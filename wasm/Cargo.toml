@@ -1,0 +1,50 @@
+[package]
+name = "wasm"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# WASM 绑定
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+serde_json = "1.0"
+rmp-serde = "1.3"
+
+# 几何处理（Shapely 的 Rust 版）
+geo = "0.28"
+geojson = "0.24"
+geo-types = "0.7"
+geozero = { version = "0.14", features = ["with-geo"] }
+
+# 2D 渲染引擎
+tiny-skia = "0.11"
+
+# 文字渲染
+fontdue = "0.8"
+
+# 错误处理
+console_error_panic_hook = "0.1"
+thiserror = "1.0"
+
+# 日志（调试用）
+wasm-bindgen-console-logger = "0.1"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+# 优化 WASM 大小
+opt-level = "z"     # 优化大小
+lto = true          # 链接时优化
+codegen-units = 1   # 单个代码生成单元
+strip = true        # 移除调试符号
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

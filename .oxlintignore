@@ -1,0 +1,5 @@
+# .oxlintignore
+dist
+node_modules
+wasm/target
+src/pkg

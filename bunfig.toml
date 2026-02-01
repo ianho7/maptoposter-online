@@ -1,0 +1,5 @@
+# 在项目根目录创建或编辑 bunfig.toml
+[install]
+# registry = "https://mirrors.cloud.tencent.com/npm/"
+# 或者使用阿里源
+# registry = "https://registry.npmmirror.com"
