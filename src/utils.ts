@@ -209,18 +209,25 @@ export async function fetchFeatures(
 
     const bbox = `${lat - deltaLat},${lon - deltaLon},${lat + deltaLat},${lon + deltaLon}`;
 
+    // 构建 OR 查询：(nwr["key1"="val1"]; nwr["key2"="val2"]; ...)
     const tagFilters = Object.entries(tags)
         .map(([key, value]) => {
-            if (value === true) return `["${key}"]`;
-            if (Array.isArray(value)) return `["${key}"~"${value.join('|')}"]`;
-            return `["${key}"="${value}"]`;
+            let filter = '';
+            if (value === true) {
+                filter = `["${key}"]`;
+            } else if (Array.isArray(value)) {
+                filter = `["${key}"~"${value.join('|')}"]`;
+            } else {
+                filter = `["${key}"="${value}"]`;
+            }
+            return `nwr${filter}(${bbox});`;
         })
         .join('');
 
     const query = `
     [out:json][timeout:300];
     (
-      nwr${tagFilters}(${bbox});
+      ${tagFilters}
     );
     out body;
     >;
@@ -233,6 +240,7 @@ export async function fetchFeatures(
     try {
         await new Promise(resolve => setTimeout(resolve, 300));
         console.log(`Fetching ${name} features from Overpass...`);
+        console.log(`  Query: ${query.replace(/\n/g, ' ').substring(0, 150)}...`);
 
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Overpass error: ${response.statusText}`);
@@ -373,4 +381,104 @@ export function shardRoadsBinary(data: Float64Array, numShards: number): Float64
     }
 
     return shards;
+}
+
+/**
+ * 从 OpenStreetMap 获取兴趣点 (POI) 数据
+ * 包括 amenity、shop、cafe、restaurant、park 等常见类型
+ */
+export async function fetchPOIs(point: Point, dist: number): Promise<GeoJSON.FeatureCollection | null> {
+    const [lat, lon] = point;
+
+    const latRad = lat * (Math.PI / 180);
+    const deltaLat = dist / 111320;
+    const deltaLon = dist / (111320 * Math.cos(latRad));
+
+    const south = lat - deltaLat;
+    const west = lon - deltaLon;
+    const north = lat + deltaLat;
+    const east = lon + deltaLon;
+
+        // 查询主要 POI 类型，限制返回数量为 5000 以避免超大数据集
+        // 注意：Overpass QL 的计数形式是 `out geom 5000;`（空格），而不是括号形式
+        const query = `
+        [out:json][timeout:300];
+        (
+            node["amenity"](${south},${west},${north},${east});
+            node["shop"](${south},${west},${north},${east});
+            node["cafe"](${south},${west},${north},${east});
+            node["restaurant"](${south},${west},${north},${east});
+            node["leisure"~"park|garden"](${south},${west},${north},${east});
+            node["tourism"](${south},${west},${north},${east});
+        );
+        out body;
+        >;
+        out geom 5000;
+    `;
+
+        // 防护：确保 bbox 为有限数字，便于排查 NaN/Infinity 导致的解析错误
+        if (![south, west, north, east].every(Number.isFinite)) {
+                console.error('Invalid bbox for POI query:', { south, west, north, east });
+                return null;
+        }
+
+        // 打印 query 以便在出错时快速调试（不要在生产环境中长时间保留）
+        console.log('Overpass POI query:', query);
+
+    // const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    const url = `https://overpass.openstreetmap.fr/api/interpreter?data=${encodeURIComponent(query)}`;
+
+    try {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        console.log("Fetching POI data from Overpass...");
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error(`Overpass API error: ${response.statusText}`);
+        }
+
+        const osmData = await response.json();
+        const geojson = osmtogeojson(osmData) as GeoJSON.FeatureCollection;
+
+        // 保留 Point 类型的要素，不需要额外属性
+        const pointFeatures = geojson.features.filter(f => f.geometry.type === 'Point');
+        return {
+            ...geojson,
+            features: pointFeatures
+        };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Error while fetching POIs: ${message}`);
+        return null;
+    }
+}
+
+/**
+ * 将 POI GeoJSON 扁平化为 Float64Array
+ * 格式：[poi_count, [x, y], [x, y], ...]
+ * 每个 POI 仅保存坐标，不保存属性（节省内存）
+ */
+export function flattenPOIsGeometry(geojson: GeoJSON.FeatureCollection | null): Float64Array {
+    if (!geojson) {
+        // 返回只包含 POI 数量为 0 的数组
+        return new Float64Array([0]);
+    }
+
+    const features = geojson.features.filter(f => f.geometry.type === 'Point');
+
+    // 格式：[poi_count, x1, y1, x2, y2, ...]
+    const buffer = new Float64Array(1 + features.length * 2);
+    buffer[0] = features.length;
+
+    let offset = 1;
+    for (const feature of features) {
+        const coords = (feature.geometry as any).coordinates;
+        if (coords && coords.length >= 2) {
+            buffer[offset++] = coords[0];  // longitude (x)
+            buffer[offset++] = coords[1];  // latitude (y)
+        }
+    }
+
+    return buffer;
 }

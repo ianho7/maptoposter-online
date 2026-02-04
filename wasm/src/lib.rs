@@ -19,6 +19,7 @@ struct JsonRenderRequest {
     roads: String,
     water: String,
     parks: String,
+    pois: Option<String>,  // POI 数据（JSON 字符串格式）
     theme: types::Theme,
     width: u32,
     height: u32,
@@ -65,6 +66,19 @@ pub fn render_map(request_json: &str) -> RenderResult {
         Err(e) => return RenderResult::error(format!("Failed to parse parks: {}", e)),
     };
     time_end("render_map: parse_parks");
+    time("render_map: parse_pois");
+    let pois = if let Some(pois_json) = &json_req.pois {
+        match parse_pois_json(pois_json) {
+            Ok(p) => p,
+            Err(e) => {
+                log(&format!("Warning: Failed to parse POIs: {}", e));
+                vec![]  // Fallback to empty POI list
+            }
+        }
+    } else {
+        vec![]
+    };
+    time_end("render_map: parse_pois");
 
     let request = RenderRequest {
         center: json_req.center,
@@ -72,6 +86,7 @@ pub fn render_map(request_json: &str) -> RenderResult {
         roads,
         water,
         parks,
+            pois,
         theme: json_req.theme,
         width: json_req.width,
         height: json_req.height,
@@ -102,6 +117,9 @@ pub struct BinaryRenderConfig {
     pub selected_size_height: u32,
     #[serde(default = "types::default_frontend_scale")]
     pub frontend_scale: f32,
+    // POI 数据（可选）
+    #[serde(default)]
+    pub pois: Option<Vec<f64>>,  // [poi_count, x1, y1, x2, y2, ...]
 }
 
 /// 主渲染函数 (二进制直读版本)
@@ -173,6 +191,28 @@ pub fn render_map_binary(
 
     time_end("render_map_bin: draw_roads");
 
+    // 投影并绘制 POI
+    if let Some(pois_data) = &config.pois {
+        if !pois_data.is_empty() && pois_data[0] as usize > 0 {
+            // 投影 POI 坐标（从 WGS84 → Web Mercator）
+            let mut projected_pois = pois_data.clone();
+            let poi_count = projected_pois[0] as usize;
+            for i in 0..poi_count {
+                let offset = 1 + i * 2;
+                let (proj_lon, proj_lat) = projection::project_point(
+                    projected_pois[offset],      // lon
+                    projected_pois[offset + 1],  // lat
+                );
+                projected_pois[offset] = proj_lon;
+                projected_pois[offset + 1] = proj_lat;
+            }
+            
+            time("render_map_bin: draw_pois");
+            renderer.draw_pois_bin(&projected_pois);
+            time_end("render_map_bin: draw_pois");
+        }
+    }
+
     time("render_map_bin: draw_gradients");
     renderer.draw_gradients();
     time_end("render_map_bin: draw_gradients");
@@ -230,6 +270,13 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
                 project_points_mut(interior);
             }
         }
+        // 投影 POI 点
+        for poi in request.pois.iter_mut() {
+            let mut coords = vec![(poi.x, poi.y)];
+            project_points_mut(&mut coords);
+            poi.x = coords[0].0;
+            poi.y = coords[0].1;
+        }
         time_end("render_map: projection_pass");
     }
 
@@ -277,6 +324,13 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
     renderer.draw_roads_scaled(&request.roads, road_width_scale);
     time_end("render_map: draw_roads");
 
+    // 绘制 POI
+    if !request.pois.is_empty() {
+        time("render_map: draw_pois");
+        renderer.draw_pois(&request.pois);
+        time_end("render_map: draw_pois");
+    }
+
     time("render_map: draw_gradients");
     renderer.draw_gradients();
     time_end("render_map: draw_gradients");
@@ -304,6 +358,12 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
 #[wasm_bindgen]
 pub fn get_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+fn parse_pois_json(_pois_json: &str) -> Result<Vec<types::POI>, String> {
+    // POI JSON 格式：扁平数组 [poi_count, x1, y1, x2, y2, ...]
+    // 为了简单起见，直接返回空 POI 列表，因为 POI 数据应该已经是二进制格式通过 config 传递
+    Ok(vec![])
 }
 
 #[wasm_bindgen]

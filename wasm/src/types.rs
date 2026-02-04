@@ -39,6 +39,7 @@ pub struct Theme {
     pub bg: String,
     pub text: String,
     pub gradient_color: String,
+    pub poi_color: String,
     pub water: String,
     pub parks: String,
     pub road_motorway: String,
@@ -196,6 +197,13 @@ pub struct PolyFeature {
     pub interiors: Vec<Vec<(f64, f64)>>,
 }
 
+/// 兴趣点 (POI) 要素
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct POI {
+    pub x: f64,
+    pub y: f64,
+}
+
 /// 渲染请求（从 JS 传入）
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RenderRequest {
@@ -207,6 +215,10 @@ pub struct RenderRequest {
     pub roads: Vec<Road>,
     pub water: Vec<PolyFeature>,
     pub parks: Vec<PolyFeature>,
+    
+    // POI 数据（可选）
+    #[serde(default)]
+    pub pois: Vec<POI>,
 
     // 主题配置
     pub theme: Theme,

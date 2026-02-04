@@ -252,20 +252,20 @@ export default function MapPosterGenerator() {
         setExtractedColors(Object.values(colors).map((item) => item.hex));
 
         // 替换自定义色
-        setCustomColors({
-          bg: colors.lightMuted.hex,
-          text: colors.darkVibrant.hex,
-          gradient_color: colors.vibrant.hex,
-          water: colors.lightVibrant.hex,
-          parks: colors.muted.hex,
-          road_motorway: colors.vibrant.hex,
-          road_primary: colors.vibrant.hex,
-          road_secondary: colors.darkVibrant.hex,
-          road_tertiary: colors.muted.hex,
-          road_residential: colors.lightMuted.hex,
-          road_default: colors.lightMuted.hex,
-          buildings: colors.lightMuted.hex
-        })
+        // setCustomColors({
+        //   bg: colors.lightMuted.hex,
+        //   text: colors.darkVibrant.hex,
+        //   gradient_color: colors.vibrant.hex,
+        //   water: colors.lightVibrant.hex,
+        //   parks: colors.muted.hex,
+        //   road_motorway: colors.vibrant.hex,
+        //   road_primary: colors.vibrant.hex,
+        //   road_secondary: colors.darkVibrant.hex,
+        //   road_tertiary: colors.muted.hex,
+        //   road_residential: colors.lightMuted.hex,
+        //   road_default: colors.lightMuted.hex,
+        //   buildings: colors.lightMuted.hex
+        // })
       }
     } catch (error) {
       console.error("Failed to extract colors:", error);
@@ -371,16 +371,34 @@ export default function MapPosterGenerator() {
       setGenerationStep(fromCache ? "已从本地数据库还原数据..." : "已完成网络抓取并保存本地缓存...");
       await yieldMainThread();
 
+      // 获取 POI 数据
+      setGenerationProgress(62);
+      setGenerationStep("正在获取兴趣点数据 (POI)...");
+      await yieldMainThread();
+
+      const { pois } = await mapDataService.getPOIs(
+        location.country,
+        location.city,
+        lat,
+        lng,
+        fetchRadius
+      );
+
+      setGenerationProgress(64);
+      setGenerationStep(`已获取 ${pois[0] || 0} 个兴趣点...`);
+      await yieldMainThread();
+
       const roadShards = shardRoadsBinary(roads, numWorkers);
       const waterTyped = water; // 已经是 Float64Array
       const parksTyped = parks;
+      const poisTyped = pois;  // 已经是 Float64Array
 
       setGenerationProgress(65);
       setGenerationStep("正在并行计算投影坐标 (Worker Pool)...");
       await yieldMainThread();
 
       let processedShardsCount = 0;
-      const totalShards = roadShards.length + 2;
+      const totalShards = roadShards.length + 3;  // 包括 POI
       const updateTaskProgress = async () => {
         processedShardsCount++;
         const currentPercent = 65 + (processedShardsCount / totalShards) * 20;
@@ -394,12 +412,32 @@ export default function MapPosterGenerator() {
       );
       const waterPromise = runInWorker(workers[0], 'polygons', waterTyped, [waterTyped.buffer]).then(async res => { await updateTaskProgress(); return res; });
       const parksPromise = runInWorker(workers[1], 'polygons', parksTyped, [parksTyped.buffer]).then(async res => { await updateTaskProgress(); return res; });
+      const poisPromise = runInWorker(workers[2], 'pois', poisTyped, [poisTyped.buffer]).then(async res => { await updateTaskProgress(); return res; });
 
-      const [processedRoadShards, waterBin, parksBin] = await Promise.all([
+      const [processedRoadShards, waterBin, parksBin, poisBin] = await Promise.all([
         Promise.all(roadProcessingPromises),
         waterPromise,
-        parksPromise
+        parksPromise,
+        poisPromise
       ]);
+
+      // 调试：打印数据大小
+      const waterCount = waterBin[0] || 0;
+      const parksCount = parksBin[0] || 0;
+      const poiCount = poisBin[0] || 0;
+      
+      console.log(`✓ 水体数据：共 ${waterCount} 个多边形`);
+      console.log(`  水体 Float64Array 长度: ${waterBin.length} 个数字`);
+      console.log(`  水体 数据大小: ${(waterBin.byteLength / 1024).toFixed(2)} KB`);
+      
+      console.log(`✓ 公园数据：共 ${parksCount} 个多边形`);
+      console.log(`  公园 Float64Array 长度: ${parksBin.length} 个数字`);
+      console.log(`  公园 数据大小: ${(parksBin.byteLength / 1024).toFixed(2)} KB`);
+      
+      console.log(`✓ POI 数据：共 ${poiCount} 个兴趣点`);
+      console.log(`  POI Float64Array 长度: ${poisBin.length} 个数字`);
+      console.log(`  POI 数据大小: ${(poisBin.byteLength / 1024).toFixed(2)} KB`);
+      console.log(`  前 10 个 POI 坐标:`, poisBin.slice(1, 21));
 
       setGenerationProgress(85);
       setGenerationStep("正在执行 WASM 图层渲染...");
@@ -409,7 +447,8 @@ export default function MapPosterGenerator() {
       const wasmTheme = {
         "bg": useCustomColors ? customColors.bg : colors.bg,
         "text": useCustomColors ? customColors.text : colors.text,
-        "gradient_color": useCustomColors ? customColors.bg : colors.bg,
+        "gradient_color": useCustomColors ? customColors.gradient_color : colors.gradient_color,
+        "poi_color": useCustomColors ? customColors.poi_color : colors.poi_color,
         "water": useCustomColors ? customColors.water : colors.water,
         "parks": useCustomColors ? customColors.parks : colors.parks,
         "road_motorway": useCustomColors ? customColors.road_motorway : colors.road_motorway,
@@ -432,7 +471,9 @@ export default function MapPosterGenerator() {
         text_position: "bottom",
         // Dynamic road width scaling parameters (unified with FRONTEND_SCALE)
         selected_size_height: selectedSize.height * FRONTEND_SCALE,
-        frontend_scale: FRONTEND_SCALE
+        frontend_scale: FRONTEND_SCALE,
+        // POI 数据
+        pois: Array.from(poisBin)
       };
 
       // Offload rendering to worker too
@@ -444,7 +485,8 @@ export default function MapPosterGenerator() {
       }, [
         ...processedRoadShards.map(s => s.buffer),
         waterBin.buffer,
-        parksBin.buffer
+        parksBin.buffer,
+        poisBin.buffer
       ]);
 
       setGenerationProgress(95);

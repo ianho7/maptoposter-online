@@ -946,6 +946,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-console-logger",
  "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]

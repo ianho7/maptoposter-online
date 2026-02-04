@@ -2,6 +2,7 @@ export interface MapColors {
   bg: string;
   text: string;
   gradient_color: string;
+  poi_color: string;
   water: string;
   parks: string;
   road_motorway: string;
@@ -51,6 +52,7 @@ export const MAP_THEMES: MapTheme[] = [
       "bg": "#FAF8F5",
       "text": "#2C2C2C",
       "gradient_color": "#FAF8F5",
+      "poi_color": "#9500ff",
       "water": "#E8E4E0",
       "parks": "#F0EDE8",
       "road_motorway": "#8B2500",
@@ -69,6 +71,7 @@ export const MAP_THEMES: MapTheme[] = [
       bg: '#f4e4bc',
       text: '#3d2914',
       gradient_color: '#d4c4a4',
+      poi_color: '#B8534C',
       water: '#a8c8d8',
       parks: '#b8c89c',
       road_motorway: '#8b5a2b',
@@ -87,6 +90,7 @@ export const MAP_THEMES: MapTheme[] = [
       bg: '#e8dcc8',
       text: '#2c1810',
       gradient_color: '#d8ccb8',
+      poi_color: '#A0523D',
       water: '#7ba3a8',
       parks: '#8fa880',
       road_motorway: '#5c3317',
@@ -105,6 +109,7 @@ export const MAP_THEMES: MapTheme[] = [
       bg: '#1a2634',
       text: '#d4af37',
       gradient_color: '#243447',
+      poi_color: '#F39C12',
       water: '#0d1520',
       parks: '#2d4a3e',
       road_motorway: '#d4af37',
@@ -123,6 +128,7 @@ export const MAP_THEMES: MapTheme[] = [
       bg: '#1e2a1e',
       text: '#c8d4b8',
       gradient_color: '#2a3a2a',
+      poi_color: '#E67E22',
       water: '#2a4858',
       parks: '#3a5a3a',
       road_motorway: '#98b888',
@@ -141,6 +147,7 @@ export const MAP_THEMES: MapTheme[] = [
       bg: '#0f1729',
       text: '#e8e4dc',
       gradient_color: '#1a2439',
+      poi_color: '#FF6B6B',
       water: '#0a1019',
       parks: '#1a3a2a',
       road_motorway: '#ffffff',

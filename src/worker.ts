@@ -20,6 +20,9 @@ self.onmessage = async (event: MessageEvent) => {
             result = process_roads_bin_wasm(data as Float64Array);
         } else if (type === 'polygons') {
             result = process_polygons_bin_wasm(data as Float64Array);
+        } else if (type === 'pois') {
+            // POI 数据已经是最简形式 [poi_count, x1, y1, x2, y2, ...], 直接返回
+            result = data as Float64Array;
         } else if (type === 'render') {
             const { roads_shards, water_bin, parks_bin, config_json } = data as any;
             const renderResult = render_map_binary(roads_shards, water_bin, parks_bin, config_json);

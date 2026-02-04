@@ -248,16 +248,25 @@ impl MapRenderer {
     /// 绘制多边形 (二进制直读版)
     pub fn draw_polygons_bin(&mut self, data: &[f64], color_hex: &str) {
         if data.is_empty() {
+            web_sys::console::log_1(&format!("⚠️  多边形数据为空").into());
             return;
         }
         let poly_count = data[0] as usize;
+        
+        if poly_count == 0 {
+            web_sys::console::log_1(&format!("⚠️  多边形数量为 0，颜色: {}", color_hex).into());
+            return;
+        }
+        
+        web_sys::console::log_1(&format!("🌊 开始绘制 {} 个多边形，颜色: {}", poly_count, color_hex).into());
+        
         let mut offset = 1;
         let color = parse_hex_color(color_hex);
 
         let mut pb = PathBuilder::new();
         let mut found = false;
 
-        for _ in 0..poly_count {
+        for _idx in 0..poly_count {
             if offset + 2 > data.len() {
                 break;
             }
@@ -310,7 +319,10 @@ impl MapRenderer {
                     Transform::identity(),
                     None,
                 );
+                web_sys::console::log_1(&format!("✅ 多边形绘制完成，颜色: {}", color_hex).into());
             }
+        } else {
+            web_sys::console::log_1(&format!("⚠️  未找到有效的多边形数据，颜色: {}", color_hex).into());
         }
     }
 
@@ -410,6 +422,122 @@ impl MapRenderer {
                     .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
             }
         }
+    }
+
+    /// 绘制 POI 圆点（使用 POI 结构体数组）
+    pub fn draw_pois(&mut self, pois: &[crate::types::POI]) {
+        if pois.is_empty() {
+            return;
+        }
+
+        // 使用主题中的梯度颜色作为 POI 颜色（或可配置 poi_color）
+        let poi_color = parse_hex_color(&self.theme.gradient_color);
+        
+        const POI_RADIUS: f32 = 10.0;  // POI 圆点半径（像素）
+
+        for poi in pois {
+            let (screen_x, screen_y) = self.world_to_screen((poi.x, poi.y));
+            
+            // 绘制圆点
+            let mut pb = PathBuilder::new();
+            pb.push_circle(screen_x, screen_y, POI_RADIUS);
+            
+            if let Some(path) = pb.finish() {
+                let mut paint = Paint::default();
+                paint.set_color(poi_color);
+                paint.anti_alias = true;
+
+                self.pixmap.fill_path(
+                    &path,
+                    &paint,
+                    FillRule::Winding,
+                    Transform::identity(),
+                    None,
+                );
+            }
+        }
+    }
+
+    /// 绘制 POI 圆点（二进制直读版本）
+    /// 数据格式：[poi_count, x1, y1, x2, y2, ...]
+    pub fn draw_pois_bin(&mut self, data: &[f64]) {
+        if data.is_empty() || data[0] as usize == 0 {
+            return;
+        }
+
+        let poi_count = data[0] as usize;
+        if data.len() < 1 + poi_count * 2 {
+            web_sys::console::log_1(&format!("❌ POI 数据长度不足: {} < {}", data.len(), 1 + poi_count * 2).into());
+            return;  // 数据长度不足
+        }
+
+        // 使用主题中的 POI 专用颜色
+        let poi_color = parse_hex_color(&self.theme.poi_color);
+        
+        const POI_RADIUS: f32 = 10.0;  // POI 圆点半径（像素）
+        const GRID_SIZE: i32 = 25;    // 网格大小（像素），用于空间采样
+        const MAX_POIS: usize = 50;   // 最多渲染 50 个 POI 点
+        
+        // 网格采样：记录每个网格是否已有 POI
+        // 计算网格维度
+        let grid_width = ((self.width as i32 + GRID_SIZE - 1) / GRID_SIZE) as usize;
+        let grid_height = ((self.height as i32 + GRID_SIZE - 1) / GRID_SIZE) as usize;
+        let mut grid = vec![false; grid_width * grid_height];
+        
+        let mut offset = 1;
+        let mut rendered_count = 0;
+        
+        for _idx in 0..poi_count {
+            // 达到最大数量则停止
+            if rendered_count >= MAX_POIS {
+                break;
+            }
+            
+            if offset + 1 < data.len() {
+                let x = data[offset];
+                let y = data[offset + 1];
+                let (screen_x, screen_y) = self.world_to_screen((x, y));
+                
+                // 计算该屏幕坐标所在的网格单元
+                let grid_x = (screen_x as i32 / GRID_SIZE).max(0) as usize;
+                let grid_y = (screen_y as i32 / GRID_SIZE).max(0) as usize;
+                
+                // 检查是否在有效范围内
+                if grid_x < grid_width && grid_y < grid_height {
+                    let grid_idx = grid_y * grid_width + grid_x;
+                    
+                    // 该网格单元还没有 POI，绘制此点
+                    if !grid[grid_idx] && screen_x >= 0.0 && screen_x <= self.width as f32 
+                        && screen_y >= 0.0 && screen_y <= self.height as f32 {
+                        grid[grid_idx] = true;
+                        
+                        // 绘制圆点
+                        let mut pb = PathBuilder::new();
+                        pb.push_circle(screen_x, screen_y, POI_RADIUS);
+                        
+                        if let Some(path) = pb.finish() {
+                            let mut paint = Paint::default();
+                            paint.set_color(poi_color);
+                            paint.anti_alias = true;
+
+                            self.pixmap.fill_path(
+                                &path,
+                                &paint,
+                                FillRule::Winding,
+                                Transform::identity(),
+                                None,
+                            );
+                            rendered_count += 1;
+                        }
+                    }
+                }
+                
+                offset += 2;
+            }
+        }
+        
+        web_sys::console::log_1(&format!("🔵 POI 网格采样完成: 原始 {} 个 → 采样后 {} 个，颜色: {}", 
+            poi_count, rendered_count, &self.theme.poi_color).into());
     }
 
     /// 绘制渐变（顶部和底部）

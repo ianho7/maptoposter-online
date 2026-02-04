@@ -11,8 +11,14 @@ export interface MapData {
     fromCache: boolean;
 }
 
+export interface POIData {
+    pois: Float64Array;
+    fromCache: boolean;
+}
+
 class MapDataService {
     private memoryCache = new Map<string, MapData>();
+    private poiMemoryCache = new Map<string, POIData>();
     private worker: Worker | null = null;
     private pendingRequests = new Map<number, { resolve: Function, reject: Function }>();
     private requestId = 0;
@@ -94,6 +100,52 @@ class MapDataService {
 
         return result;
     }
+
+    async getPOIs(
+        country: string,
+        city: string,
+        lat: number,
+        lng: number,
+        radius: number
+    ): Promise<POIData> {
+        const cacheKey = `${country}:${city}:${radius}:pois`;
+
+        // 1. 尝试 L1 内存缓存
+        if (this.poiMemoryCache.has(cacheKey)) {
+            console.log(`[MapDataService] L1 Memory Hit (POI): ${city}`);
+            const cached = this.poiMemoryCache.get(cacheKey)!;
+            // 返回副本，防止缓存的 Buffer 在 postMessage 中被 Detached
+            return {
+                pois: cached.pois.slice(),
+                fromCache: true
+            };
+        }
+
+        // 2. 向 Worker 请求 POI 数据 (Worker 会处理 L2 IndexedDB 和网络)
+        if (!this.worker) throw new Error("Data Worker not initialized");
+
+        const id = this.requestId++;
+        const promise = new Promise<POIData>((resolve, reject) => {
+            this.pendingRequests.set(id, { resolve, reject });
+        });
+
+        this.worker.postMessage({
+            id,
+            type: 'GET_POIS',
+            payload: { country, city, lat, lng, radius }
+        });
+
+        const result = await promise;
+
+        // 3. 存入 L1 内存缓存
+        this.poiMemoryCache.set(cacheKey, {
+            pois: result.pois.slice(),
+            fromCache: result.fromCache
+        });
+
+        return result;
+    }
 }
 
 export const mapDataService = new MapDataService();
+
