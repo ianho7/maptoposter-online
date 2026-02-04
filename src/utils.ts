@@ -157,7 +157,7 @@ export async function fetchGraph(point: Point, dist: number): Promise<GeoJSON.Fe
     const east = lon + deltaLon;
 
     const query = `
-    [out:json][timeout:25];
+    [out:json][timeout:300];
     (
       way["highway"](${south},${west},${north},${east});
       node(w);
@@ -167,7 +167,8 @@ export async function fetchGraph(point: Point, dist: number): Promise<GeoJSON.Fe
     out skel qt;
   `;
 
-    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    // const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    const url = `https://overpass.openstreetmap.fr/api/interpreter?data=${encodeURIComponent(query)}`;
 
     try {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -217,7 +218,7 @@ export async function fetchFeatures(
         .join('');
 
     const query = `
-    [out:json][timeout:30];
+    [out:json][timeout:300];
     (
       nwr${tagFilters}(${bbox});
     );
@@ -226,7 +227,8 @@ export async function fetchFeatures(
     out skel qt;
   `;
 
-    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    // const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    const url = `https://overpass.openstreetmap.fr/api/interpreter?data=${encodeURIComponent(query)}`;
 
     try {
         await new Promise(resolve => setTimeout(resolve, 300));

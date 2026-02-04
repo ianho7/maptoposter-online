@@ -10,6 +10,7 @@ export interface MapColors {
   road_tertiary: string;
   road_residential: string;
   road_default: string;
+  buildings: string;
 }
 
 export interface MapTheme {
@@ -44,6 +45,24 @@ export const POSTER_SIZES: PosterSize[] = [
 
 export const MAP_THEMES: MapTheme[] = [
   {
+    id: 'new',
+    name: 'Fresh New',
+    colors: {
+      "bg": "#FAF8F5",
+      "text": "#2C2C2C",
+      "gradient_color": "#FAF8F5",
+      "water": "#E8E4E0",
+      "parks": "#F0EDE8",
+      "road_motorway": "#8B2500",
+      "road_primary": "#4A4A4A",
+      "road_secondary": "#6A6A6A",
+      "road_tertiary": "#909090",
+      "road_residential": "#B8B8B8",
+      "road_default": "#909090",
+      "buildings": "#D0C8C0",
+    }
+  },
+  {
     id: 'vintage-sepia',
     name: 'Vintage Sepia',
     colors: {
@@ -58,6 +77,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: '#d2b48c',
       road_residential: '#deb887',
       road_default: '#e8d4b8',
+      buildings: '#d4b490',
     }
   },
   {
@@ -75,6 +95,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: '#a08050',
       road_residential: '#b8a080',
       road_default: '#c8b898',
+      buildings: '#c0b090',
     }
   },
   {
@@ -92,10 +113,11 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: '#8b7355',
       road_residential: '#5c5c5c',
       road_default: '#3a4a5a',
+      buildings: '#3a4a5a',
     }
   },
   {
-    id: 'forest-green',
+    id: 'forest-expedition',
     name: 'Forest Expedition',
     colors: {
       bg: '#1e2a1e',
@@ -109,10 +131,11 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: '#688858',
       road_residential: '#587848',
       road_default: '#486838',
+      buildings: '#4a6a4a',
     }
   },
   {
-    id: 'midnight-blue',
+    id: 'midnight-atlas',
     name: 'Midnight Atlas',
     colors: {
       bg: '#0f1729',
@@ -126,6 +149,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: '#808080',
       road_residential: '#505050',
       road_default: '#303030',
+      buildings: '#2a3a4a',
     }
   },
 ];

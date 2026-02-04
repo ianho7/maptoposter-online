@@ -1,22 +1,14 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import type { MapColors } from '@/lib/types';
 
 interface Location {
   country: string;
   state: string;
   city: string;
-  lat: number;
-  lng: number;
-}
-
-interface MapColors {
-  bg: string;
-  text: string;
-  water: string;
-  parks: string;
-  roads: string;
-  buildings: string;
+  lat?: number;  // 可选，预览时可能没有精确坐标
+  lng?: number;  // 可选，预览时可能没有精确坐标
 }
 
 interface VintageMapCanvasProps {
@@ -41,7 +33,7 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
     // Set canvas size based on container
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
-    
+
     // Use device pixel ratio for sharp rendering
     const dpr = window.devicePixelRatio || 1;
     canvas.width = containerWidth * dpr;
@@ -75,7 +67,9 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
     ctx.fillRect(mapMargin, mapTop, mapWidth, mapHeight);
 
     // Generate pseudo-random values based on coordinates for consistent look
-    const seed = Math.abs(location.lat * 1000 + location.lng * 100);
+    const lat = location.lat ?? 0;
+    const lng = location.lng ?? 0;
+    const seed = Math.abs(lat * 1000 + lng * 100);
     const seededRandom = (n: number) => {
       const x = Math.sin(seed + n * 9999) * 10000;
       return x - Math.floor(x);
@@ -88,7 +82,7 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
       const y = mapTop + seededRandom(i * 4 + 1) * mapHeight * 0.9;
       const w = 20 + seededRandom(i * 4 + 2) * mapWidth * 0.15;
       const h = 15 + seededRandom(i * 4 + 3) * mapHeight * 0.1;
-      
+
       // Rounded rectangles for organic park shapes
       const radius = Math.min(w, h) * 0.3;
       ctx.beginPath();
@@ -107,7 +101,7 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
     }
 
     // Draw main roads (grid pattern with variation)
-    ctx.strokeStyle = colors.roads;
+    ctx.strokeStyle = colors.road_primary;
     ctx.lineCap = 'round';
 
     // Major horizontal roads
@@ -201,13 +195,13 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
     const compassSize = Math.min(width, height) * 0.06;
     const compassX = mapMargin + mapWidth - compassSize - 10;
     const compassY = mapTop + compassSize + 10;
-    
+
     ctx.save();
     ctx.translate(compassX, compassY);
     ctx.strokeStyle = colors.text;
     ctx.fillStyle = colors.text;
     ctx.lineWidth = 1;
-    
+
     // Draw compass points
     for (let i = 0; i < 8; i++) {
       ctx.save();
@@ -227,7 +221,7 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
       }
       ctx.restore();
     }
-    
+
     // N label
     ctx.font = `bold ${compassSize * 0.4}px Georgia, serif`;
     ctx.textAlign = 'center';
@@ -256,7 +250,7 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
     ctx.moveTo(width * 0.3, lineY);
     ctx.lineTo(width * 0.7, lineY);
     ctx.stroke();
-    
+
     // Small diamond in center
     ctx.beginPath();
     ctx.moveTo(width / 2, lineY - 4);
@@ -280,10 +274,10 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
     const coordFontSize = Math.min(width * 0.026, 12);
     ctx.font = `${coordFontSize}px "Crimson Text", Georgia, serif`;
     ctx.globalAlpha = 0.7;
-    const latDir = location.lat >= 0 ? 'N' : 'S';
-    const lngDir = location.lng >= 0 ? 'E' : 'W';
+    const latDir = lat >= 0 ? 'N' : 'S';
+    const lngDir = lng >= 0 ? 'E' : 'W';
     ctx.fillText(
-      `${Math.abs(location.lat).toFixed(4)}° ${latDir}   |   ${Math.abs(location.lng).toFixed(4)}° ${lngDir}`,
+      `${Math.abs(lat).toFixed(4)}° ${latDir}   |   ${Math.abs(lng).toFixed(4)}° ${lngDir}`,
       width / 2,
       lineY + subFontSize * 4
     );
@@ -296,18 +290,18 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
       ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
       ctx.strokeStyle = colors.text;
       ctx.lineWidth = 1;
-      
+
       const size = Math.min(width, height) * 0.04;
       ctx.beginPath();
       ctx.moveTo(0, size);
       ctx.lineTo(0, 0);
       ctx.lineTo(size, 0);
       ctx.stroke();
-      
+
       ctx.beginPath();
       ctx.arc(size * 0.3, size * 0.3, size * 0.15, 0, Math.PI * 2);
       ctx.stroke();
-      
+
       ctx.restore();
     };
 
@@ -320,8 +314,8 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
   }, [location, colors, customTitle, aspectRatio]);
 
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className="w-full h-full"
       style={{ backgroundColor: colors.bg }}
     >

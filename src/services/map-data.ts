@@ -2,6 +2,8 @@
  * 地图数据服务：管理内存缓存并与 Data Worker 通信
  */
 
+import type { Coordinates } from "@/types";
+
 export interface MapData {
     roads: Float64Array;
     water: Float64Array;
@@ -14,6 +16,7 @@ class MapDataService {
     private worker: Worker | null = null;
     private pendingRequests = new Map<number, { resolve: Function, reject: Function }>();
     private requestId = 0;
+    private coordinatesCache = new Map<string, Coordinates>();
 
     constructor() {
         if (typeof window !== 'undefined') {
@@ -31,6 +34,14 @@ class MapDataService {
                 }
             };
         }
+    }
+
+    getCoordinates(city: string, country: string): Coordinates | null {
+        return this.coordinatesCache.get(`${city},${country}`) || null;
+    }
+
+    saveCoordinates(city: string, country: string, lat: number, lng: number) {
+        this.coordinatesCache.set(`${city},${country}`, { latitude: lat, longitude: lng });
     }
 
     async getMapData(

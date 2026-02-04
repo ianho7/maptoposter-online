@@ -176,6 +176,75 @@ impl MapRenderer {
         }
     }
 
+    /// 绘制道路 (二进制直读版) 使用动态缩放因子
+    pub fn draw_roads_bin_scaled(&mut self, data: &[f64], scale_factor: f32) {
+        if data.is_empty() {
+            return;
+        }
+        let road_count = data[0] as usize;
+
+        // 准备 6 个路径构建器，对应 6 种道路类型
+        let mut pbs: Vec<PathBuilder> = (0..6).map(|_| PathBuilder::new()).collect();
+        let mut found = vec![false; 6];
+
+        let mut curr_offset = 1;
+
+        for _ in 0..road_count {
+            if curr_offset + 2 > data.len() {
+                break;
+            }
+            let t = data[curr_offset] as usize;
+            let count = data[curr_offset + 1] as usize;
+            curr_offset += 2;
+
+            if t < 6 {
+                if curr_offset + count * 2 <= data.len() && count >= 2 {
+                    let pb = &mut pbs[t];
+                    let (sx, sy) = self.world_to_screen((data[curr_offset], data[curr_offset + 1]));
+                    pb.move_to(sx, sy);
+                    for i in 1..count {
+                        let (sx, sy) = self.world_to_screen((
+                            data[curr_offset + i * 2],
+                            data[curr_offset + i * 2 + 1],
+                        ));
+                        pb.line_to(sx, sy);
+                    }
+                    found[t] = true;
+                }
+            }
+            curr_offset += count * 2;
+        }
+
+        for (t_idx, pb) in pbs.into_iter().enumerate() {
+            if !found[t_idx] {
+                continue;
+            }
+
+            if let Some(path) = pb.finish() {
+                let road_type = RoadType::from_u32(t_idx as u32);
+                let color_hex = match road_type {
+                    RoadType::Motorway => &self.theme.road_motorway,
+                    RoadType::Primary => &self.theme.road_primary,
+                    RoadType::Secondary => &self.theme.road_secondary,
+                    RoadType::Tertiary => &self.theme.road_tertiary,
+                    RoadType::Residential => &self.theme.road_residential,
+                    RoadType::Default => &self.theme.road_default,
+                };
+
+                let mut paint = Paint::default();
+                paint.set_color(parse_hex_color(color_hex));
+                paint.anti_alias = true;
+                let stroke = Stroke {
+                    width: road_type.get_width_scaled(scale_factor),
+                    ..Default::default()
+                };
+
+                self.pixmap
+                    .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+            }
+        }
+    }
+
     /// 绘制多边形 (二进制直读版)
     pub fn draw_polygons_bin(&mut self, data: &[f64], color_hex: &str) {
         if data.is_empty() {
@@ -264,6 +333,55 @@ impl MapRenderer {
 
             let color = parse_hex_color(color_hex);
             let width = road_type.get_width();
+
+            let mut pb = PathBuilder::new();
+            for road in roads {
+                if road.coords.len() < 2 {
+                    continue;
+                }
+                let (x, y) = self.world_to_screen(road.coords[0]);
+                pb.move_to(x, y);
+                for &coord in &road.coords[1..] {
+                    let (x, y) = self.world_to_screen(coord);
+                    pb.line_to(x, y);
+                }
+            }
+
+            if let Some(path) = pb.finish() {
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
+
+                let stroke = Stroke {
+                    width,
+                    ..Default::default()
+                };
+
+                self.pixmap
+                    .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+            }
+        }
+    }
+
+    /// 绘制道路（使用动态缩放因子）
+    pub fn draw_roads_scaled(&mut self, roads: &[Road], scale_factor: f32) {
+        let mut groups: HashMap<crate::types::RoadType, Vec<&Road>> = HashMap::new();
+        for road in roads {
+            groups.entry(road.road_type).or_default().push(road);
+        }
+
+        for (road_type, roads) in groups {
+            let color_hex = match road_type {
+                crate::types::RoadType::Motorway => &self.theme.road_motorway,
+                crate::types::RoadType::Primary => &self.theme.road_primary,
+                crate::types::RoadType::Secondary => &self.theme.road_secondary,
+                crate::types::RoadType::Tertiary => &self.theme.road_tertiary,
+                crate::types::RoadType::Residential => &self.theme.road_residential,
+                crate::types::RoadType::Default => &self.theme.road_default,
+            };
+
+            let color = parse_hex_color(color_hex);
+            let width = road_type.get_width_scaled(scale_factor);
 
             let mut pb = PathBuilder::new();
             for road in roads {
@@ -420,37 +538,73 @@ impl MapRenderer {
 
         let text_color = parse_hex_color(&self.theme.text);
 
-        // 改进：基于逻辑宽度 (800.0) 计算缩放系数，确保与 multiplier 完全对齐
-        let scale_factor = self.width as f32 / 800.0;
+        // 改进：限制缩放系数
+        // 取 Width/800 和 Height/800*1.1 中的较小值。
+        // *1.1 是为了让 A4 (0.7宽高比) 这种瘦长比例依然由宽度主导缩放。
+        // 但是对于 16:9 (1.77宽高比) 这种扁平比例，Height/800*1.1 (约0.6) 会小于 Width/800 (1.0)，
+        // 从而强制缩小字体，避免文字撑出高度。
+        let width_scale = self.width as f32 / 1200.0;
+        let height_scale = (self.height as f32 / 1200.0) * 1.1;
+        let scale_factor = width_scale.min(height_scale);
 
-        // 根据位置计算基础 Y 比例
-        let base_y = match self.text_position {
-            TextPosition::Top => 0.10,
-            TextPosition::Center => 0.50,
-            TextPosition::Bottom => 0.88, // 稍微上移一点，避免贴边
+        // 计算基准锚点 Y 坐标 (屏幕绝对坐标)
+        // 依然保留 height 的百分比作为"定位锚点"，但元素之间的间距不再依赖 height
+        let base_y_px = match self.text_position {
+            TextPosition::Top => self.height as f32 * 0.10,
+            TextPosition::Center => self.height as f32 * 0.50,
+            TextPosition::Bottom => self.height as f32 * 0.88,
         };
+
+        // 定义相对偏移量 (基于 800px 宽度的标准像素值)
+        // 之前的 0.05 (5%) 在 1000px 高度下是 50px
+        // 之前的 0.04 (4%) 在 1000px 高度下是 40px
+        // 之前的 0.03 (3%) 在 1000px 高度下是 30px
+        let city_offset = 50.0 * scale_factor;
+        let coords_offset = -40.0 * scale_factor;
+        let decor_offset = 30.0 * scale_factor;
 
         // 绘制城市名 (增加基准大小到 80.0)
         let formatted_city = format_city_name(city);
         let city_size = calculate_font_size(&formatted_city, 80.0 * scale_factor, 10);
-        self.draw_text_centered(&font, &formatted_city, base_y + 0.05, city_size, text_color);
+        // 位置：锚点 + 偏移
+        self.draw_text_centered(
+            &font,
+            &formatted_city,
+            base_y_px + city_offset,
+            city_size,
+            text_color,
+        );
 
         // 绘制国家名 (增加基准大小到 28.0)
         let country_upper = country.to_uppercase();
         let country_size = 28.0 * scale_factor;
-        self.draw_text_centered(&font, &country_upper, base_y, country_size, text_color);
+        // 位置：锚点本身
+        self.draw_text_centered(&font, &country_upper, base_y_px, country_size, text_color);
 
         // 绘制坐标 (增加基准大小到 18.0)
         let coords_str = format_coordinates(lat, lon);
         let coords_size = 18.0 * scale_factor;
-        self.draw_text_centered(&font, &coords_str, base_y - 0.04, coords_size, text_color);
+        // 位置：锚点 - 偏移
+        self.draw_text_centered(
+            &font,
+            &coords_str,
+            base_y_px + coords_offset,
+            coords_size,
+            text_color,
+        );
 
         // 绘制装饰线
-        self.draw_decoration_line(text_color, scale_factor, base_y + 0.03);
+        // self.draw_decoration_line(text_color, scale_factor, base_y_px + decor_offset);
 
-        // 绘制署名 (也要跟随缩放)
+        // 绘制署名 (修正底部边距逻辑)
         let attr_text = "© OpenStreetMap contributors";
-        self.draw_text_bottom_right(&font, attr_text, 10.0 * scale_factor, text_color);
+        self.draw_text_bottom_right(
+            &font,
+            attr_text,
+            10.0 * scale_factor,
+            text_color,
+            scale_factor,
+        );
 
         Ok(())
     }
@@ -460,14 +614,14 @@ impl MapRenderer {
         &mut self,
         font: &Font,
         text: &str,
-        y_ratio: f32,
+        y_baseline: f32, // 改为绝对坐标
         size: f32,
         color: Color,
     ) {
         let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
         layout.append(&[font], &TextStyle::new(text, size, 0));
 
-        let y = (self.height as f32 * y_ratio) as i32;
+        let y = y_baseline as i32;
 
         // 计算文字宽度以居中
         let glyphs = layout.glyphs();
@@ -499,7 +653,14 @@ impl MapRenderer {
     }
 
     /// 右下角绘制文字
-    fn draw_text_bottom_right(&mut self, font: &Font, text: &str, size: f32, color: Color) {
+    fn draw_text_bottom_right(
+        &mut self,
+        font: &Font,
+        text: &str,
+        size: f32,
+        color: Color,
+        scale_factor: f32,
+    ) {
         let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
         layout.append(&[font], &TextStyle::new(text, size, 0));
 
@@ -513,8 +674,15 @@ impl MapRenderer {
             .map(|g| (g.x + g.width as f32) as i32)
             .max()
             .unwrap_or(0);
-        let x_offset = self.width as i32 - max_x - 20;
-        let y = self.height as i32 - 20;
+
+        // 动态计算边距
+        let margin = 20.0 * scale_factor;
+
+        let x_offset = self.width as i32 - max_x - margin as i32;
+        // y 是文本块的起始位置。为了让文本底部距离边缘 margin，
+        // y 应该是 height - margin - text_height
+        // 简单估算 text_height 为 size
+        let y = self.height as i32 - margin as i32 - size as i32;
 
         for glyph in glyphs {
             let (metrics, bitmap) = font.rasterize_config(glyph.key);
@@ -592,8 +760,8 @@ impl MapRenderer {
     }
 
     /// 绘制装饰线
-    fn draw_decoration_line(&mut self, color: Color, scale_factor: f32, y_ratio: f32) {
-        let y = self.height as f32 * y_ratio;
+    fn draw_decoration_line(&mut self, color: Color, scale_factor: f32, y_px: f32) {
+        let y = y_px;
         let x1 = self.width as f32 * 0.4;
         let x2 = self.width as f32 * 0.6;
 

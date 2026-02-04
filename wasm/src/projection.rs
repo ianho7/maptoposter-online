@@ -30,7 +30,7 @@ pub fn project_points(coords: &[(f64, f64)]) -> Vec<(f64, f64)> {
         .collect()
 }
 
-/// 计算边界框（考虑画布纵横比）
+/// 计算边界框（固定半径，确保所有尺寸看到相同的地理区域）
 pub fn calculate_bounds(
     center_lat: f64,
     center_lon: f64,
@@ -44,24 +44,27 @@ pub fn calculate_bounds(
     // 计算纵横比
     let aspect = width as f64 / height as f64;
 
-    // 初始半径
-    let mut half_x = radius;
-    let mut half_y = radius;
+    // 使用固定半径，不再根据宽高比调整
+    // 这样可以确保所有尺寸的海报都显示相同的地理区域
+    // 不同宽高比的画布会在边缘自然裁剪或留白
+    let half_x = radius;
+    let half_y = radius;
 
-    // 根据纵横比调整（与 Python 版本一致）
-    if aspect > 1.0 {
-        // 横向 -> 缩小高度
-        half_y = half_x / aspect;
+    // 根据宽高比调整边界框，使其适配画布比例
+    // 但保持中心区域一致
+    let (final_half_x, final_half_y) = if aspect > 1.0 {
+        // 横向画布：保持高度，扩展宽度
+        (half_y * aspect, half_y)
     } else {
-        // 纵向 -> 缩小宽度
-        half_x = half_y * aspect;
-    }
+        // 纵向画布：保持宽度，扩展高度
+        (half_x, half_x / aspect)
+    };
 
     BoundingBox::new(
-        center_x - half_x,
-        center_x + half_x,
-        center_y - half_y,
-        center_y + half_y,
+        center_x - final_half_x,
+        center_x + final_half_x,
+        center_y - final_half_y,
+        center_y + final_half_y,
     )
 }
 

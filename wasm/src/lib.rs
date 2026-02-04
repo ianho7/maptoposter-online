@@ -79,6 +79,9 @@ pub fn render_map(request_json: &str) -> RenderResult {
         display_country: json_req.display_country,
         text_position: None, // Default to None which maps to Top/Default in internal logic usually
         needs_projection: false,
+        // Backwards-compatible defaults for dynamic road width scaling
+        selected_size_height: 3508,
+        frontend_scale: 2.0,
     };
 
     render_map_internal(request)
@@ -94,6 +97,11 @@ pub struct BinaryRenderConfig {
     pub display_city: String,
     pub display_country: String,
     pub text_position: Option<types::TextPosition>,
+    // dynamic scaling params (optional)
+    #[serde(default = "types::default_selected_size_height")]
+    pub selected_size_height: u32,
+    #[serde(default = "types::default_frontend_scale")]
+    pub frontend_scale: f32,
 }
 
 /// 主渲染函数 (二进制直读版本)
@@ -146,15 +154,21 @@ pub fn render_map_binary(
     time("render_map_bin: draw_roads");
 
     // 处理多线程分片 (Array<Float64Array>) 或 单个大分片 (Float64Array)
+    // Compute dynamic road width scale from config (fallback to defaults)
+    let road_width_scale = types::calculate_road_width_scale(
+        config.selected_size_height as f32,
+        config.frontend_scale,
+    );
+
     if js_sys::Array::is_array(&roads_shards) {
         let shards_array = js_sys::Array::from(&roads_shards);
         for shard_val in shards_array.iter() {
             if let Some(shard_typed) = shard_val.dyn_ref::<js_sys::Float64Array>() {
-                renderer.draw_roads_bin(&shard_typed.to_vec());
+                renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
             }
         }
     } else if let Some(shard_typed) = roads_shards.dyn_ref::<js_sys::Float64Array>() {
-        renderer.draw_roads_bin(&shard_typed.to_vec());
+        renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
     }
 
     time_end("render_map_bin: draw_roads");
@@ -255,7 +269,12 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
     time_end("render_map: draw_parks");
 
     time("render_map: draw_roads");
-    renderer.draw_roads(&request.roads);
+    // 计算动态道路线宽缩放因子并调用缩放绘制方法
+    let road_width_scale = types::calculate_road_width_scale(
+        request.selected_size_height as f32,
+        request.frontend_scale,
+    );
+    renderer.draw_roads_scaled(&request.roads, road_width_scale);
     time_end("render_map: draw_roads");
 
     time("render_map: draw_gradients");

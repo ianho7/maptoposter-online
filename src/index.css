@@ -5,25 +5,25 @@
 
 :root {
     /* Vintage Map Theme - Parchment & Sepia (hex for html2canvas compatibility) */
-    --background: #f5f0e6;
-    --foreground: #3d3528;
+    --background: #f5e6d3;
+    --foreground: #4a3728;
     --card: #ebe4d4;
-    --card-foreground: #3d3528;
-    --popover: #faf8f2;
-    --popover-foreground: #3d3528;
+    --card-foreground: #4a3728;
+    --popover: #f5e6d3;
+    --popover-foreground: #4a3728;
     --primary: #5c4a32;
-    --primary-foreground: #f5f0e6;
-    --secondary: #e0d6c4;
-    --secondary-foreground: #4a3f2e;
-    --muted: #e8e1d2;
+    --primary-foreground: #f5e6d3;
+    --secondary: #ddd4c2;
+    --secondary-foreground: #4a3728;
+    --muted: #ebe4d4;
     --muted-foreground: #6b5f4d;
-    --accent: #8b5a3c;
-    --accent-foreground: #faf8f2;
+    --accent: #5c4a32;
+    --accent-foreground: #f5e6d3;
     --destructive: #8b4532;
     --destructive-foreground: #faf8f2;
     --border: #c9bda6;
-    --input: #ddd4c2;
-    --ring: #8b6a42;
+    --input: #f5e6d3;
+    --ring: #5c4a32;
     --chart-1: #8b5a3c;
     --chart-2: #4a7c6f;
     --chart-3: #4a6a8c;
@@ -31,13 +31,13 @@
     --chart-5: #8b4a3c;
     --radius: 0.5rem;
     --sidebar: #ebe4d4;
-    --sidebar-foreground: #3d3528;
+    --sidebar-foreground: #4a3728;
     --sidebar-primary: #5c4a32;
-    --sidebar-primary-foreground: #f5f0e6;
-    --sidebar-accent: #e0d6c4;
-    --sidebar-accent-foreground: #4a3f2e;
+    --sidebar-primary-foreground: #f5e6d3;
+    --sidebar-accent: #ddd4c2;
+    --sidebar-accent-foreground: #4a3728;
     --sidebar-border: #c9bda6;
-    --sidebar-ring: #8b6a42;
+    --sidebar-ring: #5c4a32;
 }
 
 .dark {
@@ -116,6 +116,29 @@
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
+
+    @keyframes accordion-down {
+        from {
+            height: 0;
+        }
+
+        to {
+            height: var(--radix-accordion-content-height);
+        }
+    }
+
+    @keyframes accordion-up {
+        from {
+            height: var(--radix-accordion-content-height);
+        }
+
+        to {
+            height: 0;
+        }
+    }
+
+    --animate-accordion-down: accordion-down 0.2s ease-out;
+    --animate-accordion-up: accordion-up 0.2s ease-out;
 }
 
 @layer base {

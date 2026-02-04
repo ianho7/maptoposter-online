@@ -50,8 +50,8 @@ self.onmessage = async (event: MessageEvent) => {
                 // 2. 缓存未命中，从网络抓取
                 const [roadsGeo, waterGeo, parksGeo] = await Promise.all([
                     fetchGraph([lat, lng], radius),
-                    fetchFeatures([lat, lng], radius, { "natural": "water" }, "water"),
-                    fetchFeatures([lat, lng], radius, { "leisure": "park" }, "parks")
+                    fetchFeatures([lat, lng], radius, { "natural": "water", "waterway": "riverbank" }, "water"),
+                    fetchFeatures([lat, lng], radius, { "leisure": "park", "landuse": "grass" }, "parks")
                 ]);
 
                 if (!roadsGeo || !waterGeo || !parksGeo) {
