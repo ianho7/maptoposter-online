@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import type { MapColors } from '@/lib/types';
 
 interface Location {
@@ -18,7 +18,7 @@ interface VintageMapCanvasProps {
   aspectRatio: number;
 }
 
-export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }: VintageMapCanvasProps) {
+export const VintageMapCanvas = memo(function VintageMapCanvas({ location, colors, customTitle, aspectRatio }: VintageMapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -30,7 +30,7 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size based on container
+    // The container now handles the aspect ratio, so the canvas just needs to fill it.
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
 
@@ -40,6 +40,12 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
     canvas.height = containerHeight * dpr;
     canvas.style.width = `${containerWidth}px`;
     canvas.style.height = `${containerHeight}px`;
+
+    // Reset position styles as the container now manages centering and sizing
+    canvas.style.position = '';
+    canvas.style.left = '';
+    canvas.style.top = '';
+
     ctx.scale(dpr, dpr);
 
     const width = containerWidth;
@@ -83,15 +89,20 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
       const w = 20 + seededRandom(i * 4 + 2) * mapWidth * 0.15;
       const h = 15 + seededRandom(i * 4 + 3) * mapHeight * 0.1;
 
-      // Rounded rectangles for organic park shapes
+      // Draw rounded rectangles for organic park shapes
       const radius = Math.min(w, h) * 0.3;
       ctx.beginPath();
-      ctx.roundRect(x, y, w, h, radius);
+      if ('roundRect' in ctx && typeof ctx.roundRect === 'function') {
+        (ctx as any).roundRect(x, y, w, h, radius);
+      } else {
+        // Fallback for older environments
+        ctx.rect(x, y, w, h);
+      }
       ctx.fill();
     }
 
     // Draw building blocks
-    ctx.fillStyle = colors.buildings;
+    // ctx.fillStyle = colors.buildings;
     for (let i = 0; i < 50; i++) {
       const x = mapMargin + seededRandom(i * 5 + 100) * mapWidth * 0.95;
       const y = mapTop + seededRandom(i * 5 + 101) * mapHeight * 0.95;
@@ -316,10 +327,17 @@ export function VintageMapCanvas({ location, colors, customTitle, aspectRatio }:
   return (
     <div
       ref={containerRef}
-      className="w-full h-full"
-      style={{ backgroundColor: colors.bg }}
+      className="relative shadow-[0_20px_50px_rgba(0,0,0,0.15)] mx-auto overflow-hidden"
+      style={{
+        backgroundColor: colors.bg,
+        aspectRatio: `${aspectRatio}`,
+        width: aspectRatio > 1 ? '100%' : 'auto',
+        height: aspectRatio > 1 ? 'auto' : '100%',
+        maxWidth: '100%',
+        maxHeight: '100%'
+      }}
     >
-      <canvas ref={canvasRef} className="w-full h-full" />
+      <canvas ref={canvasRef} className="block w-full h-full" />
     </div>
   );
-}
+});

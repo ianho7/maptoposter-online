@@ -19,7 +19,7 @@ struct JsonRenderRequest {
     roads: String,
     water: String,
     parks: String,
-    pois: Option<String>,  // POI 数据（JSON 字符串格式）
+    pois: Option<String>, // POI 数据（JSON 字符串格式）
     theme: types::Theme,
     width: u32,
     height: u32,
@@ -72,7 +72,7 @@ pub fn render_map(request_json: &str) -> RenderResult {
             Ok(p) => p,
             Err(e) => {
                 log(&format!("Warning: Failed to parse POIs: {}", e));
-                vec![]  // Fallback to empty POI list
+                vec![] // Fallback to empty POI list
             }
         }
     } else {
@@ -86,7 +86,7 @@ pub fn render_map(request_json: &str) -> RenderResult {
         roads,
         water,
         parks,
-            pois,
+        pois,
         theme: json_req.theme,
         width: json_req.width,
         height: json_req.height,
@@ -97,6 +97,7 @@ pub fn render_map(request_json: &str) -> RenderResult {
         // Backwards-compatible defaults for dynamic road width scaling
         selected_size_height: 3508,
         frontend_scale: 2.0,
+        road_width_boost: 1.0,
     };
 
     render_map_internal(request)
@@ -117,19 +118,48 @@ pub struct BinaryRenderConfig {
     pub selected_size_height: u32,
     #[serde(default = "types::default_frontend_scale")]
     pub frontend_scale: f32,
+    #[serde(default = "types::default_road_width_boost")]
+    pub road_width_boost: f32,
     // POI 数据（可选）
     #[serde(default)]
-    pub pois: Option<Vec<f64>>,  // [poi_count, x1, y1, x2, y2, ...]
+    pub pois: Option<Vec<f64>>, // [poi_count, x1, y1, x2, y2, ...]
 }
 
 /// 主渲染函数 (二进制直读版本)
-/// 彻底跳过 MessagePack！直接接收多个二进制分片和基础配置 JSON
 #[wasm_bindgen]
 pub fn render_map_binary(
-    roads_shards: JsValue, // 可以是单个 Float64Array 或 Array<Float64Array>
+    roads_shards: JsValue,
     water_bin: &[f64],
     parks_bin: &[f64],
     config_json: &str,
+) -> RenderResult {
+    render_map_binary_internal(
+        roads_shards,
+        water_bin,
+        parks_bin,
+        config_json,
+        ROBOTO_REGULAR,
+    )
+}
+
+/// 主渲染函数 (带自定义字体版本)
+#[wasm_bindgen]
+pub fn render_map_binary_with_font(
+    roads_shards: JsValue,
+    water_bin: &[f64],
+    parks_bin: &[f64],
+    config_json: &str,
+    font_data: &[u8],
+) -> RenderResult {
+    render_map_binary_internal(roads_shards, water_bin, parks_bin, config_json, font_data)
+}
+
+fn render_map_binary_internal(
+    roads_shards: JsValue,
+    water_bin: &[f64],
+    parks_bin: &[f64],
+    config_json: &str,
+    font_data: &[u8],
 ) -> RenderResult {
     let config: BinaryRenderConfig = match serde_json::from_str(config_json) {
         Ok(c) => c,
@@ -171,11 +201,10 @@ pub fn render_map_binary(
 
     time("render_map_bin: draw_roads");
 
-    // 处理多线程分片 (Array<Float64Array>) 或 单个大分片 (Float64Array)
-    // Compute dynamic road width scale from config (fallback to defaults)
     let road_width_scale = types::calculate_road_width_scale(
         config.selected_size_height as f32,
         config.frontend_scale,
+        config.road_width_boost,
     );
 
     if js_sys::Array::is_array(&roads_shards) {
@@ -194,19 +223,18 @@ pub fn render_map_binary(
     // 投影并绘制 POI
     if let Some(pois_data) = &config.pois {
         if !pois_data.is_empty() && pois_data[0] as usize > 0 {
-            // 投影 POI 坐标（从 WGS84 → Web Mercator）
             let mut projected_pois = pois_data.clone();
             let poi_count = projected_pois[0] as usize;
             for i in 0..poi_count {
                 let offset = 1 + i * 2;
                 let (proj_lon, proj_lat) = projection::project_point(
-                    projected_pois[offset],      // lon
-                    projected_pois[offset + 1],  // lat
+                    projected_pois[offset],     // lon
+                    projected_pois[offset + 1], // lat
                 );
                 projected_pois[offset] = proj_lon;
                 projected_pois[offset + 1] = proj_lat;
             }
-            
+
             time("render_map_bin: draw_pois");
             renderer.draw_pois_bin(&projected_pois);
             time_end("render_map_bin: draw_pois");
@@ -217,13 +245,13 @@ pub fn render_map_binary(
     renderer.draw_gradients();
     time_end("render_map_bin: draw_gradients");
 
-    // 4. 绘制文字
+    // 4. 绘制文字 (使用传入的字体数据)
     if let Err(e) = renderer.draw_text(
         &config.display_city,
         &config.display_country,
         config.center.lat,
         config.center.lon,
-        ROBOTO_REGULAR,
+        font_data,
     ) {
         return RenderResult::error(format!("Failed to draw text: {}", e));
     }
@@ -320,6 +348,7 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
     let road_width_scale = types::calculate_road_width_scale(
         request.selected_size_height as f32,
         request.frontend_scale,
+        request.road_width_boost,
     );
     renderer.draw_roads_scaled(&request.roads, road_width_scale);
     time_end("render_map: draw_roads");

@@ -20,6 +20,7 @@ const COLOR_LABELS: Record<keyof MapColors, string> = {
   bg: 'Background',
   text: 'Text',
   gradient_color: 'Gradient',
+  poi_color: 'POI',
   water: 'Water',
   parks: 'Parks',
   road_motorway: 'Motorway',
@@ -28,11 +29,10 @@ const COLOR_LABELS: Record<keyof MapColors, string> = {
   road_tertiary: 'Tertiary Road',
   road_residential: 'Residential',
   road_default: 'Default Road',
-  buildings: 'Buildings',
 };
 
 const COLOR_GROUPS = {
-  basic: ['bg', 'text', 'gradient_color', 'buildings'] as (keyof MapColors)[],
+  basic: ['bg', 'text', 'gradient_color', 'poi_color', 'buildings'] as (keyof MapColors)[],
   nature: ['water', 'parks'] as (keyof MapColors)[],
   roads: ['road_motorway', 'road_primary', 'road_secondary', 'road_tertiary', 'road_residential', 'road_default'] as (keyof MapColors)[],
 };

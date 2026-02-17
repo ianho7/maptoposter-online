@@ -1,4 +1,4 @@
-import init, { process_roads_bin_wasm, process_polygons_bin_wasm, render_map_binary, init_panic_hook } from './pkg/wasm';
+import init, { process_roads_bin_wasm, process_polygons_bin_wasm, render_map_binary, render_map_binary_with_font, init_panic_hook } from './pkg/wasm';
 
 // Initialize WASM
 const wasmPromise = init().then(() => {
@@ -24,8 +24,15 @@ self.onmessage = async (event: MessageEvent) => {
             // POI 数据已经是最简形式 [poi_count, x1, y1, x2, y2, ...], 直接返回
             result = data as Float64Array;
         } else if (type === 'render') {
-            const { roads_shards, water_bin, parks_bin, config_json } = data as any;
-            const renderResult = render_map_binary(roads_shards, water_bin, parks_bin, config_json);
+            const { roads_shards, water_bin, parks_bin, config_json, custom_font } = data as any;
+
+            let renderResult;
+            if (custom_font && custom_font instanceof Uint8Array && custom_font.length > 0) {
+                renderResult = render_map_binary_with_font(roads_shards, water_bin, parks_bin, config_json, custom_font);
+            } else {
+                renderResult = render_map_binary(roads_shards, water_bin, parks_bin, config_json);
+            }
+
             if (renderResult.is_success()) {
                 result = renderResult.get_data(); // 返回 Uint8Array
             } else {

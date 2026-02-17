@@ -1,14 +1,15 @@
-import { fetchGraph, fetchFeatures, fetchPOIs, flattenRoadsGeoJSON, flattenPolygonsGeoJSON, flattenPOIsGeometry } from './utils';
+import { fetchGraph, fetchFeatures, fetchPOIs, fetchFromProtomaps, flattenRoadsGeoJSON, flattenPolygonsGeoJSON, flattenPOIsGeometry } from './utils';
 import { getDB, compress, decompress } from './db';
 
 const STORE_NAME = 'geojson-cache';
+const USE_PROTOMAPS = false; // MVP 开关：设置为 true 开启 Protomaps 高速抓取
 
 self.onmessage = async (event: MessageEvent) => {
     const { id, type, payload } = event.data;
 
     try {
         if (type === 'GET_MAP_DATA') {
-            const { country, city, lat, lng, radius } = payload;
+            const { country, city, lat, lng, radius, lodMode } = payload;
             const db = await getDB();
 
             const results = {
@@ -24,7 +25,7 @@ self.onmessage = async (event: MessageEvent) => {
             let allCached = true;
 
             for (const t of types) {
-                const key = `map_data:${country}:${city}:${radius}:${t}`;
+                const key = `map_data:${country}:${city}:${radius}:${lodMode}:${t}`;
                 const blob = await db.get(STORE_NAME, key);
                 if (blob) {
                     cachedBlobs[t] = blob;
@@ -34,7 +35,7 @@ self.onmessage = async (event: MessageEvent) => {
             }
 
             if (allCached) {
-                console.log(`[DataWorker] Cache Hit: ${city}, ${country}`);
+                console.log(`[DataWorker] Cache Hit: ${city}, ${country} (LOD: ${lodMode})`);
                 const [roadsJSON, waterJSON, parksJSON] = await Promise.all([
                     decompress(cachedBlobs['roads']!).then(JSON.parse),
                     decompress(cachedBlobs['water']!).then(JSON.parse),
@@ -45,26 +46,37 @@ self.onmessage = async (event: MessageEvent) => {
                 results.water = flattenPolygonsGeoJSON(waterJSON) as any;
                 results.parks = flattenPolygonsGeoJSON(parksJSON) as any;
                 results.fromCache = true;
-                
-                console.log(`  ✓ 水体多边形数: ${waterJSON.features?.length || 0}`);
-                console.log(`  ✓ 公园多边形数: ${parksJSON.features?.length || 0}`);
             } else {
-                console.log(`[DataWorker] Cache Miss: ${city}, ${country}. Fetching from OSM...`);
-                // 2. 缓存未命中，从网络抓取
-                const [roadsGeo, waterGeo, parksGeo] = await Promise.all([
-                    fetchGraph([lat, lng], radius),
-                    fetchFeatures([lat, lng], radius, { "natural": ["water", "wetland"], "waterway": ["riverbank", "river", "canal"] }, "water"),
-                    fetchFeatures([lat, lng], radius, { "leisure": ["park", "garden", "playground"], "landuse": ["grass", "forest", "park"] }, "parks")
-                ]);
+                let roadsGeo, waterGeo, parksGeo;
+
+                if (USE_PROTOMAPS) {
+                    console.log(`[DataWorker] Cache Miss: ${city}. Fetching from Protomaps...`);
+                    const protomapsData = await fetchFromProtomaps([lat, lng], radius);
+                    if (!protomapsData) throw new Error("Failed to fetch data from Protomaps");
+                    roadsGeo = protomapsData.roads;
+                    waterGeo = protomapsData.water;
+                    parksGeo = protomapsData.landuse;
+                } else {
+                    console.log(`[DataWorker] Cache Miss: ${city}. Fetching from OSM (Parallel) with LOD: ${lodMode}...`);
+                    const fetched = await Promise.all([
+                        fetchGraph([lat, lng], radius, lodMode),
+                        fetchFeatures([lat, lng], radius, { "natural": ["water", "wetland"], "waterway": ["riverbank", "river", "canal"] }, "water"),
+                        fetchFeatures([lat, lng], radius, { "leisure": ["park", "garden", "playground"], "landuse": ["grass", "forest", "park"] }, "parks")
+                    ]);
+                    roadsGeo = fetched[0];
+                    waterGeo = fetched[1];
+                    parksGeo = fetched[2];
+                }
 
                 if (!roadsGeo || !waterGeo || !parksGeo) {
-                    throw new Error("Failed to fetch data from OSM");
+                    throw new Error("Failed to fetch data from remote source");
                 }
-                
-                console.log(`  ✓ 从网络获取 - 水体多边形数: ${waterGeo.features?.length || 0}`);
-                console.log(`  ✓ 从网络获取 - 公园多边形数: ${parksGeo.features?.length || 0}`);
 
-                // 3. 异步压缩并入库 (不阻塞返回结果)
+                results.roads = flattenRoadsGeoJSON(roadsGeo) as any;
+                results.water = flattenPolygonsGeoJSON(waterGeo) as any;
+                results.parks = flattenPolygonsGeoJSON(parksGeo) as any;
+
+                // 异步存入库
                 const saveTasks = [
                     { type: 'roads', data: roadsGeo },
                     { type: 'water', data: waterGeo },
@@ -72,26 +84,14 @@ self.onmessage = async (event: MessageEvent) => {
                 ].map(async ({ type: t, data }) => {
                     const json = JSON.stringify(data);
                     const compressed = await compress(json);
-                    const key = `map_data:${country}:${city}:${radius}:${t}`;
+                    const key = `map_data:${country}:${city}:${radius}:${lodMode}:${t}`;
                     return db.put(STORE_NAME, compressed, key);
                 });
-
-                // 我们不需要 await saveTasks，因为可以直接开始扁平化并返回
-                // 但为了稳健，我们先并行处理
-                results.roads = flattenRoadsGeoJSON(roadsGeo) as any;
-                results.water = flattenPolygonsGeoJSON(waterGeo) as any;
-                results.parks = flattenPolygonsGeoJSON(parksGeo) as any;
-
                 await Promise.all(saveTasks);
             }
 
-            // 4. 返回结果 (使用 Transferable)
-            const transferList = [
-                results.roads.buffer,
-                results.water.buffer,
-                results.parks.buffer
-            ].filter(b => b instanceof ArrayBuffer) as Transferable[];
-
+            // 4. 返回结果
+            const transferList = [results.roads.buffer, results.water.buffer, results.parks.buffer].filter(b => b instanceof ArrayBuffer) as Transferable[];
             (self as any).postMessage({
                 id,
                 success: true,
@@ -99,64 +99,45 @@ self.onmessage = async (event: MessageEvent) => {
                     roads: results.roads as any,
                     water: results.water as any,
                     parks: results.parks as any,
-                    fromCache: results.fromCache
+                    fromCache: results.fromCache,
+                    isProtomaps: USE_PROTOMAPS
                 }
             }, transferList);
+
         } else if (type === 'GET_POIS') {
             const { country, city, lat, lng, radius } = payload;
             const db = await getDB();
+            const results = { pois: new Float64Array([0]), fromCache: false };
 
-            const results = {
-                pois: new Float64Array([0]),  // 默认空 POI 数据
-                fromCache: false
-            };
-
-            // 1. 检查 IndexedDB 缓存
             const cacheKey = `map_data:${country}:${city}:${radius}:pois`;
             const cachedBlob = await db.get(STORE_NAME, cacheKey);
 
             if (cachedBlob) {
-                console.log(`[DataWorker] POI Cache Hit: ${city}, ${country}`);
                 const poisJSON = await decompress(cachedBlob).then(JSON.parse);
-                results.pois = flattenPOIsGeometry(poisJSON) as Float64Array<ArrayBuffer>;
+                results.pois = flattenPOIsGeometry(poisJSON) as any;
                 results.fromCache = true;
             } else {
-                console.log(`[DataWorker] POI Cache Miss: ${city}, ${country}. Fetching from OSM...`);
-                // 2. 缓存未命中，从网络抓取
-                const poisGeo = await fetchPOIs([lat, lng], radius);
-
-                // 3. 异步压缩并入库 (不阻塞返回结果)
-                if (poisGeo) {
-                    const json = JSON.stringify(poisGeo);
-                    const compressed = await compress(json);
-                    db.put(STORE_NAME, compressed, cacheKey).catch(err => {
-                        console.error(`Failed to cache POI data: ${err}`);
-                    });
-                    
-                    results.pois = flattenPOIsGeometry(poisGeo) as Float64Array<ArrayBuffer>;
+                let poisGeo;
+                if (USE_PROTOMAPS) {
+                    const protomapsData = await fetchFromProtomaps([lat, lng], radius);
+                    poisGeo = protomapsData?.pois;
                 } else {
-                    // POI 抓取失败，返回空数据
-                    results.pois = new Float64Array([0]);
+                    poisGeo = await fetchPOIs([lat, lng], radius);
+                }
+
+                if (poisGeo) {
+                    const compressed = await compress(JSON.stringify(poisGeo));
+                    await db.put(STORE_NAME, compressed, cacheKey);
+                    results.pois = flattenPOIsGeometry(poisGeo) as any;
                 }
             }
 
-            // 4. 返回结果 (使用 Transferable)
             const transferList = [results.pois.buffer].filter(b => b instanceof ArrayBuffer) as Transferable[];
-
             (self as any).postMessage({
-                id,
-                success: true,
-                payload: {
-                    pois: results.pois as any,
-                    fromCache: results.fromCache
-                }
+                id, success: true, payload: { pois: results.pois as any, fromCache: results.fromCache }
             }, transferList);
         }
     } catch (error) {
-        self.postMessage({
-            id,
-            success: false,
-            error: error instanceof Error ? error.message : String(error)
-        });
+        self.postMessage({ id, success: false, error: error instanceof Error ? error.message : String(error) });
     }
 };

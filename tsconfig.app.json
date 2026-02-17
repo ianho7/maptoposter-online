@@ -28,6 +28,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
+    "allowJs": true,
     "paths": {
       "@/*": [
         "./src/*"

@@ -9,11 +9,13 @@ export interface MapData {
     water: Float64Array;
     parks: Float64Array;
     fromCache: boolean;
+    isProtomaps?: boolean;
 }
 
 export interface POIData {
     pois: Float64Array;
     fromCache: boolean;
+    isProtomaps?: boolean;
 }
 
 class MapDataService {
@@ -55,20 +57,22 @@ class MapDataService {
         city: string,
         lat: number,
         lng: number,
-        radius: number
+        radius: number,
+        lodMode: 'simplified' | 'detailed' = 'simplified'
     ): Promise<MapData> {
-        const cacheKey = `${country}:${city}:${radius}`;
+        const cacheKey = `${country}:${city}:${radius}:${lodMode}`;
 
         // 1. 尝试 L1 内存缓存
         if (this.memoryCache.has(cacheKey)) {
-            console.log(`[MapDataService] L1 Memory Hit: ${city}`);
+            console.log(`[MapDataService] L1 Memory Hit: ${city} (LOD: ${lodMode})`);
             const cached = this.memoryCache.get(cacheKey)!;
             // 重要：返回副本，防止缓存的 Buffer 在 postMessage 中被 Detached
             return {
                 roads: cached.roads.slice(),
                 water: cached.water.slice(),
                 parks: cached.parks.slice(),
-                fromCache: true
+                fromCache: true,
+                isProtomaps: cached.isProtomaps
             };
         }
 
@@ -83,7 +87,7 @@ class MapDataService {
         this.worker.postMessage({
             id,
             type: 'GET_MAP_DATA',
-            payload: { country, city, lat, lng, radius }
+            payload: { country, city, lat, lng, radius, lodMode }
         });
 
         const result = await promise;
@@ -95,7 +99,8 @@ class MapDataService {
             roads: result.roads.slice(),
             water: result.water.slice(),
             parks: result.parks.slice(),
-            fromCache: result.fromCache
+            fromCache: result.fromCache,
+            isProtomaps: result.isProtomaps
         });
 
         return result;
@@ -140,7 +145,8 @@ class MapDataService {
         // 3. 存入 L1 内存缓存
         this.poiMemoryCache.set(cacheKey, {
             pois: result.pois.slice(),
-            fromCache: result.fromCache
+            fromCache: result.fromCache,
+            isProtomaps: result.isProtomaps
         });
 
         return result;

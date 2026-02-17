@@ -28,9 +28,13 @@ const RESOLUTION_SCALE: f32 = 8.0;
 /// // 缩放因子 = 7016 / 4800 = 1.462
 /// let width = road_type.get_width_scaled(scale);  // 使用动态缩放
 /// ```
-pub fn calculate_road_width_scale(selected_size_height: f32, _frontend_scale: f32) -> f32 {
-    // selected_size_height 已经包含倍数，直接除以标准高度
-    selected_size_height / PYTHON_STANDARD_HEIGHT_PX
+pub fn calculate_road_width_scale(
+    selected_size_height: f32,
+    _frontend_scale: f32,
+    boost: f32,
+) -> f32 {
+    // selected_size_height 已经包含倍数，直接除以标准高度，并加上额外的权重增强
+    (selected_size_height / PYTHON_STANDARD_HEIGHT_PX) * boost
 }
 
 /// 主题配色方案
@@ -106,7 +110,7 @@ impl RoadType {
     }
 
     /// 获取道路线宽（已乘以分辨率缩放因子）
-    /// 
+    ///
     /// 返回值已经考虑了 8x 分辨率放大，确保在高分辨率输出中小道路也能清晰可见
     /// 原始线宽 * RESOLUTION_SCALE:
     /// - Motorway: 1.2 * 8 = 9.6
@@ -114,7 +118,7 @@ impl RoadType {
     /// - Secondary: 0.8 * 8 = 6.4
     /// - Tertiary: 0.6 * 8 = 4.8
     /// - Residential/Default: 0.4 * 8 = 3.2
-    /// 
+    ///
     /// 注意：此方法使用固定的 RESOLUTION_SCALE (8.0)，如需动态缩放请使用 get_width_scaled()
     pub fn get_width(self) -> f32 {
         let base_width = match self {
@@ -215,7 +219,7 @@ pub struct RenderRequest {
     pub roads: Vec<Road>,
     pub water: Vec<PolyFeature>,
     pub parks: Vec<PolyFeature>,
-    
+
     // POI 数据（可选）
     #[serde(default)]
     pub pois: Vec<POI>,
@@ -240,18 +244,26 @@ pub struct RenderRequest {
     // 选定尺寸的原始高度（像素），例如 A4 Portrait 的 3508
     #[serde(default = "default_selected_size_height")]
     pub selected_size_height: u32,
-    
+
     // 前端应用的缩放倍数，例如 8
     #[serde(default = "default_frontend_scale")]
     pub frontend_scale: f32,
+
+    // 道路权重增强倍率（默认 1.0）
+    #[serde(default = "default_road_width_boost")]
+    pub road_width_boost: f32,
+}
+
+pub fn default_road_width_boost() -> f32 {
+    1.0
 }
 
 pub fn default_selected_size_height() -> u32 {
-    3508  // A4 Portrait 默认值
+    3508 // A4 Portrait 默认值
 }
 
 pub fn default_frontend_scale() -> f32 {
-    8.0  // 默认缩放倍数
+    8.0 // 默认缩放倍数
 }
 
 #[derive(Debug, Deserialize, Serialize)]
