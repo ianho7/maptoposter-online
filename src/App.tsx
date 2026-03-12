@@ -1,14 +1,14 @@
 import React from "react"
 import { RefreshCw } from 'lucide-react';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LocationCombobox } from '@/components/location-combobox';
-import { Download, MapPin, Palette, Square, Smartphone, Monitor, FileImage, Loader2, ImageIcon, AlertCircle, Type, FileText, FileCheck, Settings2 } from 'lucide-react';
+import { Download, MapPin, Palette, Square, Smartphone, Monitor, FileImage, Loader2, AlertCircle, Type, FileText, FileCheck, Settings2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { VintageMapCanvas } from '@/components/vintage-map-canvas';
 import { cn } from '@/lib/utils';
@@ -19,7 +19,7 @@ import init, { init_panic_hook } from './pkg/wasm';
 import { shardRoadsBinary, getCoordinates } from './utils';
 import { type MapColors, MAP_THEMES as THEMES } from '@/lib/types';
 import { mapDataService } from './services/map-data';
-import { getVibrant } from "./lib/vibrant";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // Paraglide i18n
@@ -134,12 +134,7 @@ export default function MapPosterGenerator() {
     'Glitch-Purple': m.theme_glitch_purple()
   };
 
-  // Palette extraction state
-  const [extractedColors, setExtractedColors] = useState<string[]>([]);
-  const [isExtractingColors, setIsExtractingColors] = useState(false);
-  const [uploadedImagePreview, setUploadedImagePreview] = useState<string | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Location selection state
   const [selectedCountry, setSelectedCountry] = useState<string>('');
@@ -292,7 +287,8 @@ export default function MapPosterGenerator() {
   // Remove the old initialization useEffect (lines 182-211) as it's merged above
 
 
-  const colors = useCustomColors ? customColors : selectedTheme.colors;
+  const deferredCustomColors = useDeferredValue(customColors);
+  const colors = useCustomColors ? deferredCustomColors : selectedTheme.colors;
 
   const handleCountryChange = useCallback(async (countryName: string) => {
     setSelectedCountry(countryName);
@@ -353,52 +349,7 @@ export default function MapPosterGenerator() {
     setLocation({ country: selectedCountry, state: selectedState, city: cityName });
   }, [selectedCountry, selectedState]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const objectUrl = URL.createObjectURL(file);
-    setUploadedImagePreview(objectUrl);
-    setIsExtractingColors(true);
-    setExtractedColors([]);
-    try {
-      const src = URL.createObjectURL(file);
-      const colors = await getVibrant(src);
-      if (colors) {
-        setExtractedColors(Object.values(colors).map((item) => item.hex));
-        setCustomColors({
-          bg: colors.lightMuted.hex,
-          text: colors.darkVibrant.hex,
-          gradient_color: colors.vibrant.hex,
-          water: colors.lightVibrant.hex,
-          parks: colors.muted.hex,
-          road_motorway: colors.vibrant.hex,
-          road_primary: colors.vibrant.hex,
-          road_secondary: colors.darkVibrant.hex,
-          road_tertiary: colors.muted.hex,
-          road_residential: colors.lightMuted.hex,
-          road_default: colors.lightMuted.hex,
-          poi_color: colors.lightMuted.hex
-        })
-      }
-    } catch (error) {
-      console.error("Failed to extract colors:", error);
-    } finally {
-      setIsExtractingColors(false);
-    }
-  };
 
-  const clearUploadedImage = () => {
-    if (uploadedImagePreview) URL.revokeObjectURL(uploadedImagePreview);
-    setUploadedImagePreview(null);
-    setExtractedColors([]);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleColorClick = (hex: string) => {
-    navigator.clipboard.writeText(hex);
-    setCopyFeedback(hex);
-    setTimeout(() => setCopyFeedback(null), 1500);
-  };
 
   const handleFontUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -478,21 +429,14 @@ export default function MapPosterGenerator() {
       setGenerationStep(m.step_fetching_data());
       await yieldMainThread();
 
-      // 【优化】：并行发起所有 OSM 请求。
-      // 由于 utils.ts 的轮询机制，这 4 个请求会几乎同时命中 4 个不同的镜像站点
-      const [mapResults, poiResults] = await Promise.all([
-        mapDataService.getMapData(location.country, location.city, lat, lng, baseRadius, lodMode),
-        mapDataService.getPOIs(location.country, location.city, lat, lng, baseRadius)
-      ]);
+      // 【优化】：获取地图数据 (包含 POI)
+      const mapResults = await mapDataService.getMapData(location.country, location.city, lat, lng, baseRadius, lodMode);
 
-      const { roads, water, parks, fromCache, isProtomaps: mapIsProtomaps } = mapResults;
-      const { pois: poisRaw, fromCache: poiFromCache, isProtomaps: poiIsProtomaps } = poiResults;
+      const { roads, water, parks, pois: poisRaw, fromCache, isProtomaps } = mapResults;
 
       setGenerationProgress(60);
-      setGenerationStep((fromCache && poiFromCache) ? m.step_restore_cache() : m.step_fetch_complete());
+      setGenerationStep(fromCache ? m.step_restore_cache() : m.step_fetch_complete());
       await yieldMainThread();
-
-      const isProtomaps = mapIsProtomaps || poiIsProtomaps;
 
       setGenerationProgress(70);
       setGenerationStep(m.step_processing());
@@ -690,7 +634,7 @@ export default function MapPosterGenerator() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Array.from({ length: 11 }, (_, i) => 5000 + i * 1000).map(radius => (
+                      {Array.from({ length: 16 }, (_, i) => 1000 + i * 1000).map(radius => (
                         <SelectItem key={radius} value={radius.toString()}>{radius}m</SelectItem>
                       ))}
                     </SelectContent>
@@ -723,35 +667,41 @@ export default function MapPosterGenerator() {
                   </div>
                 </TabsContent>
                 <TabsContent value="custom" className="mt-3">
-                  <div className="mb-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.extract_from_photo()}</Label>
-                      {uploadedImagePreview && <Button variant="ghost" size="sm" onClick={clearUploadedImage} className="h-6 px-2 text-[10px] text-destructive">{m.clear()}</Button>}
-                    </div>
-                    {!uploadedImagePreview ? (
-                      <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-border rounded-lg p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors">
-                        <ImageIcon className="w-6 h-6 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">{m.click_to_upload()}</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex gap-2">
-                          <div className="relative w-16 h-16 rounded-md overflow-hidden border border-border">
-                            <img src={uploadedImagePreview} alt="Uploaded" className="w-full h-full object-cover" />
+                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar pt-1">
+                    {[
+                      { key: 'bg', label: m.color_bg() },
+                      { key: 'text', label: m.color_text() },
+                      { key: 'gradient_color', label: m.color_gradient() },
+                      { key: 'water', label: m.color_water() },
+                      { key: 'parks', label: m.color_parks() },
+                      { key: 'poi_color', label: m.color_poi() },
+                      { key: 'road_motorway', label: m.color_road_motorway() },
+                      { key: 'road_primary', label: m.color_road_primary() },
+                      { key: 'road_secondary', label: m.color_road_secondary() },
+                      { key: 'road_tertiary', label: m.color_road_tertiary() },
+                      { key: 'road_residential', label: m.color_road_residential() },
+                      { key: 'road_default', label: m.color_road_default() },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between gap-4">
+                        <Label className="text-[11px] text-muted-foreground whitespace-nowrap">{label}</Label>
+                        <div className="flex items-center gap-2">
+                          <div className="relative group">
+                            <input
+                              type="color"
+                              value={customColors[key as keyof MapColors]}
+                              onChange={(e) => setCustomColors({ ...customColors, [key]: e.target.value })}
+                              className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent p-0 overflow-hidden [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none"
+                            />
                           </div>
-                          <div className="flex-1">
-                            {isExtractingColors ? (
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin" />{m.extracting_palette()}</div>
-                            ) : (
-                              <div className="flex flex-wrap gap-2">
-                                {extractedColors.map((color, i) => <button key={i} onClick={() => handleColorClick(color)} className="w-6 h-6 rounded-sm border border-border" style={{ backgroundColor: color }} />)}
-                              </div>
-                            )}
-                          </div>
+                          <Input
+                            value={customColors[key as keyof MapColors]}
+                            onChange={(e) => setCustomColors({ ...customColors, [key]: e.target.value })}
+                            className="w-20 h-8 text-[11px] font-mono px-2"
+                            placeholder="#000000"
+                          />
                         </div>
                       </div>
-                    )}
-                    <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+                    ))}
                   </div>
                 </TabsContent>
               </Tabs>

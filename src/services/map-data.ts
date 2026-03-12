@@ -8,6 +8,7 @@ export interface MapData {
     roads: Float64Array;
     water: Float64Array;
     parks: Float64Array;
+    pois: Float64Array;  // 合并 POI 到 MapData
     fromCache: boolean;
     isProtomaps?: boolean;
 }
@@ -20,7 +21,6 @@ export interface POIData {
 
 class MapDataService {
     private memoryCache = new Map<string, MapData>();
-    private poiMemoryCache = new Map<string, POIData>();
     private worker: Worker | null = null;
     private pendingRequests = new Map<number, { resolve: Function, reject: Function }>();
     private requestId = 0;
@@ -71,6 +71,7 @@ class MapDataService {
                 roads: cached.roads.slice(),
                 water: cached.water.slice(),
                 parks: cached.parks.slice(),
+                pois: cached.pois.slice(),  // 合并 POI
                 fromCache: true,
                 isProtomaps: cached.isProtomaps
             };
@@ -99,6 +100,7 @@ class MapDataService {
             roads: result.roads.slice(),
             water: result.water.slice(),
             parks: result.parks.slice(),
+            pois: result.pois.slice(),  // 合并 POI
             fromCache: result.fromCache,
             isProtomaps: result.isProtomaps
         });
@@ -106,6 +108,7 @@ class MapDataService {
         return result;
     }
 
+    // [已废弃] POI 已合并到 getMapData 中，此方法保留用于向后兼容
     async getPOIs(
         country: string,
         city: string,
@@ -113,43 +116,13 @@ class MapDataService {
         lng: number,
         radius: number
     ): Promise<POIData> {
-        const cacheKey = `${country}:${city}:${radius}:pois`;
-
-        // 1. 尝试 L1 内存缓存
-        if (this.poiMemoryCache.has(cacheKey)) {
-            console.log(`[MapDataService] L1 Memory Hit (POI): ${city}`);
-            const cached = this.poiMemoryCache.get(cacheKey)!;
-            // 返回副本，防止缓存的 Buffer 在 postMessage 中被 Detached
-            return {
-                pois: cached.pois.slice(),
-                fromCache: true
-            };
-        }
-
-        // 2. 向 Worker 请求 POI 数据 (Worker 会处理 L2 IndexedDB 和网络)
-        if (!this.worker) throw new Error("Data Worker not initialized");
-
-        const id = this.requestId++;
-        const promise = new Promise<POIData>((resolve, reject) => {
-            this.pendingRequests.set(id, { resolve, reject });
-        });
-
-        this.worker.postMessage({
-            id,
-            type: 'GET_POIS',
-            payload: { country, city, lat, lng, radius }
-        });
-
-        const result = await promise;
-
-        // 3. 存入 L1 内存缓存
-        this.poiMemoryCache.set(cacheKey, {
-            pois: result.pois.slice(),
-            fromCache: result.fromCache,
-            isProtomaps: result.isProtomaps
-        });
-
-        return result;
+        // 直接调用 getMapData，获取其中的 pois
+        const mapData = await this.getMapData(country, city, lat, lng, radius, 'simplified');
+        return {
+            pois: mapData.pois,
+            fromCache: mapData.fromCache,
+            isProtomaps: mapData.isProtomaps
+        };
     }
 }
 

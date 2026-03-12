@@ -3,6 +3,33 @@ import osmtogeojson from 'osmtogeojson';
 import Pbf from 'pbf';
 import { VectorTile } from '@mapbox/vector-tile';
 
+// 全局并发限制，最多同时 2 个 Overpass 请求
+const MAX_CONCURRENT = 2;
+let activeRequests = 0;
+const requestQueue: (() => void)[] = [];
+
+function acquireSlot(): Promise<void> {
+    return new Promise(resolve => {
+        if (activeRequests < MAX_CONCURRENT) {
+            activeRequests++;
+            resolve();
+        } else {
+            requestQueue.push(() => {
+                activeRequests++;
+                resolve();
+            });
+        }
+    });
+}
+
+function releaseSlot() {
+    activeRequests--;
+    if (requestQueue.length > 0) {
+        const next = requestQueue.shift()!;
+        next();
+    }
+}
+
 /**
  * 将经度转换为瓦片 X 坐标
  */
@@ -475,13 +502,11 @@ export function shardRoadsBinary(data: Float64Array, numShards: number): Float64
     return shards;
 }
 
-const OVERPASS_SERVERS = [
-    "https://overpass-api.de/api/interpreter",
-    "https://lz4.overpass-api.de/api/interpreter",
-    "https://z.overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.openstreetmap.fr/api/interpreter",
-    "https://overpass.n.tyras.nl/api/interpreter", // 增加一个稳定的荷兰镜像
+const OVERPASS_SERVERS: { url: string; retries: number }[] = [
+    { url: "https://overpass.kumi.systems/api/interpreter", retries: 3 },
+    { url: "https://lz4.overpass-api.de/api/interpreter", retries: 3 },
+    { url: "https://z.overpass-api.de/api/interpreter", retries: 1 },
+    { url: "https://overpass.openstreetmap.ru/api/interpreter", retries: 1 },
 ];
 
 let currentServerIndex = 0;
@@ -489,21 +514,46 @@ let currentServerIndex = 0;
 /**
  * 核心请求工具：实现自动切服用轮询
  */
-async function fetchWithRetry(query: string, retries = 2): Promise<Response> {
-    const server = OVERPASS_SERVERS[currentServerIndex];
-    currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
-    const url = `${server}?data=${encodeURIComponent(query)}`;
+async function fetchWithRetry(
+    query: string,
+    serverIndex = currentServerIndex,
+    serverRetries?: number
+): Promise<Response> {
+    await acquireSlot();
+
+    const server = OVERPASS_SERVERS[serverIndex % OVERPASS_SERVERS.length];
+    const retries = serverRetries ?? server.retries;
+    const url = `${server.url}?data=${encodeURIComponent(query)}`;
 
     try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response;
-    } catch (e) {
-        if (retries > 0) {
-            console.warn(`[Overpass] Server ${server} failed, retrying next...`);
-            return fetchWithRetry(query, retries - 1);
+        const response = await fetch(url, {
+            signal: AbortSignal.timeout(28000)
+        });
+
+        if (response.status === 429 || response.status === 504) {
+            throw new Error(`HTTP ${response.status}`);
         }
-        throw e;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        currentServerIndex = (serverIndex + 1) % OVERPASS_SERVERS.length;
+        releaseSlot(); // 成功释放
+        return response;
+
+    } catch (e) {
+        releaseSlot(); // 失败也释放，再决定是否重试
+        console.warn(`[Overpass] ${server.url} failed: ${e}, retries left: ${retries - 1}`);
+
+        if (retries > 1) {
+            return fetchWithRetry(query, serverIndex, retries - 1);
+        }
+
+        const nextIndex = serverIndex + 1;
+        if (nextIndex < serverIndex + OVERPASS_SERVERS.length) {
+            console.warn(`[Overpass] Switching to next server...`);
+            return fetchWithRetry(query, nextIndex);
+        }
+
+        throw new Error(`All Overpass servers failed. Last error: ${e}`);
     }
 }
 
@@ -540,10 +590,14 @@ export async function fetchGraph(point: Point, dist: number, lodMode: 'simplifie
     }
 
     const query = `
-    [out:json][timeout:60];
-    way["highway"~"${highwayFilter}"](${south},${west},${north},${east});
-    out geom qt;
-  `;
+    [out:json][timeout:25];
+    (
+      way["highway"~"${highwayFilter}"](${south},${west},${north},${east});
+    );
+    out body;
+    >;
+    out skel qt;
+`;
 
     try {
         console.log(`[OSM] Fetching roads...`);
@@ -577,16 +631,19 @@ export async function fetchFeatures(
     const bbox = `${south},${west},${north},${east}`;
 
     const tagFilters = Object.entries(tags)
-        .map(([key, value]) => {
+        .flatMap(([key, value]) => {
             let filter = '';
             if (value === true) filter = `["${key}"]`;
             else if (Array.isArray(value)) filter = `["${key}"~"${value.join('|')}"]`;
             else filter = `["${key}"="${value}"]`;
-            return `nwr${filter}(${bbox});`;
+            return [
+                `way${filter}(${bbox});`,
+                `relation${filter}(${bbox});`
+            ];
         })
         .join('');
 
-    const query = `[out:json][timeout:60];(${tagFilters});out geom qt;`;
+    const query = `[out:json][timeout:25];(${tagFilters});out body;>;out skel qt;`;
 
     try {
         console.log(`[OSM] Fetching ${name}...`);
@@ -605,32 +662,72 @@ export async function fetchFeatures(
 export async function fetchPOIs(point: Point, dist: number): Promise<GeoJSON.FeatureCollection | null> {
     const [lat, lon] = point;
     const latRad = lat * (Math.PI / 180);
-    const deltaLat = dist / 111320;
-    const deltaLon = dist / (111320 * Math.cos(latRad));
+    const effectiveDist = dist; // Math.min(dist, 5000);
+    const deltaLat = effectiveDist / 111320;
+    const deltaLon = effectiveDist / (111320 * Math.cos(latRad));
 
-    const south = (lat - deltaLat).toFixed(4);
-    const west = (lon - deltaLon).toFixed(4);
-    const north = (lat + deltaLat).toFixed(4);
-    const east = (lon + deltaLon).toFixed(4);
+    const south = lat - deltaLat;
+    const west = lon - deltaLon;
+    const north = lat + deltaLat;
+    const east = lon + deltaLon;
 
-    // 【优化】：POI 也改为 out geom qt，并增加 bbox 规范化
-    const query = `
-        [out:json][timeout:60];
+    const GRID = 4;
+    // 每格放宽到 500，边缘格子 POI 少时尽量多取
+    const perCell = 100;
+
+    const cells: string[] = [];
+    for (let row = 0; row < GRID; row++) {
+        for (let col = 0; col < GRID; col++) {
+            const cellSouth = (south + (north - south) * (row / GRID)).toFixed(4);
+            const cellNorth = (south + (north - south) * ((row + 1) / GRID)).toFixed(4);
+            const cellWest = (west + (east - west) * (col / GRID)).toFixed(4);
+            const cellEast = (west + (east - west) * ((col + 1) / GRID)).toFixed(4);
+            cells.push(`${cellSouth},${cellWest},${cellNorth},${cellEast}`);
+        }
+    }
+
+    const buildQuery = (bbox: string) => `
+        [out:json][timeout:25];
         (
-            node["amenity"](${south},${west},${north},${east});
-            node["shop"](${south},${west},${north},${east});
-            node["tourism"](${south},${west},${north},${east});
+            node["amenity"](${bbox});
+            node["shop"](${bbox});
+            node["tourism"](${bbox});
         );
-        out geom qt;
+        out skel qt ${perCell};
     `;
 
     try {
-        console.log("[OSM] Fetching POIs...");
-        const response = await fetchWithRetry(query);
-        const osmData = await response.json();
-        const geojson = osmtogeojson(osmData) as GeoJSON.FeatureCollection;
+        console.log(`[OSM] Fetching POIs (${GRID}×${GRID} grid, up to ${perCell} per cell)...`);
+
+        const BATCH_SIZE = 2;
+        const allResults: { elements: any[] }[] = [];
+
+        for (let i = 0; i < cells.length; i += BATCH_SIZE) {
+            const batch = cells.slice(i, i + BATCH_SIZE);
+            const batchResults = await Promise.all(
+                batch.map(bbox =>
+                    fetchWithRetry(buildQuery(bbox))
+                        .then(r => r.json())
+                        .catch(() => ({ elements: [] }))
+                )
+            );
+            allResults.push(...batchResults);
+        }
+
+        const allElements = allResults.flatMap(r => r.elements ?? []);
+
+        // 洗牌后截断到 2000
+        for (let i = allElements.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allElements[i], allElements[j]] = [allElements[j], allElements[i]];
+        }
+
+        const merged = { version: 0.6, elements: allElements.slice(0, 2000) };
+        const geojson = osmtogeojson(merged) as GeoJSON.FeatureCollection;
         const pointFeatures = geojson.features.filter(f => f.geometry.type === 'Point');
+
         return { ...geojson, features: pointFeatures };
+
     } catch (error) {
         console.error(`POIs Fetch Failed: ${error}`);
         return null;
