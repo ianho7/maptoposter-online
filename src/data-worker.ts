@@ -21,11 +21,34 @@ const USE_OVERPASS_CLIENT = true; // true=使用新库(overpass-client), false=�
 import { fetchGraph, fetchFeatures, fetchPOIs, fetchFromProtomaps, flattenRoadsGeoJSON, flattenPolygonsGeoJSON, flattenPOIsGeometry } from './utils';
 // 新库 (overpass-client) - 包装层
 import { fetchGraphOverpass, fetchFeaturesOverpass, fetchPOIsOverpass } from './services/overpass-wrapper';
+// 导入 getOverpassPause 用于进度更新
+import { getOverpassPause, type OverpassProgressCallback } from './services/overpass-client';
 
 import { getDB, compress, decompress } from './db';
 
 const STORE_NAME = 'geojson-cache';
 const USE_PROTOMAPS = false; // MVP 开关：设置为 true 开启 Protomaps 高速抓取
+
+// 进度消息辅助函数
+function sendProgress(progress: number, step: string) {
+    (self as any).postMessage({ type: 'PROGRESS', progress, step });
+}
+
+// 创建带基础进度的进度回调
+function createProgressCallback(baseProgress: number, baseStep: string): OverpassProgressCallback | undefined {
+    return (progress: number, step: string, currentBlock?: number, totalBlocks?: number, secondsRemaining?: number) => {
+        if (step === 'waiting_slot' && secondsRemaining !== undefined) {
+            // API 槽位等待
+            sendProgress(baseProgress, `step_waiting_api:${secondsRemaining}`);
+        } else if (step === 'retrying_error' && secondsRemaining !== undefined) {
+            // 错误重试等待
+            sendProgress(baseProgress, `step_retrying_error:${secondsRemaining}`);
+        } else {
+            // 其他情况，使用基础进度和步骤
+            sendProgress(baseProgress, baseStep);
+        }
+    };
+}
 
 self.onmessage = async (event: MessageEvent) => {
     const { id, type, payload } = event.data;
@@ -65,6 +88,9 @@ self.onmessage = async (event: MessageEvent) => {
 
             if (allCached && poisCached) {
                 console.log(`[DataWorker] Cache Hit: ${city}, ${country} (LOD: ${lodMode}) + POIs`);
+                // 发送缓存恢复进度
+                sendProgress(60, 'step_restore_cache');
+
                 const [roadsJSON, waterJSON, parksJSON, poisJSON] = await Promise.all([
                     decompress(cachedBlobs['roads']!).then(JSON.parse),
                     decompress(cachedBlobs['water']!).then(JSON.parse),
@@ -82,6 +108,7 @@ self.onmessage = async (event: MessageEvent) => {
 
                 if (USE_PROTOMAPS) {
                     console.log(`[DataWorker] Cache Miss: ${city}. Fetching from Protomaps...`);
+                    sendProgress(5, 'step_fetching_data');
                     const protomapsData = await fetchFromProtomaps([lat, lng], radius);
                     if (!protomapsData) throw new Error("Failed to fetch data from Protomaps");
                     roadsGeo = protomapsData.roads;
@@ -90,13 +117,68 @@ self.onmessage = async (event: MessageEvent) => {
                 } else if (USE_OVERPASS_CLIENT) {
                     // [新库] 使用 overpass-client (串行请求，避免触发服务器并发限制)
                     console.log(`[DataWorker] Cache Miss: ${city}. Fetching from overpass-client (sequential) with LOD: ${lodMode}...`);
-                    roadsGeo = await fetchGraphOverpass([lat, lng], radius, lodMode);
-                    waterGeo = await fetchFeaturesOverpass([lat, lng], radius, 'water');
-                    parksGeo = await fetchFeaturesOverpass([lat, lng], radius, 'parks');
+
+                    // 步骤1: 检查API状态并获取道路
+                    sendProgress(5, 'step_checking_api');
+                    const roadPause = await getOverpassPause('https://overpass-api.de/api');
+                    if (roadPause > 0) {
+                        // 需要等待，显示倒计时
+                        let remaining = Math.ceil(roadPause / 1000);
+                        while (remaining > 0) {
+                            sendProgress(5, `step_waiting_api:${remaining}`);
+                            await new Promise(r => setTimeout(r, 1000));
+                            remaining--;
+                        }
+                    }
+                    sendProgress(10, 'step_fetching_roads');
+                    // 传入进度回调和预获取的等待时间，避免 overpass-client 重复调用 getOverpassPause
+                    roadsGeo = await fetchGraphOverpass([lat, lng], radius, lodMode, createProgressCallback(10, 'step_fetching_roads'), roadPause);
+
+                    // 步骤2: 检查API状态并获取水体
+                    sendProgress(15, 'step_checking_api');
+                    const waterPause = await getOverpassPause('https://overpass-api.de/api');
+                    if (waterPause > 0) {
+                        let remaining = Math.ceil(waterPause / 1000);
+                        while (remaining > 0) {
+                            sendProgress(15, `step_waiting_api:${remaining}`);
+                            await new Promise(r => setTimeout(r, 1000));
+                            remaining--;
+                        }
+                    }
+                    sendProgress(20, 'step_fetching_water');
+                    waterGeo = await fetchFeaturesOverpass([lat, lng], radius, 'water', createProgressCallback(20, 'step_fetching_water'), waterPause);
+
+                    // 步骤3: 检查API状态并获取公园
+                    sendProgress(25, 'step_checking_api');
+                    const parksPause = await getOverpassPause('https://overpass-api.de/api');
+                    if (parksPause > 0) {
+                        let remaining = Math.ceil(parksPause / 1000);
+                        while (remaining > 0) {
+                            sendProgress(25, `step_waiting_api:${remaining}`);
+                            await new Promise(r => setTimeout(r, 1000));
+                            remaining--;
+                        }
+                    }
+                    sendProgress(30, 'step_fetching_parks');
+                    parksGeo = await fetchFeaturesOverpass([lat, lng], radius, 'parks', createProgressCallback(30, 'step_fetching_parks'), parksPause);
+
+                    // 步骤4: 检查API状态并获取POI
+                    sendProgress(35, 'step_checking_api');
+                    const poiPause = await getOverpassPause('https://overpass-api.de/api');
+                    if (poiPause > 0) {
+                        let remaining = Math.ceil(poiPause / 1000);
+                        while (remaining > 0) {
+                            sendProgress(35, `step_waiting_api:${remaining}`);
+                            await new Promise(r => setTimeout(r, 1000));
+                            remaining--;
+                        }
+                    }
+                    sendProgress(40, 'step_fetching_pois');
 
                     // 串行获取 POI (合并到 getMapData 中)
                     if (!poisCached) {
-                        const poisGeo = await fetchPOIsOverpass([lat, lng], radius);
+                        // 传入进度回调和预获取的等待时间，用于处理 429/504/网络错误重试时的进度更新
+                        const poisGeo = await fetchPOIsOverpass([lat, lng], radius, createProgressCallback(40, 'step_fetching_pois'), poiPause);
                         if (poisGeo) {
                             const compressed = await compress(JSON.stringify(poisGeo));
                             await db.put(STORE_NAME, compressed, poisCacheKey);
@@ -106,9 +188,12 @@ self.onmessage = async (event: MessageEvent) => {
                         const poisJSON = await decompress(poisCachedBlob!).then(JSON.parse);
                         results.pois = flattenPOIsGeometry(poisJSON) as any;
                     }
+
+                    sendProgress(60, 'step_fetch_complete');
                 } else {
                     // [旧函数] 使用 utils.ts 中的原始函数
                     console.log(`[DataWorker] Cache Miss: ${city}. Fetching from OSM (Parallel) with LOD: ${lodMode}...`);
+                    sendProgress(10, 'step_fetching_roads');
                     const fetched = await Promise.all([
                         fetchGraph([lat, lng], radius, lodMode),
                         fetchFeatures([lat, lng], radius, { "natural": ["water", "wetland"], "waterway": ["riverbank", "river", "canal"] }, "water"),
@@ -119,6 +204,7 @@ self.onmessage = async (event: MessageEvent) => {
                     parksGeo = fetched[2];
 
                     // 串行获取 POI (合并到 getMapData 中)
+                    sendProgress(35, 'step_fetching_pois');
                     if (!poisCached) {
                         const poisGeo = await fetchPOIs([lat, lng], radius);
                         if (poisGeo) {
@@ -130,6 +216,8 @@ self.onmessage = async (event: MessageEvent) => {
                         const poisJSON = await decompress(poisCachedBlob!).then(JSON.parse);
                         results.pois = flattenPOIsGeometry(poisJSON) as any;
                     }
+
+                    sendProgress(60, 'step_fetch_complete');
                 }
 
                 if (!roadsGeo || !waterGeo || !parksGeo) {
@@ -165,6 +253,7 @@ self.onmessage = async (event: MessageEvent) => {
                     parks: results.parks as any,
                     pois: results.pois as any,
                     fromCache: results.fromCache,
+                    cacheLevel: results.fromCache ? 'indexeddb' : 'none',
                     isProtomaps: USE_PROTOMAPS
                 }
             }, transferList);

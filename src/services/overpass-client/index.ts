@@ -44,6 +44,7 @@ export {
   downloadOverpassFeatures,
   makeOverpassSettings,
   getOverpassPause,
+  type OverpassProgressCallback,
 } from "./overpass";
 
 // 几何工具

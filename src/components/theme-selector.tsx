@@ -17,7 +17,7 @@ export function ThemeSelector({ selectedTheme, onSelect }: ThemeSelectorProps) {
             key={theme.id}
             onClick={() => onSelect(theme)}
             className={cn(
-              "group relative p-2 rounded-lg border transition-all duration-200",
+              "group relative p-2 border transition-all duration-200",
               selectedTheme === theme.id
                 ? "border-accent ring-2 ring-accent/30"
                 : "border-border/50 hover:border-border"
@@ -25,19 +25,19 @@ export function ThemeSelector({ selectedTheme, onSelect }: ThemeSelectorProps) {
           >
             {/* Theme preview */}
             <div 
-              className="aspect-[3/4] rounded overflow-hidden mb-2"
+              className="aspect-[3/4] overflow-hidden mb-2"
               style={{ backgroundColor: theme.colors.bg }}
             >
               {/* Mini map preview */}
               <div className="relative w-full h-full p-1">
                 {/* Water */}
                 <div 
-                  className="absolute top-2 left-2 w-4 h-3 rounded-sm opacity-60"
+                  className="absolute top-2 left-2 w-4 h-3 opacity-60"
                   style={{ backgroundColor: theme.colors.water }}
                 />
                 {/* Park */}
                 <div 
-                  className="absolute top-4 right-2 w-3 h-2 rounded-sm opacity-60"
+                  className="absolute top-4 right-2 w-3 h-2 opacity-60"
                   style={{ backgroundColor: theme.colors.parks }}
                 />
                 {/* Roads */}

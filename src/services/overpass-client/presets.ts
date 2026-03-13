@@ -28,7 +28,7 @@ import type { Feature, MultiPolygon, Polygon } from "geojson";
 import { overpassConfig } from "./config";
 import { makeOverpassPolygonCoordStrs } from "./geo";
 import { log } from "./http";
-import { downloadOverpassFeatures, downloadOverpassNetwork } from "./overpass";
+import { downloadOverpassFeatures, downloadOverpassNetwork, type OverpassProgressCallback } from "./overpass";
 
 // ─── 道路网络类型 ────────────────────────────────────────
 
@@ -189,6 +189,8 @@ export function getNetworkFilter(networkType: NetworkType): string {
 export async function downloadRoads(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
   networkType: NetworkType = "all",
+  onProgress?: OverpassProgressCallback,
+  preFetchedPauseMs?: number,
 ): Promise<Record<string, unknown>[]> {
   log("info", `=== downloadRoads: type='${networkType}' ===`);
 
@@ -200,7 +202,7 @@ export async function downloadRoads(
   const wayFilter = getNetworkFilter(networkType);
 
   // 步骤 3：逐块请求
-  const results = await downloadOverpassNetwork(coordStrs, wayFilter);
+  const results = await downloadOverpassNetwork(coordStrs, wayFilter, onProgress, preFetchedPauseMs);
   log("info", `=== downloadRoads complete: ${results.length} response(s) ===`);
 
   return results;
@@ -215,10 +217,14 @@ export async function downloadRoads(
  * - leisure=nature_reserve（自然保护区）
  *
  * @param polygon GeoJSON Polygon 或 MultiPolygon
+ * @param onProgress 进度回调函数
+ * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  * @returns 所有子块的 Overpass JSON 响应数组
  */
 export async function downloadParks(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
+  onProgress?: OverpassProgressCallback,
+  preFetchedPauseMs?: number,
 ): Promise<Record<string, unknown>[]> {
   log("info", `=== downloadParks ===`);
 
@@ -227,7 +233,7 @@ export async function downloadParks(
 
   // 查询 leisure 标签下的公园相关值
   const tags = { leisure: ["park", "garden", "nature_reserve"] };
-  const results = await downloadOverpassFeatures(coordStrs, tags);
+  const results = await downloadOverpassFeatures(coordStrs, tags, onProgress, preFetchedPauseMs);
 
   log("info", `=== downloadParks complete: ${results.length} response(s) ===`);
   return results;
@@ -241,10 +247,14 @@ export async function downloadParks(
  * - waterway=*（河流、溪流等动态水体——true 表示匹配所有值）
  *
  * @param polygon GeoJSON Polygon 或 MultiPolygon
+ * @param onProgress 进度回调函数
+ * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  * @returns 所有子块的 Overpass JSON 响应数组
  */
 export async function downloadWater(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
+  onProgress?: OverpassProgressCallback,
+  preFetchedPauseMs?: number,
 ): Promise<Record<string, unknown>[]> {
   log("info", `=== downloadWater ===`);
 
@@ -253,7 +263,7 @@ export async function downloadWater(
 
   // natural=water 匹配静态水体, waterway=true 匹配所有动态水体
   const tags = { natural: "water", waterway: true as const };
-  const results = await downloadOverpassFeatures(coordStrs, tags);
+  const results = await downloadOverpassFeatures(coordStrs, tags, onProgress, preFetchedPauseMs);
 
   log("info", `=== downloadWater complete: ${results.length} response(s) ===`);
   return results;
@@ -266,6 +276,8 @@ export async function downloadWater(
  * @param amenityTypes 可选，指定要查询的 amenity 类型列表。
  *   - 传入数组如 ["restaurant", "cafe", "hospital"] → 只下载这些类型
  *   - 不传或传 undefined → 下载所有 amenity 标签的 POI
+ * @param onProgress 进度回调函数
+ * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  * @returns 所有子块的 Overpass JSON 响应数组
  *
  * @example
@@ -277,6 +289,8 @@ export async function downloadWater(
 export async function downloadPOIs(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
   amenityTypes?: string[],
+  onProgress?: OverpassProgressCallback,
+  preFetchedPauseMs?: number,
 ): Promise<Record<string, unknown>[]> {
   const typeDesc = amenityTypes ? amenityTypes.join(", ") : "all";
   log("info", `=== downloadPOIs: types=[${typeDesc}] ===`);
@@ -288,7 +302,7 @@ export async function downloadPOIs(
   const tags: Record<string, boolean | string | string[]> = {
     amenity: amenityTypes ?? true,
   };
-  const results = await downloadOverpassFeatures(coordStrs, tags);
+  const results = await downloadOverpassFeatures(coordStrs, tags, onProgress, preFetchedPauseMs);
 
   log("info", `=== downloadPOIs complete: ${results.length} response(s) ===`);
   return results;

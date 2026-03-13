@@ -24,7 +24,7 @@ export function ExampleCards({ onSelect }: ExampleCardsProps) {
           <button
             key={index}
             onClick={() => onSelect(example.location, example.theme)}
-            className="group relative aspect-[3/4] rounded-lg overflow-hidden border border-border/30 hover:border-accent/50 transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+            className="group relative aspect-[3/4] overflow-hidden border border-border/30 hover:border-accent/50 transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
             style={{ backgroundColor: example.theme.colors.bg }}
           >
             {/* Decorative border */}
@@ -37,7 +37,7 @@ export function ExampleCards({ onSelect }: ExampleCardsProps) {
             <div className="absolute inset-4">
               {/* Water bodies */}
               <div 
-                className="absolute top-4 left-3 w-8 h-6 rounded-full opacity-40"
+                className="absolute top-4 left-3 w-8 h-6 opacity-40"
                 style={{ backgroundColor: example.theme.colors.water }}
               />
               

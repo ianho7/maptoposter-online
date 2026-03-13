@@ -19,6 +19,7 @@ import {
     downloadWater,
     downloadPOIs,
     type NetworkType,
+    type OverpassProgressCallback,
 } from './overpass-client';
 import { log } from './overpass-client';
 
@@ -53,11 +54,15 @@ function convertToGeoJSON(results: Record<string, unknown>[]): GeoJSON.FeatureCo
  * @param point 中心点坐标 [lng, lat]
  * @param dist 半径 (米)
  * @param lodMode 细节等级
+ * @param onProgress 进度回调函数
+ * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  */
 export async function fetchGraphOverpass(
     point: Point,
     dist: number,
-    lodMode: 'simplified' | 'detailed' = 'simplified'
+    lodMode: 'simplified' | 'detailed' = 'simplified',
+    onProgress?: OverpassProgressCallback,
+    preFetchedPauseMs?: number
 ): Promise<GeoJSON.FeatureCollection | null> {
     // point 格式为 [lat, lon]，与旧函数兼容
     const [lat, lng] = point;
@@ -102,10 +107,10 @@ export async function fetchGraphOverpass(
         }
     }
 
-    log('info', `[fetchGraphOverpass] lodMode=${lodMode}, dist=${dist}m, networkType=${networkType}`);
+    log('info', `[fetchGraphOverpass] lodMode=${lodMode}, dist=${dist}m, networkType=${networkType}, preFetchedPauseMs=${preFetchedPauseMs}`);
 
     try {
-        const results = await downloadRoads(polygon, networkType);
+        const results = await downloadRoads(polygon, networkType, onProgress, preFetchedPauseMs);
         return convertToGeoJSON(results);
     } catch (error) {
         log('error', `fetchGraphOverpass failed: ${error}`);
@@ -119,11 +124,15 @@ export async function fetchGraphOverpass(
  * @param point 中心点坐标 [lng, lat]
  * @param dist 半径 (米)
  * @param type 'water' | 'parks'
+ * @param onProgress 进度回调函数
+ * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  */
 export async function fetchFeaturesOverpass(
     point: Point,
     dist: number,
-    type: 'water' | 'parks'
+    type: 'water' | 'parks',
+    onProgress?: OverpassProgressCallback,
+    preFetchedPauseMs?: number
 ): Promise<GeoJSON.FeatureCollection | null> {
     // point 格式为 [lat, lon]，与旧函数兼容
     const [lat, lng] = point;
@@ -145,10 +154,10 @@ export async function fetchFeaturesOverpass(
 
         if (type === 'water') {
             // 水体: natural=water, waterway=*
-            results = await downloadWater(polygon);
+            results = await downloadWater(polygon, onProgress, preFetchedPauseMs);
         } else {
             // 公园: leisure=park/garden/nature_reserve
-            results = await downloadParks(polygon);
+            results = await downloadParks(polygon, onProgress, preFetchedPauseMs);
         }
 
         return convertToGeoJSON(results);
@@ -163,10 +172,14 @@ export async function fetchFeaturesOverpass(
  *
  * @param point 中心点坐标 [lng, lat]
  * @param dist 半径 (米)
+ * @param onProgress 进度回调函数
+ * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  */
 export async function fetchPOIsOverpass(
     point: Point,
-    dist: number
+    dist: number,
+    onProgress?: OverpassProgressCallback,
+    preFetchedPauseMs?: number
 ): Promise<GeoJSON.FeatureCollection | null> {
     // point 格式为 [lat, lon]，与旧函数兼容
     const [lat, lng] = point;
@@ -184,8 +197,8 @@ export async function fetchPOIsOverpass(
     log('info', `[fetchPOIsOverpass] dist=${dist}m`);
 
     try {
-        // 下载所有 amenity 类型的 POI
-        const results = await downloadPOIs(polygon);
+        // 下载所有 amenity 类型的 POI (amenityTypes 传 undefined 表示获取所有类型)
+        const results = await downloadPOIs(polygon, undefined, onProgress, preFetchedPauseMs);
         return convertToGeoJSON(results);
     } catch (error) {
         log('error', `fetchPOIsOverpass failed: ${error}`);

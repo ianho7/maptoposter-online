@@ -16,7 +16,7 @@ export function SizeSelector({ selectedSize, onSelect }: SizeSelectorProps) {
           key={size.id}
           onClick={() => onSelect(size)}
           className={cn(
-            "flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200",
+            "flex items-center gap-2 px-3 py-2 border transition-all duration-200",
             selectedSize === size.id
               ? "border-accent bg-accent/10 text-accent"
               : "border-border/50 hover:border-border bg-card/30"
@@ -24,7 +24,7 @@ export function SizeSelector({ selectedSize, onSelect }: SizeSelectorProps) {
         >
           {/* Size icon */}
           <div 
-            className="w-4 h-5 border rounded-sm flex-shrink-0"
+            className="w-4 h-5 border flex-shrink-0"
             style={{ 
               aspectRatio: size.aspect,
               borderColor: selectedSize === size.id ? 'var(--accent)' : 'var(--border)',

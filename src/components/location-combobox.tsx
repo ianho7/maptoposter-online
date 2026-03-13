@@ -64,7 +64,7 @@ export const LocationCombobox = React.memo(function LocationCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between mt-1 bg-background border-border text-foreground font-normal"
+          className="w-full justify-between mt-1 font-normal bg-card border-border text-card-foreground hover:border-transparent transition-colors"
           disabled={disabled || isLoading}
         >
           <span className="truncate">
@@ -73,12 +73,13 @@ export const LocationCombobox = React.memo(function LocationCombobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 bg-card border-border">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder={m.search_placeholder({ item: placeholder.toLowerCase() })}
             value={searchQuery}
             onValueChange={setSearchQuery}
+            className="bg-card text-card-foreground"
           />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
@@ -92,10 +93,11 @@ export const LocationCombobox = React.memo(function LocationCombobox({
                     setOpen(false);
                     setSearchQuery('');
                   }}
+                  className="text-card-foreground"
                 >
                   <Check
                     className={cn(
-                      'mr-2 h-4 w-4',
+                      'mr-2 h-4 w-4 text-primary',
                       value === option.name ? 'opacity-100' : 'opacity-0'
                     )}
                   />

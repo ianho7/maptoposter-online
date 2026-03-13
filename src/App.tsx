@@ -11,6 +11,7 @@ import { LocationCombobox } from '@/components/location-combobox';
 import { Download, MapPin, Palette, Square, Smartphone, Monitor, FileImage, Loader2, AlertCircle, Type, FileText, FileCheck, Settings2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { VintageMapCanvas } from '@/components/vintage-map-canvas';
+import { MapPosterPreview } from '@/components/preview';
 import { cn } from '@/lib/utils';
 import { useLocationData } from '@/hooks/useLocationData';
 
@@ -237,6 +238,20 @@ export default function MapPosterGenerator() {
 
                   if (config.selectedCity) {
                     setSelectedCity(config.selectedCity);
+                    // 获取坐标（如果 location 中没有）
+                    const cityName = config.selectedCity;
+                    const cached = mapDataService.getCoordinates(cityName, config.selectedCountry);
+                    if (cached) {
+                      setLocation({ country: config.selectedCountry, state: config.selectedState, city: cityName, lat: cached.latitude, lng: cached.longitude });
+                    } else {
+                      try {
+                        const coords = await getCoordinates(cityName, config.selectedCountry);
+                        mapDataService.saveCoordinates(cityName, config.selectedCountry, coords.latitude, coords.longitude);
+                        setLocation({ country: config.selectedCountry, state: config.selectedState, city: cityName, lat: coords.latitude, lng: coords.longitude });
+                      } catch {
+                        setLocation({ country: config.selectedCountry, state: config.selectedState, city: cityName });
+                      }
+                    }
                   }
                 }
               }
@@ -270,7 +285,19 @@ export default function MapPosterGenerator() {
             setIsCitiesLoading(false);
             if (stateCities.length > 0) {
               setSelectedCity(stateCities[0].name);
-              setLocation({ country: firstCountry.name, state: firstState.name, city: stateCities[0].name });
+              const cityName = stateCities[0].name;
+              const cached = mapDataService.getCoordinates(cityName, firstCountry.name);
+              if (cached) {
+                setLocation({ country: firstCountry.name, state: firstState.name, city: cityName, lat: cached.latitude, lng: cached.longitude });
+              } else {
+                try {
+                  const coords = await getCoordinates(cityName, firstCountry.name);
+                  mapDataService.saveCoordinates(cityName, firstCountry.name, coords.latitude, coords.longitude);
+                  setLocation({ country: firstCountry.name, state: firstState.name, city: cityName, lat: coords.latitude, lng: coords.longitude });
+                } catch {
+                  setLocation({ country: firstCountry.name, state: firstState.name, city: cityName });
+                }
+              }
             }
           }
           isRestored.current = true;
@@ -310,7 +337,19 @@ export default function MapPosterGenerator() {
         setIsCitiesLoading(false);
         if (stateCities.length > 0) {
           setSelectedCity(stateCities[0].name);
-          setLocation({ country: country?.name || countryName, state: firstState.name, city: stateCities[0].name });
+          const cityName = stateCities[0].name;
+          const cached = mapDataService.getCoordinates(cityName, country?.name || countryName);
+          if (cached) {
+            setLocation({ country: country?.name || countryName, state: firstState.name, city: cityName, lat: cached.latitude, lng: cached.longitude });
+          } else {
+            try {
+              const coords = await getCoordinates(cityName, country?.name || countryName);
+              mapDataService.saveCoordinates(cityName, country?.name || countryName, coords.latitude, coords.longitude);
+              setLocation({ country: country?.name || countryName, state: firstState.name, city: cityName, lat: coords.latitude, lng: coords.longitude });
+            } catch {
+              setLocation({ country: country?.name || countryName, state: firstState.name, city: cityName });
+            }
+          }
         }
       }
     } catch (error) {
@@ -334,7 +373,19 @@ export default function MapPosterGenerator() {
         if (stateCities.length > 0) {
           const firstCity = stateCities[0];
           setSelectedCity(firstCity.name);
-          setLocation({ country: selectedCountry, state: state.name, city: firstCity.name });
+          const cityName = firstCity.name;
+          const cached = mapDataService.getCoordinates(cityName, selectedCountry);
+          if (cached) {
+            setLocation({ country: selectedCountry, state: state.name, city: cityName, lat: cached.latitude, lng: cached.longitude });
+          } else {
+            try {
+              const coords = await getCoordinates(cityName, selectedCountry);
+              mapDataService.saveCoordinates(cityName, selectedCountry, coords.latitude, coords.longitude);
+              setLocation({ country: selectedCountry, state: state.name, city: cityName, lat: coords.latitude, lng: coords.longitude });
+            } catch {
+              setLocation({ country: selectedCountry, state: state.name, city: cityName });
+            }
+          }
         }
       }
     } catch (error) {
@@ -343,10 +394,28 @@ export default function MapPosterGenerator() {
     }
   }, [states, selectedCountry, getCitiesByState]);
 
-  const handleCityChange = useCallback((cityName: string) => {
+  const handleCityChange = useCallback(async (cityName: string) => {
     setSelectedCity(cityName);
     setShowGenerated(false);
-    setLocation({ country: selectedCountry, state: selectedState, city: cityName });
+
+    // 获取城市坐标
+    let lat = 0, lng = 0;
+    const cachedCoordinates = mapDataService.getCoordinates(cityName, selectedCountry);
+    if (cachedCoordinates) {
+      lat = cachedCoordinates.latitude;
+      lng = cachedCoordinates.longitude;
+    } else {
+      try {
+        const coordinates = await getCoordinates(cityName, selectedCountry);
+        lat = coordinates.latitude;
+        lng = coordinates.longitude;
+        mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
+      } catch (error) {
+        console.error('Failed to get coordinates for city:', error);
+      }
+    }
+
+    setLocation({ country: selectedCountry, state: selectedState, city: cityName, lat, lng });
   }, [selectedCountry, selectedState]);
 
 
@@ -408,6 +477,30 @@ export default function MapPosterGenerator() {
     const workers = Array.from({ length: numWorkers }, () =>
       new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
     );
+
+    // 设置进度回调，用于接收 data-worker 发来的进度更新
+    const progressHandler = (progress: number, step: string) => {
+      // 处理带等待秒数的步骤 (格式: "step_waiting_api:30" 或 "step_retrying_error:55")
+      if (step.startsWith('step_waiting_api:')) {
+        const seconds = step.split(':')[1];
+        setGenerationStep(m.step_waiting_api({ seconds }));
+      } else if (step.startsWith('step_retrying_error:')) {
+        const seconds = step.split(':')[1];
+        setGenerationStep(m.step_retrying_error({ seconds }));
+      } else {
+        // 处理普通步骤
+        const stepKey = step as keyof typeof m;
+        if (stepKey && m[stepKey]) {
+          // @ts-ignore - 动态调用国际化消息
+          setGenerationStep(m[stepKey]());
+        } else {
+          setGenerationStep(step);
+        }
+      }
+      setGenerationProgress(progress);
+    };
+    mapDataService.setProgressCallback(progressHandler);
+
     try {
       setGenerationProgress(5);
       setGenerationStep(m.step_coordinates());
@@ -426,16 +519,23 @@ export default function MapPosterGenerator() {
       const width = selectedSize.width * FRONTEND_SCALE;
       const height = selectedSize.height * FRONTEND_SCALE;
       setGenerationProgress(10);
+      // 初始获取数据消息，会被 worker 的进度更新覆盖
       setGenerationStep(m.step_fetching_data());
       await yieldMainThread();
 
       // 【优化】：获取地图数据 (包含 POI)
       const mapResults = await mapDataService.getMapData(location.country, location.city, lat, lng, baseRadius, lodMode);
 
-      const { roads, water, parks, pois: poisRaw, fromCache, isProtomaps } = mapResults;
+      const { roads, water, parks, pois: poisRaw, fromCache, cacheLevel, isProtomaps } = mapResults;
 
-      setGenerationProgress(60);
-      setGenerationStep(fromCache ? m.step_restore_cache() : m.step_fetch_complete());
+      // 根据缓存层级设置最终消息
+      if (cacheLevel === 'memory') {
+        setGenerationProgress(60);
+        setGenerationStep(m.step_restore_memory());
+      } else {
+        setGenerationProgress(60);
+        setGenerationStep(fromCache ? m.step_restore_cache() : m.step_fetch_complete());
+      }
       await yieldMainThread();
 
       setGenerationProgress(70);
@@ -460,6 +560,11 @@ export default function MapPosterGenerator() {
         runInWorker(workers[1 % numWorkers], 'polygons', parksTyped, [parksTyped.buffer]),
         runInWorker(workers[2 % numWorkers], 'pois', poisTyped, [poisTyped.buffer])
       ]);
+
+      // 数据处理完成
+      setGenerationProgress(70);
+      setGenerationStep(m.step_processing_complete());
+      await yieldMainThread();
 
       // 准备渲染配置
       const config = {
@@ -507,6 +612,10 @@ export default function MapPosterGenerator() {
       const pngData = await runInWorker(workers[0 % numWorkers], 'render', renderOptions, finalTransfers);
 
       if (pngData) {
+        setGenerationProgress(100);
+        setGenerationStep(m.step_complete());
+        await yieldMainThread();
+
         const blob = new Blob([pngData], { type: 'image/png' });
         const url = URL.createObjectURL(blob);
         setGeneratedImage(url);
@@ -520,6 +629,7 @@ export default function MapPosterGenerator() {
       console.error(m.error_generating(), error);
       alert(m.error_generating() + (error instanceof Error ? error.message : String(error)));
     } finally {
+      mapDataService.setProgressCallback(null);
       setIsGenerating(false);
       workers.forEach(w => w.terminate());
     }
@@ -530,8 +640,8 @@ export default function MapPosterGenerator() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
-      <header className="border-b bg-background/95 border-border shrink-0">
+    <div className="h-screen flex flex-col overflow-hidden bg-background">
+      <header className="shrink-0 bg-background">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl tracking-wide font-serif text-foreground">{m.app_title()}</h1>
@@ -539,16 +649,16 @@ export default function MapPosterGenerator() {
           </div>
           <div className="flex items-center gap-3">
             <Select value={activeLang} onValueChange={(val) => handleLanguageChange(val as AvailableLanguageTag)}>
-              <SelectTrigger className="w-[120px] h-9 bg-background border-border">
+              <SelectTrigger className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {locales.map((tag) => <SelectItem key={tag} value={tag}>{languageNames[tag]}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button onClick={handleDownload} disabled={isGenerating || locationLoading} className="gap-2 bg-primary text-primary-foreground">
+            <Button onClick={handleDownload} disabled={isGenerating || locationLoading} className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
               {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {isGenerating ? m.generating() : m.download_button()}
+              <span className="hidden sm:inline">{isGenerating ? m.generating() : m.download_button()}</span>
             </Button>
           </div>
         </div>
@@ -556,14 +666,14 @@ export default function MapPosterGenerator() {
 
       {isGenerating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <Card className="w-[400px] p-6 shadow-2xl border-primary/20 bg-[#f8f5f0]">
+          <Card className="w-[400px] p-6 shadow-2xl bg-card border-primary">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-serif text-lg text-primary">{m.creating_art()}</h3>
                 <span className="text-sm font-mono text-primary/60">{Math.round(generationProgress)}%</span>
               </div>
-              <Progress value={generationProgress} className="h-2 bg-primary/10" />
-              <p className="text-sm text-center text-muted-foreground animate-pulse">{generationStep}</p>
+              <Progress value={generationProgress} className="h-2 bg-secondary" />
+              <p className="text-sm text-center animate-pulse text-muted-foreground">{generationStep}</p>
             </div>
           </Card>
         </div>
@@ -571,9 +681,9 @@ export default function MapPosterGenerator() {
 
       <main className="flex-1 overflow-hidden container mx-auto px-4 py-6">
         <div className="grid lg:grid-cols-[380px_1fr] gap-8 h-full">
-          <div className="space-y-5 overflow-y-auto pr-4 pb-10 custom-scrollbar">
-            <Card className="p-4 bg-muted/50 border-border">
-              <div className="flex items-center gap-2 mb-4">
+          <div className="space-y-5 overflow-y-auto custom-scrollbar">
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-primary" />
                 <h2 className="text-lg font-serif text-foreground">{m.location()}</h2>
               </div>
@@ -592,13 +702,13 @@ export default function MapPosterGenerator() {
                 </div>
                 <div>
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.label_custom_title()}</Label>
-                  <Input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} placeholder={location.city} />
+                  <Input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} placeholder={location.city} className="border-border bg-card text-foreground" />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-4 bg-muted/50 border-border">
-              <div className="flex items-center gap-2 mb-4">
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-2">
                 <Settings2 className="w-4 h-4 text-primary" />
                 <h2 className="text-lg font-serif text-foreground">{m.label_lod_mode()}</h2>
               </div>
@@ -606,17 +716,17 @@ export default function MapPosterGenerator() {
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.label_lod_mode()}</Label>
                   <Tabs value={lodMode} onValueChange={(val) => setLodMode(val as 'simplified' | 'detailed')} className="w-full">
-                    <TabsList className="w-full bg-secondary/50">
-                      <TabsTrigger value="simplified" className="flex-1 text-xs">{m.lod_simplified()}</TabsTrigger>
-                      <TabsTrigger value="detailed" className="flex-1 text-xs">{m.lod_detailed()}</TabsTrigger>
+                    <TabsList className="w-full bg-secondary">
+                      <TabsTrigger value="simplified" className="flex-1 text-foreground data-[state=active]:text-vanilla">{m.lod_simplified()}</TabsTrigger>
+                      <TabsTrigger value="detailed" className="flex-1 text-foreground data-[state=active]:text-vanilla">{m.lod_detailed()}</TabsTrigger>
                     </TabsList>
                   </Tabs>
                   {lodMode === 'detailed' && (
-                    <div className="mt-2 flex items-start gap-2.5 p-3 rounded-md bg-primary/5 border border-primary/10 transition-all duration-300 animate-in fade-in slide-in-from-top-2">
-                      <AlertCircle className="w-3.5 h-3.5 text-primary/60 shrink-0 mt-0.5" />
+                    <div className="mt-2 flex items-start gap-2.5 p-3 bg-primary/5 border border-primary/10 transition-all duration-300 animate-in fade-in slide-in-from-top-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary/60" />
                       <div className="space-y-1">
-                        <p className="text-[10px] font-medium text-primary uppercase tracking-widest opacity-70">{m.label_note()}</p>
-                        <p className="text-[10px] leading-normal text-muted-foreground italic font-serif">
+                        <p className="text-[10px] font-medium uppercase tracking-widest opacity-70 text-primary">{m.label_note()}</p>
+                        <p className="text-[10px] leading-normal italic font-serif text-muted-foreground">
                           {m.lod_detailed_desc()}
                         </p>
                       </div>
@@ -630,7 +740,7 @@ export default function MapPosterGenerator() {
                     <span className="text-xs font-mono text-primary">{baseRadius}m</span>
                   </div>
                   <Select value={baseRadius.toString()} onValueChange={(val) => setBaseRadius(parseInt(val))}>
-                    <SelectTrigger className="w-full h-9 bg-background border-border">
+                    <SelectTrigger className="w-full h-9 border-border bg-card">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -639,29 +749,29 @@ export default function MapPosterGenerator() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[10px] text-muted-foreground italic px-1">{m.radius_desc()}</p>
+                  <p className="text-[10px] italic px-1 text-muted-foreground">{m.radius_desc()}</p>
                 </div>
               </div>
             </Card>
 
-            <Card className="p-4 bg-muted/50 border-border">
-              <div className="flex items-center gap-2 mb-4">
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-2">
                 <Palette className="w-4 h-4 text-primary" />
                 <h2 className="text-lg font-serif text-foreground">{m.theme_colors()}</h2>
               </div>
               <Tabs defaultValue="presets" className="w-full">
-                <TabsList className="w-full bg-secondary/50">
-                  <TabsTrigger value="presets" className="flex-1" onClick={() => setUseCustomColors(false)}>{m.tab_presets()}</TabsTrigger>
-                  <TabsTrigger value="custom" className="flex-1" onClick={() => setUseCustomColors(true)}>{m.tab_custom()}</TabsTrigger>
+                <TabsList className="w-full bg-secondary">
+                  <TabsTrigger value="presets" className="flex-1 text-foreground data-[state=active]:text-vanilla" onClick={() => setUseCustomColors(false)}>{m.tab_presets()}</TabsTrigger>
+                  <TabsTrigger value="custom" className="flex-1 text-foreground data-[state=active]:text-vanilla" onClick={() => setUseCustomColors(true)}>{m.tab_custom()}</TabsTrigger>
                 </TabsList>
                 <TabsContent value="presets" className="mt-3">
                   <div className="grid grid-cols-2 gap-2">
                     {THEMES.map(theme => (
-                      <button key={theme.id} onClick={() => { setSelectedTheme(theme); setCustomColors(theme.colors); setUseCustomColors(false); }} className={cn("p-2 rounded-lg border-2 transition-all flex flex-col items-start gap-2", selectedTheme.id === theme.id && !useCustomColors ? "border-primary bg-background shadow-sm" : "border-transparent bg-transparent hover:bg-background/50")}>
+                      <button key={theme.id} onClick={() => { setSelectedTheme(theme); setCustomColors(theme.colors); setUseCustomColors(false); }} className={cn("p-2 border-1 transition-all flex flex-col items-start gap-2", selectedTheme.id === theme.id && !useCustomColors ? "border-primary bg-background/60" : "border-transparent bg-transparent hover:bg-background/50")}>
                         <div className="flex -space-x-1.5">
-                          {Object.values(theme.colors).slice(0, 4).map((color, i) => <div key={i} className="w-5 h-5 rounded-full border border-background shadow-sm" style={{ backgroundColor: color }} />)}
+                          {Object.values(theme.colors).slice(0, 4).map((color, i) => <div key={i} className="w-5 h-5 border border-background shadow-sm" style={{ backgroundColor: color }} />)}
                         </div>
-                        <span className="text-[11px] font-medium text-foreground line-clamp-1">{themeNameMap[theme.id] || theme.name}</span>
+                        <span className="text-[11px] font-medium line-clamp-1 text-foreground">{themeNameMap[theme.id] || theme.name}</span>
                       </button>
                     ))}
                   </div>
@@ -683,7 +793,7 @@ export default function MapPosterGenerator() {
                       { key: 'road_default', label: m.color_road_default() },
                     ].map(({ key, label }) => (
                       <div key={key} className="flex items-center justify-between gap-4">
-                        <Label className="text-[11px] text-muted-foreground whitespace-nowrap">{label}</Label>
+                        <Label className="text-[11px] whitespace-nowrap text-muted-foreground">{label}</Label>
                         <div className="flex items-center gap-2">
                           <div className="relative group">
                             <input
@@ -696,7 +806,7 @@ export default function MapPosterGenerator() {
                           <Input
                             value={customColors[key as keyof MapColors]}
                             onChange={(e) => setCustomColors({ ...customColors, [key]: e.target.value })}
-                            className="w-20 h-8 text-[11px] font-mono px-2"
+                            className="w-20 h-8 text-[11px] font-mono px-2 border-border bg-card text-foreground"
                             placeholder="#000000"
                           />
                         </div>
@@ -707,27 +817,27 @@ export default function MapPosterGenerator() {
               </Tabs>
             </Card>
 
-            <Card className="p-4 bg-muted/50 border-border">
-              <div className="flex items-center gap-2 mb-4">
+            <Card className="p-4 bg-card border-border">
+              <div className="flex items-center gap-2">
                 <Type className="w-4 h-4 text-primary" />
                 <h2 className="text-lg font-serif text-foreground">{m.font_settings()}</h2>
               </div>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.custom_font()}</Label>
-                  {customFont && <Button variant="ghost" size="sm" onClick={clearCustomFont} className="h-6 px-2 text-[10px] text-destructive">{m.clear()}</Button>}
+                  {customFont && <Button variant="ghost" size="sm" onClick={clearCustomFont} className="h-6 px-2 text-[10px] text-destructive">Clear</Button>}
                 </div>
                 {!customFont ? (
-                  <div onClick={() => fontFileInputRef.current?.click()} className="border-2 border-dashed border-border rounded-lg p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors">
+                  <div onClick={() => fontFileInputRef.current?.click()} className="border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors border-border">
                     <FileText className="w-6 h-6 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">{m.upload_font()}</span>
                     <span className="text-[10px] text-muted-foreground">{m.font_formats()}</span>
                   </div>
                 ) : (
-                  <div className="border border-border rounded-lg p-3 bg-background flex items-center justify-between">
+                  <div className="border p-3 flex items-center justify-between border-border bg-card">
                     <div className="flex items-center gap-2 min-w-0">
-                      <FileCheck className="w-4 h-4 text-green-600 shrink-0" />
-                      <span className="text-sm text-foreground truncate">{fontFileName}</span>
+                      <FileCheck className="w-4 h-4 shrink-0 text-green-600" />
+                      <span className="text-sm truncate text-foreground">{fontFileName}</span>
                     </div>
                   </div>
                 )}
@@ -735,11 +845,11 @@ export default function MapPosterGenerator() {
               </div>
             </Card>
 
-            <Card className="p-4 bg-muted/50 border-border">
+            <Card className="p-4 bg-card border-border">
               <h2 className="text-lg mb-3 font-serif text-foreground">{m.poster_size()}</h2>
               <div className="grid grid-cols-2 gap-2">
                 {SIZES.map(size => (
-                  <button key={size.id} onClick={() => setSelectedSize(size)} className={cn("p-3 rounded-lg border-2 transition-all flex items-center gap-2", selectedSize.id === size.id ? "border-primary bg-background shadow-sm" : "border-transparent bg-transparent hover:bg-background/40")}>
+                  <button key={size.id} onClick={() => setSelectedSize(size)} className={cn("p-3 border-1 transition-all flex items-center gap-2", selectedSize.id === size.id ? "border-primary bg-background/60" : "border-transparent bg-transparent hover:bg-background/50")}>
                     <span className="text-primary">{size.icon}</span>
                     <span className="text-xs text-foreground">{size.name}</span>
                   </button>
@@ -748,33 +858,62 @@ export default function MapPosterGenerator() {
             </Card>
           </div>
 
-          <div className="flex flex-col items-center justify-center p-4 bg-secondary/10 rounded-xl border border-border/50 relative overflow-hidden h-full">
+          <div
+            className="flex flex-col items-center justify-center p-4 relative overflow-hidden bg-card border-border h-full"
+            style={{
+              maxHeight: '100%',
+              maxWidth: '100%',
+              background: `
+                      radial-gradient(ellipse at 30% 20%, ${colors.bg}dd 0%, transparent 50%),
+                      radial-gradient(ellipse at 70% 80%, ${colors.text}cc 0%, transparent 40%),
+                      linear-gradient(135deg, ${colors.parks} 0%, ${colors.water}f0 50%, ${colors.poi_color}dd 100%)
+                    `,
+              backdropFilter: 'blur(8px)'
+            }}
+          >
             <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
             <div
               ref={previewRef}
-              className="flex items-center justify-center relative transition-all duration-300 ease-in-out w-full h-full max-w-full max-h-full"
+              className="flex items-center justify-center relative transition-all duration-300 ease-in-out w-full h-full p-4"
             >
-              {showGenerated && generatedImage ? (
-                <div
-                  className="shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden"
-                  style={{
-                    aspectRatio: `${selectedSize.width} / ${selectedSize.height}`,
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    width: selectedSize.width > selectedSize.height ? '100%' : 'auto',
-                    height: selectedSize.width > selectedSize.height ? 'auto' : '100%'
+              <div
+                className="relative shadow-lg"
+                style={{
+                  aspectRatio: `${selectedSize.width} / ${selectedSize.height}`,
+                  width: selectedSize.width > selectedSize.height ? '100%' : 'auto',
+                  height: selectedSize.width > selectedSize.height ? 'auto' : '100%',
+                  maxWidth: '100%',
+                  maxHeight: '100%'
+                }}
+              >
+                <MapPosterPreview
+                  location={{ lat: location.lat || 0, lon: location.lng || 0 }}
+                  city={customTitle || location.city || ''}
+                  country={location.country || ''}
+                  zoom={12}
+                  radius={baseRadius}
+                  poiDensity="dense"
+                  theme={{
+                    bg: colors.bg,
+                    water: colors.water,
+                    parks: colors.parks,
+                    road_motorway: colors.road_motorway,
+                    road_primary: colors.road_primary,
+                    road_secondary: colors.road_secondary,
+                    road_tertiary: colors.road_tertiary,
+                    road_residential: colors.road_residential,
+                    road_default: colors.road_default,
+                    route: colors.poi_color || colors.text || colors.bg,
+                    poi: colors.poi_color || colors.road_default
                   }}
-                >
-                  <img src={generatedImage || "/placeholder.svg"} alt="Generated poster" className="w-full h-full object-contain" />
-                </div>
-              ) : (
-                <VintageMapCanvas
-                  location={location}
-                  colors={colors}
-                  customTitle={customTitle}
-                  aspectRatio={selectedSize.width / selectedSize.height}
+                  textColor={colors.text}
+                  gradientColor={colors.gradient_color}
+                  posterSize={selectedSize}
+                  customFont={customFont || undefined}
+                  className="w-full h-full"
+                  roadWidthMultiplier={1}
                 />
-              )}
+              </div>
             </div>
           </div>
         </div>

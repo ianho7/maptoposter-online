@@ -10,6 +10,7 @@ export interface MapData {
     parks: Float64Array;
     pois: Float64Array;  // 合并 POI 到 MapData
     fromCache: boolean;
+    cacheLevel?: 'memory' | 'indexeddb' | 'none';  // 缓存层级
     isProtomaps?: boolean;
 }
 
@@ -19,18 +20,29 @@ export interface POIData {
     isProtomaps?: boolean;
 }
 
+// 进度回调类型
+export type ProgressCallback = (progress: number, step: string) => void;
+
 class MapDataService {
     private memoryCache = new Map<string, MapData>();
     private worker: Worker | null = null;
     private pendingRequests = new Map<number, { resolve: Function, reject: Function }>();
     private requestId = 0;
     private coordinatesCache = new Map<string, Coordinates>();
+    private progressCallback: ProgressCallback | null = null;
 
     constructor() {
         if (typeof window !== 'undefined') {
             this.worker = new Worker(new URL('../data-worker.ts', import.meta.url), { type: 'module' });
             this.worker.onmessage = (event) => {
-                const { id, success, payload, error } = event.data;
+                const { id, success, payload, error, progress, step, type } = event.data;
+
+                // 处理进度消息
+                if (type === 'PROGRESS' && this.progressCallback) {
+                    this.progressCallback(progress, step);
+                    return;
+                }
+
                 const pending = this.pendingRequests.get(id);
                 if (pending) {
                     this.pendingRequests.delete(id);
@@ -42,6 +54,11 @@ class MapDataService {
                 }
             };
         }
+    }
+
+    // 设置进度回调
+    setProgressCallback(callback: ProgressCallback | null) {
+        this.progressCallback = callback;
     }
 
     getCoordinates(city: string, country: string): Coordinates | null {
@@ -73,6 +90,7 @@ class MapDataService {
                 parks: cached.parks.slice(),
                 pois: cached.pois.slice(),  // 合并 POI
                 fromCache: true,
+                cacheLevel: 'memory',
                 isProtomaps: cached.isProtomaps
             };
         }
@@ -102,6 +120,7 @@ class MapDataService {
             parks: result.parks.slice(),
             pois: result.pois.slice(),  // 合并 POI
             fromCache: result.fromCache,
+            cacheLevel: result.cacheLevel,
             isProtomaps: result.isProtomaps
         });
 
