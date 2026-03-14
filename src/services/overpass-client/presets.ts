@@ -25,7 +25,6 @@
  */
 
 import type { Feature, MultiPolygon, Polygon } from "geojson";
-import { overpassConfig } from "./config";
 import { makeOverpassPolygonCoordStrs } from "./geo";
 import { log } from "./http";
 import { downloadOverpassFeatures, downloadOverpassNetwork, type OverpassProgressCallback } from "./overpass";

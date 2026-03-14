@@ -22,7 +22,7 @@ import { fetchGraph, fetchFeatures, fetchPOIs, fetchFromProtomaps, flattenRoadsG
 // 新库 (overpass-client) - 包装层
 import { fetchGraphOverpass, fetchFeaturesOverpass, fetchPOIsOverpass } from './services/overpass-wrapper';
 // 导入 getOverpassPause 用于进度更新
-import { getOverpassPause, type OverpassProgressCallback } from './services/overpass-client';
+import { type OverpassProgressCallback } from './services/overpass-client';
 
 import { getDB, compress, decompress } from './db';
 
@@ -36,7 +36,7 @@ function sendProgress(progress: number, step: string) {
 
 // 创建带基础进度的进度回调
 function createProgressCallback(baseProgress: number, baseStep: string): OverpassProgressCallback | undefined {
-    return (progress: number, step: string, currentBlock?: number, totalBlocks?: number, secondsRemaining?: number) => {
+    return (_progress: number, step: string, _currentBlock?: number, _totalBlocks?: number, secondsRemaining?: number) => {
         if (step === 'waiting_slot' && secondsRemaining !== undefined) {
             // API 槽位等待
             sendProgress(baseProgress, `step_waiting_api:${secondsRemaining}`);
@@ -118,67 +118,25 @@ self.onmessage = async (event: MessageEvent) => {
                     // [新库] 使用 overpass-client (串行请求，避免触发服务器并发限制)
                     console.log(`[DataWorker] Cache Miss: ${city}. Fetching from overpass-client (sequential) with LOD: ${lodMode}...`);
 
-                    // 步骤1: 检查API状态并获取道路
-                    sendProgress(5, 'step_checking_api');
-                    const roadPause = await getOverpassPause('https://overpass-api.de/api');
-                    if (roadPause > 0) {
-                        // 需要等待，显示倒计时
-                        let remaining = Math.ceil(roadPause / 1000);
-                        while (remaining > 0) {
-                            sendProgress(5, `step_waiting_api:${remaining}`);
-                            await new Promise(r => setTimeout(r, 1000));
-                            remaining--;
-                        }
-                    }
-                    sendProgress(10, 'step_fetching_roads');
-                    // 传入进度回调和预获取的等待时间，避免 overpass-client 重复调用 getOverpassPause
-                    roadsGeo = await fetchGraphOverpass([lat, lng], radius, lodMode, createProgressCallback(10, 'step_fetching_roads'), roadPause);
+                    // 步骤1: 获取道路 (overpass-client 内部会处理 API 槽位检查和倒计时)
+                    sendProgress(5, 'step_fetching_roads');
+                    roadsGeo = await fetchGraphOverpass([lat, lng], radius, lodMode, createProgressCallback(5, 'step_fetching_roads'));
 
-                    // 步骤2: 检查API状态并获取水体
-                    sendProgress(15, 'step_checking_api');
-                    const waterPause = await getOverpassPause('https://overpass-api.de/api');
-                    if (waterPause > 0) {
-                        let remaining = Math.ceil(waterPause / 1000);
-                        while (remaining > 0) {
-                            sendProgress(15, `step_waiting_api:${remaining}`);
-                            await new Promise(r => setTimeout(r, 1000));
-                            remaining--;
-                        }
-                    }
-                    sendProgress(20, 'step_fetching_water');
-                    waterGeo = await fetchFeaturesOverpass([lat, lng], radius, 'water', createProgressCallback(20, 'step_fetching_water'), waterPause);
+                    // 步骤2: 获取水体
+                    sendProgress(15, 'step_fetching_water');
+                    waterGeo = await fetchFeaturesOverpass([lat, lng], radius, 'water', createProgressCallback(15, 'step_fetching_water'));
 
-                    // 步骤3: 检查API状态并获取公园
-                    sendProgress(25, 'step_checking_api');
-                    const parksPause = await getOverpassPause('https://overpass-api.de/api');
-                    if (parksPause > 0) {
-                        let remaining = Math.ceil(parksPause / 1000);
-                        while (remaining > 0) {
-                            sendProgress(25, `step_waiting_api:${remaining}`);
-                            await new Promise(r => setTimeout(r, 1000));
-                            remaining--;
-                        }
-                    }
-                    sendProgress(30, 'step_fetching_parks');
-                    parksGeo = await fetchFeaturesOverpass([lat, lng], radius, 'parks', createProgressCallback(30, 'step_fetching_parks'), parksPause);
+                    // 步骤3: 获取公园
+                    sendProgress(25, 'step_fetching_parks');
+                    parksGeo = await fetchFeaturesOverpass([lat, lng], radius, 'parks', createProgressCallback(25, 'step_fetching_parks'));
 
-                    // 步骤4: 检查API状态并获取POI
-                    sendProgress(35, 'step_checking_api');
-                    const poiPause = await getOverpassPause('https://overpass-api.de/api');
-                    if (poiPause > 0) {
-                        let remaining = Math.ceil(poiPause / 1000);
-                        while (remaining > 0) {
-                            sendProgress(35, `step_waiting_api:${remaining}`);
-                            await new Promise(r => setTimeout(r, 1000));
-                            remaining--;
-                        }
-                    }
-                    sendProgress(40, 'step_fetching_pois');
+                    // 步骤4: 获取POI
+                    sendProgress(35, 'step_fetching_pois');
 
                     // 串行获取 POI (合并到 getMapData 中)
                     if (!poisCached) {
-                        // 传入进度回调和预获取的等待时间，用于处理 429/504/网络错误重试时的进度更新
-                        const poisGeo = await fetchPOIsOverpass([lat, lng], radius, createProgressCallback(40, 'step_fetching_pois'), poiPause);
+                        // 传入进度回调，overpass-client 内部会处理 API 槽位检查和倒计时
+                        const poisGeo = await fetchPOIsOverpass([lat, lng], radius, createProgressCallback(40, 'step_fetching_pois'));
                         if (poisGeo) {
                             const compressed = await compress(JSON.stringify(poisGeo));
                             await db.put(STORE_NAME, compressed, poisCacheKey);

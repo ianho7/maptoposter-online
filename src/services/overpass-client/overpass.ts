@@ -255,11 +255,17 @@ async function _overpassRequestInternal(
       "info",
       `Pausing ${(pauseMs / 1000).toFixed(1)}s before POST to '${hostname}'`,
     );
-    // 调用进度回调
+    // 在等待期间每秒更新倒计时
     if (onProgress) {
-      onProgress(0, 'waiting_slot', undefined, undefined, Math.ceil(pauseMs / 1000));
+      let remaining = Math.ceil(pauseMs / 1000);
+      while (remaining > 0) {
+        onProgress(0, 'waiting_slot', undefined, undefined, remaining);
+        await new Promise(r => setTimeout(r, 1000));
+        remaining--;
+      }
+    } else {
+      await sleep(pauseMs);
     }
-    await sleep(pauseMs);
   }
 
   // ── 步骤 2：发起 POST 请求 ──
@@ -417,7 +423,7 @@ export async function downloadOverpassFeatures(
     log("info", `Sub-request ${i + 1}/${polygonCoordStrs.length}`);
     // 创建带进度上下文的回调
     const progressCallback = onProgress
-      ? (progress: number, step: string, currentBlock?: number, totalBlocks?: number, secondsRemaining?: number) => onProgress(progress, step, i + 1, polygonCoordStrs.length, secondsRemaining)
+      ? (_progress: number, _step: string, _currentBlock?: number, _totalBlocks?: number, secondsRemaining?: number) => onProgress(_progress, _step, i + 1, polygonCoordStrs.length, secondsRemaining)
       : undefined;
     // 仅在第一个请求时传入预获取的等待时间，后续请求由于rate limit会自动等待
     const pauseForThisRequest = i === 0 ? preFetchedPauseMs : undefined;

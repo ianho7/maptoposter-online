@@ -1,7 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/message-format",
   "app_title": "Map To Poster",
-  "app_subtitle": "Vintage-Kartenposter-Generator",
+  "app_subtitle": "Mach aus deinen Lieblingsstädten großartige Designs",
   "download_button": "Poster herunterladen",
   "generating": "Generierung...",
   "location": "Standort",
@@ -90,5 +90,6 @@
   "color_road_secondary": "Nebenstraßen",
   "color_road_tertiary": "Tertiärstraßen",
   "color_road_residential": "Wohnstraßen",
-  "color_road_default": "Sonstige Straßen"
+  "color_road_default": "Sonstige Straßen",
+  "preview_actual_result": "Das tatsächliche Ergebnis richtet sich nach dem heruntergeladenen Bild"
 }

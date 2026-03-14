@@ -10,7 +10,8 @@
  *   - false = 使用 utils.ts 中的原始函数
  */
 
-import * as turf from '@turf/turf';
+import { point as turfPoint } from '@turf/helpers';
+import { buffer } from '@turf/buffer';
 import osmtogeojson from 'osmtogeojson';
 import type { Feature, Polygon, MultiPolygon } from 'geojson';
 import {
@@ -71,8 +72,8 @@ export async function fetchGraphOverpass(
     const distKm = dist / 1000;
 
     // 生成圆形区域多边形 (使用 buffer) - turf 使用 [lng, lat] 顺序
-    const centerPoint = turf.point([lng, lat]);
-    const polygon = turf.buffer(centerPoint, distKm, { units: 'kilometers', steps: 64 }) as Feature<Polygon> | Feature<MultiPolygon> | null;
+    const centerPoint = turfPoint([lng, lat]);
+    const polygon = buffer(centerPoint, distKm, { units: 'kilometers', steps: 64 }) as Feature<Polygon> | Feature<MultiPolygon> | null;
 
     if (!polygon) {
         log('error', 'Failed to create polygon buffer for roads');
@@ -86,7 +87,6 @@ export async function fetchGraphOverpass(
             ? polygon.geometry.coordinates[0][0]
             : []);
     const firstCoord = coords[0] || [];
-    const lastCoord = coords[coords.length - 1] || [];
     // turf 使用 [lng, lat]，所以 firstCoord 是 [lng, lat]
     log('info', `[fetchGraphOverpass] polygon: center=[lat=${lat.toFixed(4)}, lng=${lng.toFixed(4)}], radius=${dist}m, firstPoint=[lat=${firstCoord[1]?.toFixed(4)}, lng=${firstCoord[0]?.toFixed(4)}]`);
 
@@ -139,8 +139,8 @@ export async function fetchFeaturesOverpass(
     const distKm = dist / 1000;
 
     // 生成圆形区域多边形
-    const centerPoint = turf.point([lng, lat]);
-    const polygon = turf.buffer(centerPoint, distKm, { units: 'kilometers', steps: 64 }) as Feature<Polygon> | Feature<MultiPolygon> | null;
+    const centerPoint = turfPoint([lng, lat]);
+    const polygon = buffer(centerPoint, distKm, { units: 'kilometers', steps: 64 }) as Feature<Polygon> | Feature<MultiPolygon> | null;
 
     if (!polygon) {
         log('error', `Failed to create polygon buffer for ${type}`);
@@ -186,8 +186,8 @@ export async function fetchPOIsOverpass(
     const distKm = dist / 1000;
 
     // 生成圆形区域多边形
-    const centerPoint = turf.point([lng, lat]);
-    const polygon = turf.buffer(centerPoint, distKm, { units: 'kilometers', steps: 64 }) as Feature<Polygon> | Feature<MultiPolygon> | null;
+    const centerPoint = turfPoint([lng, lat]);
+    const polygon = buffer(centerPoint, distKm, { units: 'kilometers', steps: 64 }) as Feature<Polygon> | Feature<MultiPolygon> | null;
 
     if (!polygon) {
         log('error', 'Failed to create polygon buffer for POIs');

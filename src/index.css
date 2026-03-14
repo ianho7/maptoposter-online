@@ -89,6 +89,8 @@
 @theme inline {
     --font-sans: var(--font-crimson), 'Crimson Text', Georgia, serif;
     --font-serif: 'Sitea', 'Playfair Display', Georgia, serif;
+    /* 新增 */
+    --font-body: 'Sitea', 'Playfair Display', Georgia, serif;
     --font-mono: 'Geist Mono', 'Geist Mono Fallback';
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -159,11 +161,23 @@
 
     body {
         @apply bg-background text-foreground;
-        font-family: 'Sitea', 'Playfair Display', Georgia, serif;
+        font-family: var(--font-body);
     }
 
     /* 让所有文本默认使用衬线字体 */
-    h1, h2, h3, h4, h5, h6, p, span, div, button, input, select, label {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    p,
+    span,
+    div,
+    button,
+    input,
+    select,
+    label {
         font-family: inherit;
     }
 }

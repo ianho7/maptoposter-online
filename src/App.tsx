@@ -1,6 +1,4 @@
 import React from "react"
-import { RefreshCw } from 'lucide-react';
-
 import { useState, useRef, useCallback, useEffect, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,8 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LocationCombobox } from '@/components/location-combobox';
 import { Download, MapPin, Palette, Square, Smartphone, Monitor, FileImage, Loader2, AlertCircle, Type, FileText, FileCheck, Settings2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { VintageMapCanvas } from '@/components/vintage-map-canvas';
-import { MapPosterPreview } from '@/components/preview';
+import { MapPosterPreview } from '@/components/artistic-map';
 import { cn } from '@/lib/utils';
 import { useLocationData } from '@/hooks/useLocationData';
 
@@ -26,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 // Paraglide i18n
 import * as m from '@/paraglide/messages';
 import { getLocale, setLocale, locales } from '@/paraglide/runtime';
+import { useDynamicFont } from "./hooks/useDynamicFont";
 
 type AvailableLanguageTag = (typeof locales)[number];
 
@@ -83,7 +81,7 @@ const yieldMainThread = () => new Promise(r => requestAnimationFrame(() => setTi
 const FRONTEND_SCALE = 1;
 
 export default function MapPosterGenerator() {
-  const { countries, getStatesByCountry, getCitiesByState, isLoading: locationLoading, error: locationError, refresh: refreshLocations } = useLocationData();
+  const { countries, getStatesByCountry, getCitiesByState, isLoading: locationLoading } = useLocationData();
 
   // i18n language state
   const [activeLang, setActiveLang] = useState<AvailableLanguageTag>(getLocale());
@@ -95,8 +93,6 @@ export default function MapPosterGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generationStep, setGenerationStep] = useState('');
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [showGenerated, setShowGenerated] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -169,12 +165,15 @@ export default function MapPosterGenerator() {
       setActiveLang(finalLang);
       localStorage.setItem('lang', finalLang);
     }
+
+    document.title = `${m.app_title()} - ${m.app_subtitle()}`
   }, []);
 
   const handleLanguageChange = (newLang: AvailableLanguageTag) => {
     setLocale(newLang, { reload: false });
     setActiveLang(newLang);
     localStorage.setItem('lang', newLang);
+    document.title = `${m.app_title()} - ${m.app_subtitle()}`
   };
 
   // Persistence Handling
@@ -319,7 +318,6 @@ export default function MapPosterGenerator() {
 
   const handleCountryChange = useCallback(async (countryName: string) => {
     setSelectedCountry(countryName);
-    setShowGenerated(false);
     setStates([]);
     setCities([]);
     setIsStatesLoading(true);
@@ -361,7 +359,6 @@ export default function MapPosterGenerator() {
 
   const handleStateChange = useCallback(async (stateName: string) => {
     setSelectedState(stateName);
-    setShowGenerated(false);
     setCities([]);
     setIsCitiesLoading(true);
     try {
@@ -396,7 +393,6 @@ export default function MapPosterGenerator() {
 
   const handleCityChange = useCallback(async (cityName: string) => {
     setSelectedCity(cityName);
-    setShowGenerated(false);
 
     // 获取城市坐标
     let lat = 0, lng = 0;
@@ -618,8 +614,6 @@ export default function MapPosterGenerator() {
 
         const blob = new Blob([pngData], { type: 'image/png' });
         const url = URL.createObjectURL(blob);
-        setGeneratedImage(url);
-        setShowGenerated(true);
         const link = document.createElement('a');
         link.href = url;
         link.download = `${(customTitle || location.city).toLowerCase().replace(/\s+/g, '-')}-map-poster.png`;
@@ -639,11 +633,14 @@ export default function MapPosterGenerator() {
     'en': 'English', 'zh-CN': '简体中文', 'ja': '日本語', 'ko': '한국어', 'fr': 'Français', 'de': 'Deutsch', 'es': 'Español'
   };
 
+  useDynamicFont(activeLang);
+
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
+    <div className="flex flex-col bg-background md:h-screen md:overflow-hidden">
       <header className="shrink-0 bg-background">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
+        <div className="container mx-auto px-4 py-4 flex items-center">
+          <img className="w-10 h-10 mr-2" src="/icon.svg" alt="icon" />
+          <div className="mr-auto select-none">
             <h1 className="text-2xl tracking-wide font-serif text-foreground">{m.app_title()}</h1>
             <p className="text-xs tracking-widest uppercase text-muted-foreground">{m.app_subtitle()}</p>
           </div>
@@ -679,9 +676,9 @@ export default function MapPosterGenerator() {
         </div>
       )}
 
-      <main className="flex-1 overflow-hidden container mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-[380px_1fr] gap-8 h-full">
-          <div className="space-y-5 overflow-y-auto custom-scrollbar">
+      <main className="md:flex-1 md:overflow-hidden container mx-auto px-4 py-6">
+        <div className="grid md:grid-cols-[380px_1fr] gap-8 md:h-full">
+          <div className="space-y-5 md:overflow-y-auto custom-scrollbar md:min-h-0">
             <Card className="p-4 bg-card border-border">
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-primary" />
@@ -859,7 +856,7 @@ export default function MapPosterGenerator() {
           </div>
 
           <div
-            className="flex flex-col items-center justify-center p-4 relative overflow-hidden bg-card border-border h-full"
+            className="flex flex-col items-center justify-center p-8 relative overflow-hidden bg-card border-border md:h-full min-h-[400px]"
             style={{
               maxHeight: '100%',
               maxWidth: '100%',
@@ -873,17 +870,23 @@ export default function MapPosterGenerator() {
           >
             <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
             <div
+              className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full pointer-events-none select-none"
+            >
+              <span className="text-xs tracking-wide text-white font-light whitespace-nowrap text-shadow-sm">
+                {m.preview_actual_result()} :)
+              </span>
+            </div>
+            <div
               ref={previewRef}
               className="flex items-center justify-center relative transition-all duration-300 ease-in-out w-full h-full p-4"
+              style={{ containerType: 'size' }}
             >
               <div
                 className="relative shadow-lg"
                 style={{
                   aspectRatio: `${selectedSize.width} / ${selectedSize.height}`,
-                  width: selectedSize.width > selectedSize.height ? '100%' : 'auto',
-                  height: selectedSize.width > selectedSize.height ? 'auto' : '100%',
-                  maxWidth: '100%',
-                  maxHeight: '100%'
+                  width: `min(${(selectedSize.width / selectedSize.height * 100).toFixed(4)}cqh, 100cqw)`,
+                  height: `min(${(selectedSize.height / selectedSize.width * 100).toFixed(4)}cqw, 100cqh)`,
                 }}
               >
                 <MapPosterPreview

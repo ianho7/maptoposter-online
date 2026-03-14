@@ -1,7 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/message-format",
   "app_title": "Map To Poster",
-  "app_subtitle": "Transform your favorite cities into beautiful designs",
+  "app_subtitle": "Turn the cities you love into stunning designs.",
   "download_button": "Download Poster",
   "generating": "Generating...",
   "location": "Location",
@@ -90,5 +90,6 @@
   "color_road_secondary": "Secondary Roads",
   "color_road_tertiary": "Tertiary Roads",
   "color_road_residential": "Residential Roads",
-  "color_road_default": "Other Streets"
+  "color_road_default": "Other Streets",
+  "preview_actual_result": "Actual result is subject to the downloaded image"
 }

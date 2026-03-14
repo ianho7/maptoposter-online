@@ -8,8 +8,15 @@
  * 依赖 @turf/turf 进行几何运算。
  */
 
-import * as turf from "@turf/turf";
-import type { Feature, LineString, MultiPolygon, Polygon, Position } from "geojson";
+import { bbox } from "@turf/bbox";
+import { lineString, featureCollection, polygon } from "@turf/helpers";
+import { lineSplit } from "@turf/line-split";
+import { polygonToLine } from "@turf/polygon-to-line";
+import { bboxPolygon } from "@turf/bbox-polygon";
+import { intersect } from "@turf/intersect";
+import { area } from "@turf/area";
+import { convex } from "@turf/convex";
+import type { Feature, LineString, MultiPolygon, Polygon } from "geojson";
 import { overpassConfig } from "./config";
 import { log } from "./http";
 
@@ -38,8 +45,8 @@ function quadratCutGeometry(
   polygon: Feature<Polygon>,
   quadratWidth: number,
 ): Feature<Polygon>[] {
-  const bbox = turf.bbox(polygon);
-  const [left, bottom, right, top] = bbox;
+  const polygonBbox = bbox(polygon);
+  const [left, bottom, right, top] = polygonBbox;
 
   // 最少 3 条切割线（生成 4 个象限）
   const minNum = 3;
@@ -52,10 +59,10 @@ function quadratCutGeometry(
   // 生成网格线
   const lines: Feature<LineString>[] = [];
   for (const x of xPoints) {
-    lines.push(turf.lineString([[x, yPoints[0]], [x, yPoints[yPoints.length - 1]]]));
+    lines.push(lineString([[x, yPoints[0]], [x, yPoints[yPoints.length - 1]]]));
   }
   for (const y of yPoints) {
-    lines.push(turf.lineString([[xPoints[0], y], [xPoints[xPoints.length - 1], y]]));
+    lines.push(lineString([[xPoints[0], y], [xPoints[xPoints.length - 1], y]]));
   }
 
   // 递归切割
@@ -65,7 +72,7 @@ function quadratCutGeometry(
     const newGeoms: Feature<Polygon>[] = [];
     for (const g of geoms) {
       try {
-        const split = turf.lineSplit(turf.polygonToLine(g) as any, line);
+        const split = lineSplit(polygonToLine(g) as any, line);
         if (split.features.length > 1) {
           // lineSplit 产生的是 LineString，需要回退为用 booleanIntersects 切割
           // 改用 intersect + difference 的方式
@@ -99,18 +106,18 @@ function splitPolygonByLine(
 
     if (isVertical) {
       const x = coords[0][0];
-      const bbox = turf.bbox(polygon);
+      const polygonBbox = bbox(polygon);
       // 左半部分
-      const leftClip = turf.bboxPolygon([bbox[0], bbox[1], x, bbox[3]]);
+      const leftClip = bboxPolygon([polygonBbox[0], polygonBbox[1], x, polygonBbox[3]]);
       // 右半部分
-      const rightClip = turf.bboxPolygon([x, bbox[1], bbox[2], bbox[3]]);
+      const rightClip = bboxPolygon([x, polygonBbox[1], polygonBbox[2], polygonBbox[3]]);
 
       const parts: Feature<Polygon>[] = [];
-      const leftIntersect = turf.intersect(
-        turf.featureCollection([polygon, leftClip]),
+      const leftIntersect = intersect(
+        featureCollection([polygon, leftClip]),
       );
-      const rightIntersect = turf.intersect(
-        turf.featureCollection([polygon, rightClip]),
+      const rightIntersect = intersect(
+        featureCollection([polygon, rightClip]),
       );
 
       if (leftIntersect) parts.push(...extractPolygons(leftIntersect));
@@ -119,18 +126,18 @@ function splitPolygonByLine(
       return parts.length > 0 ? parts : [polygon];
     } else {
       const y = coords[0][1];
-      const bbox = turf.bbox(polygon);
+      const polygonBbox = bbox(polygon);
       // 下半部分
-      const bottomClip = turf.bboxPolygon([bbox[0], bbox[1], bbox[2], y]);
+      const bottomClip = bboxPolygon([polygonBbox[0], polygonBbox[1], polygonBbox[2], y]);
       // 上半部分
-      const topClip = turf.bboxPolygon([bbox[0], y, bbox[2], bbox[3]]);
+      const topClip = bboxPolygon([polygonBbox[0], y, polygonBbox[2], polygonBbox[3]]);
 
       const parts: Feature<Polygon>[] = [];
-      const bottomIntersect = turf.intersect(
-        turf.featureCollection([polygon, bottomClip]),
+      const bottomIntersect = intersect(
+        featureCollection([polygon, bottomClip]),
       );
-      const topIntersect = turf.intersect(
-        turf.featureCollection([polygon, topClip]),
+      const topIntersect = intersect(
+        featureCollection([polygon, topClip]),
       );
 
       if (bottomIntersect) parts.push(...extractPolygons(bottomIntersect));
@@ -154,7 +161,7 @@ function extractPolygons(
   }
   if (geom.geometry.type === "MultiPolygon") {
     return geom.geometry.coordinates.map((coords) =>
-      turf.polygon(coords),
+      polygon(coords),
     );
   }
   return [];
@@ -179,25 +186,25 @@ export function subdividePolygon(polygon: AnyPolygon): Feature<Polygon>[] {
   const maxArea = overpassConfig.maxQueryAreaSize;
 
   // 计算面积（平方米）
-  let area = turf.area(polygon);
+  let polygonArea = area(polygon);
   let workingPoly: Feature<Polygon>;
 
   // 如果是 MultiPolygon 或面积超标，取凸包
-  if (polygon.geometry.type === "MultiPolygon" || area > maxArea) {
-    const hull = turf.convex(polygon);
+  if (polygon.geometry.type === "MultiPolygon" || polygonArea > maxArea) {
+    const hull = convex(polygon);
     if (!hull) {
       log("warn", "Could not compute convex hull, using bbox");
-      workingPoly = turf.bboxPolygon(turf.bbox(polygon));
+      workingPoly = bboxPolygon(bbox(polygon));
     } else {
       workingPoly = hull;
     }
-    area = turf.area(workingPoly);
+    polygonArea = area(workingPoly);
   } else {
     workingPoly = polygon as Feature<Polygon>;
   }
 
   // 如果面积不超标，直接返回
-  if (area <= maxArea) {
+  if (polygonArea <= maxArea) {
     return [workingPoly];
   }
 
@@ -205,7 +212,7 @@ export function subdividePolygon(polygon: AnyPolygon): Feature<Polygon>[] {
   const quadratWidth = Math.sqrt(maxArea);
   log(
     "info",
-    `Area ${(area / 1e6).toFixed(0)}km² exceeds max ${(maxArea / 1e6).toFixed(0)}km², subdividing...`,
+    `Area ${(polygonArea / 1e6).toFixed(0)}km² exceeds max ${(maxArea / 1e6).toFixed(0)}km², subdividing...`,
   );
 
   return quadratCutGeometry(workingPoly, quadratWidth);

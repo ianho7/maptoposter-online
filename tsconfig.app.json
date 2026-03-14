@@ -40,6 +40,7 @@
   ],
   "exclude": [
     "src/test.ts",
-    "src/test_local.ts"
+    "src/test_local.ts",
+    "**/*.test.ts"
   ]
 }
