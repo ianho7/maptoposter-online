@@ -258,7 +258,7 @@ fn render_map_binary_internal(
 
     // 5. 编码为 PNG
     time("render_map_bin: encode_png");
-    let png_data = renderer.encode_png();
+    let png_data = renderer.encode_png(300);
     time_end("render_map_bin: encode_png");
 
     RenderResult::success(config.width, config.height, png_data)
@@ -377,7 +377,7 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
 
     // 7. 编码为 PNG
     time("render_map: encode_png");
-    let png_data = renderer.encode_png();
+    let png_data = renderer.encode_png(300);
     time_end("render_map: encode_png");
 
     RenderResult::success(request.width, request.height, png_data)
