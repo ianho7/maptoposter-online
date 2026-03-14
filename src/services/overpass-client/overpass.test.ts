@@ -18,14 +18,16 @@ describe("Config Module", () => {
 
 describe("Geo Module", () => {
   it("should format coordinates correctly (lat lon with 6 decimals)", () => {
-    const poly: Feature<Polygon> = turf.polygon([[
-      [116.3000001, 39.9000001],
-      [116.5000002, 39.9000002],
-      [116.5000003, 40.0000003],
-      [116.3000004, 40.0000004],
-      [116.3000001, 39.9000001],
-    ]]);
-    
+    const poly: Feature<Polygon> = turf.polygon([
+      [
+        [116.3000001, 39.9000001],
+        [116.5000002, 39.9000002],
+        [116.5000003, 40.0000003],
+        [116.3000004, 40.0000004],
+        [116.3000001, 39.9000001],
+      ],
+    ]);
+
     const coordStr = polygonToOverpassCoordStr(poly);
     // 注意：lat 在前，lon 在后
     expect(coordStr).toBe(
@@ -34,7 +36,15 @@ describe("Geo Module", () => {
   });
 
   it("should output valid polygon coord strs without splitting small area", () => {
-    const poly = turf.polygon([[[116.3, 39.9], [116.31, 39.9], [116.31, 39.91], [116.3, 39.91], [116.3, 39.9]]]);
+    const poly = turf.polygon([
+      [
+        [116.3, 39.9],
+        [116.31, 39.9],
+        [116.31, 39.91],
+        [116.3, 39.91],
+        [116.3, 39.9],
+      ],
+    ]);
     const strs = makeOverpassPolygonCoordStrs(poly);
     expect(strs.length).toBe(1);
     expect(typeof strs[0]).toBe("string");
@@ -46,7 +56,7 @@ describe("Overpass Core Settings", () => {
     overpassConfig.requestsTimeout = 60000; // 60s
     overpassConfig.overpassMemory = 1073741824;
     expect(makeOverpassSettings()).toBe("[out:json][timeout:60][maxsize:1073741824]");
-    
+
     overpassConfig.overpassMemory = null;
     expect(makeOverpassSettings()).toBe("[out:json][timeout:60]");
   });
@@ -58,15 +68,15 @@ describe("HTTP Module - parseResponse", () => {
     const mockJson = {
       version: 0.6,
       generator: "Overpass API",
-      remark: "runtime error: Query timed out in \"query\" at line 1",
-      elements: []
+      remark: 'runtime error: Query timed out in "query" at line 1',
+      elements: [],
     };
     const response = new Response(JSON.stringify(mockJson), {
       status: 200,
       headers: { "content-length": "100" },
     });
     Object.defineProperty(response, "url", { value: "https://example.com" });
-    
+
     // 断言必须抛出指定的异常
     await expect(parseResponse(response)).rejects.toThrow(OverpassResponseError);
   });

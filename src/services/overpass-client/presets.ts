@@ -27,7 +27,11 @@
 import type { Feature, MultiPolygon, Polygon } from "geojson";
 import { makeOverpassPolygonCoordStrs } from "./geo";
 import { log } from "./http";
-import { downloadOverpassFeatures, downloadOverpassNetwork, type OverpassProgressCallback } from "./overpass";
+import {
+  downloadOverpassFeatures,
+  downloadOverpassNetwork,
+  type OverpassProgressCallback,
+} from "./overpass";
 
 // ─── 道路网络类型 ────────────────────────────────────────
 
@@ -41,13 +45,7 @@ import { downloadOverpassFeatures, downloadOverpassNetwork, type OverpassProgres
  * - "all_public"：所有公共道路
  * - "all"：所有道路（含私人道路）
  */
-export type NetworkType =
-  | "drive"
-  | "drive_service"
-  | "walk"
-  | "bike"
-  | "all_public"
-  | "all";
+export type NetworkType = "drive" | "drive_service" | "walk" | "bike" | "all_public" | "all";
 
 // ─── 道路过滤器 ──────────────────────────────────────────
 
@@ -189,7 +187,7 @@ export async function downloadRoads(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
   networkType: NetworkType = "all",
   onProgress?: OverpassProgressCallback,
-  preFetchedPauseMs?: number,
+  preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>[]> {
   log("info", `=== downloadRoads: type='${networkType}' ===`);
 
@@ -201,7 +199,12 @@ export async function downloadRoads(
   const wayFilter = getNetworkFilter(networkType);
 
   // 步骤 3：逐块请求
-  const results = await downloadOverpassNetwork(coordStrs, wayFilter, onProgress, preFetchedPauseMs);
+  const results = await downloadOverpassNetwork(
+    coordStrs,
+    wayFilter,
+    onProgress,
+    preFetchedPauseMs
+  );
   log("info", `=== downloadRoads complete: ${results.length} response(s) ===`);
 
   return results;
@@ -223,7 +226,7 @@ export async function downloadRoads(
 export async function downloadParks(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
   onProgress?: OverpassProgressCallback,
-  preFetchedPauseMs?: number,
+  preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>[]> {
   log("info", `=== downloadParks ===`);
 
@@ -253,7 +256,7 @@ export async function downloadParks(
 export async function downloadWater(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
   onProgress?: OverpassProgressCallback,
-  preFetchedPauseMs?: number,
+  preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>[]> {
   log("info", `=== downloadWater ===`);
 
@@ -289,7 +292,7 @@ export async function downloadPOIs(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
   amenityTypes?: string[],
   onProgress?: OverpassProgressCallback,
-  preFetchedPauseMs?: number,
+  preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>[]> {
   const typeDesc = amenityTypes ? amenityTypes.join(", ") : "all";
   log("info", `=== downloadPOIs: types=[${typeDesc}] ===`);

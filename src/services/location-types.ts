@@ -34,7 +34,7 @@ export interface State {
   type?: string;
   latitude?: number;
   longitude?: number;
-  countryCode?: string;  // 用于与国家关联
+  countryCode?: string; // 用于与国家关联
 }
 
 export interface City {
@@ -44,8 +44,8 @@ export interface City {
   name: string;
   latitude: number;
   longitude: number;
-  countryCode?: string;  // 用于与国家关联
-  stateCode?: string;    // 用于与省份关联
+  countryCode?: string; // 用于与国家关联
+  stateCode?: string; // 用于与省份关联
 }
 
 export interface LocationData {
@@ -56,8 +56,8 @@ export interface LocationData {
 
 export interface LocationServiceState {
   countries: Country[];
-  statesByCountry: Record<number, State[]>;  // countryId -> states[]
-  citiesByState: Record<number, City[]>;     // stateId -> cities[]
+  statesByCountry: Record<number, State[]>; // countryId -> states[]
+  citiesByState: Record<number, City[]>; // stateId -> cities[]
   lastUpdated: number;
   version: string;
 }

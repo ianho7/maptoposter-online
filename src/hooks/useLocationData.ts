@@ -3,9 +3,9 @@
  * Manages location data loading from CDN/IndexDB
  */
 
-import { useEffect, useState, useCallback } from 'react';
-import type { Country, State, City } from '@/services/location-types';
-import { locationService } from '@/services/location-service';
+import { useEffect, useState, useCallback } from "react";
+import type { Country, State, City } from "@/services/location-types";
+import { locationService } from "@/services/location-service";
 
 export interface UseLocationDataResult {
   countries: Country[];
@@ -31,14 +31,14 @@ export function useLocationData(): UseLocationDataResult {
       const data = await locationService.loadData();
       setCountries(data.countries);
       console.log(`✓ Location data loaded: ${data.countries.length} countries`);
-      console.log('isLoading will be set to false');
+      console.log("isLoading will be set to false");
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('Unknown error');
+      const error = err instanceof Error ? err : new Error("Unknown error");
       setError(error);
-      console.error('Failed to load location data:', error);
+      console.error("Failed to load location data:", error);
     } finally {
       setIsLoading(false);
-      console.log('isLoading = false');
+      console.log("isLoading = false");
     }
   }, []);
 
@@ -48,11 +48,11 @@ export function useLocationData(): UseLocationDataResult {
       setError(null);
       const data = await locationService.refreshData();
       setCountries(data.countries);
-      console.log('✓ Location data refreshed');
+      console.log("✓ Location data refreshed");
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('Unknown error');
+      const error = err instanceof Error ? err : new Error("Unknown error");
       setError(error);
-      console.error('Failed to refresh location data:', error);
+      console.error("Failed to refresh location data:", error);
     } finally {
       setIsLoading(false);
     }

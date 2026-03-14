@@ -17,10 +17,7 @@ const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 } as const;
 /**
  * 带级别的日志输出。只有 >= overpassConfig.logLevel 的消息才会打印。
  */
-export function log(
-  level: "debug" | "info" | "warn" | "error",
-  ...args: unknown[]
-): void {
+export function log(level: "debug" | "info" | "warn" | "error", ...args: unknown[]): void {
   if (LOG_LEVELS[level] >= LOG_LEVELS[overpassConfig.logLevel]) {
     const prefix = `[OverpassClient][${level.toUpperCase()}]`;
     switch (level) {
@@ -49,10 +46,7 @@ export function log(
 export class OverpassResponseError extends Error {
   public statusCode?: number;
 
-  constructor(
-    message: string,
-    statusCode?: number,
-  ) {
+  constructor(message: string, statusCode?: number) {
     super(message);
     this.name = "OverpassResponseError";
     this.statusCode = statusCode;
@@ -66,10 +60,7 @@ export class OverpassResponseError extends Error {
 export class OverpassStatusCodeError extends Error {
   public statusCode: number;
 
-  constructor(
-    message: string,
-    statusCode: number,
-  ) {
+  constructor(message: string, statusCode: number) {
     super(message);
     this.name = "OverpassStatusCodeError";
     this.statusCode = statusCode;
@@ -110,14 +101,12 @@ export function buildHeaders(): HeadersInit {
  * @throws {OverpassResponseError} 当数据含 remark 或解析失败时
  * @throws {OverpassStatusCodeError} 当 HTTP 状态码异常时
  */
-export async function parseResponse(
-  response: Response,
-): Promise<Record<string, unknown>> {
+export async function parseResponse(response: Response): Promise<Record<string, unknown>> {
   const hostname = new URL(response.url).hostname;
   const sizeKb = Number(response.headers.get("content-length") || 0) / 1000;
   log(
     "info",
-    `Downloaded ${sizeKb.toFixed(1)}kB from '${hostname}' with status ${response.status}`,
+    `Downloaded ${sizeKb.toFixed(1)}kB from '${hostname}' with status ${response.status}`
   );
 
   // 如果状态码不是 2xx（429/504 由上层 overpassRequest 处理，不会到这里）
@@ -149,7 +138,7 @@ export async function parseResponse(
     // 注意：含 remark 的数据绝不能缓存，否则会反复返回残缺数据
     throw new OverpassResponseError(
       `Overpass returned incomplete data: ${data.remark}`,
-      response.status,
+      response.status
     );
   }
 

@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import * as React from "react";
+import { Check, ChevronsUpDown } from "lucide-react";
 
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -12,13 +12,9 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from '@/components/ui/command';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import * as m from '@/paraglide/messages';
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import * as m from "@/paraglide/messages";
 
 interface LocationComboboxProps {
   options: { id: number | string; name: string }[];
@@ -40,7 +36,7 @@ export const LocationCombobox = React.memo(function LocationCombobox({
   isLoading = false,
 }: LocationComboboxProps) {
   const [open, setOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState('');
+  const [searchQuery, setSearchQuery] = React.useState("");
 
   // 性能关键：只显示匹配的前 100 条结果，避免 DOM 节点过多导致卡顿
   const filteredOptions = React.useMemo(() => {
@@ -67,9 +63,7 @@ export const LocationCombobox = React.memo(function LocationCombobox({
           className="w-full justify-between mt-1 font-normal bg-card border-border text-card-foreground hover:border-transparent transition-colors"
           disabled={disabled || isLoading}
         >
-          <span className="truncate">
-            {isLoading ? m.loading() : (value || placeholder)}
-          </span>
+          <span className="truncate">{isLoading ? m.loading() : value || placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -91,14 +85,14 @@ export const LocationCombobox = React.memo(function LocationCombobox({
                   onSelect={() => {
                     onValueChange(option.name);
                     setOpen(false);
-                    setSearchQuery('');
+                    setSearchQuery("");
                   }}
                   className="text-card-foreground"
                 >
                   <Check
                     className={cn(
-                      'mr-2 h-4 w-4 text-primary',
-                      value === option.name ? 'opacity-100' : 'opacity-0'
+                      "mr-2 h-4 w-4 text-primary",
+                      value === option.name ? "opacity-100" : "opacity-0"
                     )}
                   />
                   {option.name}

@@ -30,12 +30,7 @@
 export { overpassConfig, type OverpassConfig } from "./config";
 
 // HTTP 工具（高级用户可能需要直接使用）
-export {
-  OverpassResponseError,
-  OverpassStatusCodeError,
-  log,
-  sleep,
-} from "./http";
+export { OverpassResponseError, OverpassStatusCodeError, log, sleep } from "./http";
 
 // Overpass 请求核心
 export {
@@ -48,11 +43,7 @@ export {
 } from "./overpass";
 
 // 几何工具
-export {
-  subdividePolygon,
-  polygonToOverpassCoordStr,
-  makeOverpassPolygonCoordStrs,
-} from "./geo";
+export { subdividePolygon, polygonToOverpassCoordStr, makeOverpassPolygonCoordStrs } from "./geo";
 
 // 预置查询 (针对常用场景)
 export {
@@ -63,4 +54,3 @@ export {
   downloadWater,
   downloadPOIs,
 } from "./presets";
-

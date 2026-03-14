@@ -41,16 +41,16 @@ type AnyPolygon = Feature<Polygon> | Feature<MultiPolygon>;
  * @param quadratWidth 每个网格块的边长（米）
  * @returns 切割后的子多边形数组
  */
-function quadratCutGeometry(
-  polygon: Feature<Polygon>,
-  quadratWidth: number,
-): Feature<Polygon>[] {
+function quadratCutGeometry(polygon: Feature<Polygon>, quadratWidth: number): Feature<Polygon>[] {
   const polygonBbox = bbox(polygon);
   const [left, bottom, right, top] = polygonBbox;
 
   // 最少 3 条切割线（生成 4 个象限）
   const minNum = 3;
-  const xNum = Math.max(Math.ceil((right - left) / metersToDegrees(quadratWidth, (top + bottom) / 2)) + 1, minNum);
+  const xNum = Math.max(
+    Math.ceil((right - left) / metersToDegrees(quadratWidth, (top + bottom) / 2)) + 1,
+    minNum
+  );
   const yNum = Math.max(Math.ceil((top - bottom) / metersToDegrees(quadratWidth)) + 1, minNum);
 
   const xPoints = linspace(left, right, xNum);
@@ -59,10 +59,20 @@ function quadratCutGeometry(
   // 生成网格线
   const lines: Feature<LineString>[] = [];
   for (const x of xPoints) {
-    lines.push(lineString([[x, yPoints[0]], [x, yPoints[yPoints.length - 1]]]));
+    lines.push(
+      lineString([
+        [x, yPoints[0]],
+        [x, yPoints[yPoints.length - 1]],
+      ])
+    );
   }
   for (const y of yPoints) {
-    lines.push(lineString([[xPoints[0], y], [xPoints[xPoints.length - 1], y]]));
+    lines.push(
+      lineString([
+        [xPoints[0], y],
+        [xPoints[xPoints.length - 1], y],
+      ])
+    );
   }
 
   // 递归切割
@@ -98,7 +108,7 @@ function quadratCutGeometry(
  */
 function splitPolygonByLine(
   polygon: Feature<Polygon>,
-  line: Feature<LineString>,
+  line: Feature<LineString>
 ): Feature<Polygon>[] {
   try {
     const coords = line.geometry.coordinates;
@@ -113,12 +123,8 @@ function splitPolygonByLine(
       const rightClip = bboxPolygon([x, polygonBbox[1], polygonBbox[2], polygonBbox[3]]);
 
       const parts: Feature<Polygon>[] = [];
-      const leftIntersect = intersect(
-        featureCollection([polygon, leftClip]),
-      );
-      const rightIntersect = intersect(
-        featureCollection([polygon, rightClip]),
-      );
+      const leftIntersect = intersect(featureCollection([polygon, leftClip]));
+      const rightIntersect = intersect(featureCollection([polygon, rightClip]));
 
       if (leftIntersect) parts.push(...extractPolygons(leftIntersect));
       if (rightIntersect) parts.push(...extractPolygons(rightIntersect));
@@ -133,12 +139,8 @@ function splitPolygonByLine(
       const topClip = bboxPolygon([polygonBbox[0], y, polygonBbox[2], polygonBbox[3]]);
 
       const parts: Feature<Polygon>[] = [];
-      const bottomIntersect = intersect(
-        featureCollection([polygon, bottomClip]),
-      );
-      const topIntersect = intersect(
-        featureCollection([polygon, topClip]),
-      );
+      const bottomIntersect = intersect(featureCollection([polygon, bottomClip]));
+      const topIntersect = intersect(featureCollection([polygon, topClip]));
 
       if (bottomIntersect) parts.push(...extractPolygons(bottomIntersect));
       if (topIntersect) parts.push(...extractPolygons(topIntersect));
@@ -153,16 +155,12 @@ function splitPolygonByLine(
 /**
  * 从 intersect 结果中提取 Polygon Feature 列表。
  */
-function extractPolygons(
-  geom: Feature<Polygon | MultiPolygon>,
-): Feature<Polygon>[] {
+function extractPolygons(geom: Feature<Polygon | MultiPolygon>): Feature<Polygon>[] {
   if (geom.geometry.type === "Polygon") {
     return [geom as Feature<Polygon>];
   }
   if (geom.geometry.type === "MultiPolygon") {
-    return geom.geometry.coordinates.map((coords) =>
-      polygon(coords),
-    );
+    return geom.geometry.coordinates.map((coords) => polygon(coords));
   }
   return [];
 }
@@ -212,7 +210,7 @@ export function subdividePolygon(polygon: AnyPolygon): Feature<Polygon>[] {
   const quadratWidth = Math.sqrt(maxArea);
   log(
     "info",
-    `Area ${(polygonArea / 1e6).toFixed(0)}km² exceeds max ${(maxArea / 1e6).toFixed(0)}km², subdividing...`,
+    `Area ${(polygonArea / 1e6).toFixed(0)}km² exceeds max ${(maxArea / 1e6).toFixed(0)}km², subdividing...`
   );
 
   return quadratCutGeometry(workingPoly, quadratWidth);
@@ -230,14 +228,10 @@ export function subdividePolygon(polygon: AnyPolygon): Feature<Polygon>[] {
  * @param polygon GeoJSON Polygon Feature
  * @returns "lat1 lon1 lat2 lon2 ..." 格式的坐标串（仅外环，忽略内环/洞）
  */
-export function polygonToOverpassCoordStr(
-  polygon: Feature<Polygon>,
-): string {
+export function polygonToOverpassCoordStr(polygon: Feature<Polygon>): string {
   // 取外环坐标（index 0），忽略内环
   const ring = polygon.geometry.coordinates[0];
-  return ring
-    .map(([lon, lat]) => `${lat.toFixed(6)} ${lon.toFixed(6)}`)
-    .join(" ");
+  return ring.map(([lon, lat]) => `${lat.toFixed(6)} ${lon.toFixed(6)}`).join(" ");
 }
 
 /**
@@ -250,9 +244,7 @@ export function polygonToOverpassCoordStr(
  * @param polygon GeoJSON Polygon 或 MultiPolygon Feature
  * @returns 坐标串数组，每个元素对应一个 Overpass 子查询
  */
-export function makeOverpassPolygonCoordStrs(
-  polygon: AnyPolygon,
-): string[] {
+export function makeOverpassPolygonCoordStrs(polygon: AnyPolygon): string[] {
   const subPolygons = subdividePolygon(polygon);
   log("info", `Polygon subdivided into ${subPolygons.length} sub-query(ies)`);
   return subPolygons.map(polygonToOverpassCoordStr);

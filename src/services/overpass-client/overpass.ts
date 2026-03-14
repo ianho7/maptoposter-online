@@ -33,9 +33,7 @@ import {
 export function makeOverpassSettings(): string {
   const timeoutSeconds = Math.round(overpassConfig.requestsTimeout / 1000);
   const maxsize =
-    overpassConfig.overpassMemory !== null
-      ? `[maxsize:${overpassConfig.overpassMemory}]`
-      : "";
+    overpassConfig.overpassMemory !== null ? `[maxsize:${overpassConfig.overpassMemory}]` : "";
   return overpassConfig.overpassSettings
     .replace("{timeout}", String(timeoutSeconds))
     .replace("{maxsize}", maxsize);
@@ -81,7 +79,7 @@ export function makeOverpassSettings(): string {
 export async function getOverpassPause(
   baseEndpoint: string,
   recursionPause = 5,
-  defaultPause = 60,
+  defaultPause = 60
 ): Promise<number> {
   // 如果用户禁用了限流检查，直接返回 0
   if (!overpassConfig.overpassRateLimit) {
@@ -144,16 +142,14 @@ export async function getOverpassPause(
     // 情况 2：首 token 是 "Slot" → 被锁定，需等待至指定时间
     if (firstToken === "Slot") {
       // 格式示例: "Slot available after: 2026-03-12T21:30:00Z, in 25 seconds."
-      const match = statusLine.match(
-        /after:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)/,
-      );
+      const match = statusLine.match(/after:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)/);
       if (match) {
         const targetTime = new Date(match[1]).getTime();
         const now = Date.now();
         const diffMs = Math.max(targetTime - now, 1000);
         log(
           "info",
-          `[Status] Slot locked by another client, waiting ${(diffMs / 1000).toFixed(0)}s until ${match[1]}`,
+          `[Status] Slot locked by another client, waiting ${(diffMs / 1000).toFixed(0)}s until ${match[1]}`
         );
         return diffMs;
       }
@@ -176,7 +172,7 @@ export async function getOverpassPause(
       const runningCount = (statusLine.match(/^\d+/g) || []).length;
       log(
         "info",
-        `[Status] Server has ${runningCount} running query(ies), waiting ${recursionPause}s before retry...`,
+        `[Status] Server has ${runningCount} running query(ies), waiting ${recursionPause}s before retry...`
       );
       await sleep(recursionPause * 1000);
       return getOverpassPause(baseEndpoint, recursionPause, defaultPause);
@@ -196,7 +192,13 @@ export async function getOverpassPause(
 /**
  * 进度回调类型
  */
-export type OverpassProgressCallback = (progress: number, step: string, currentBlock?: number, totalBlocks?: number, secondsRemaining?: number) => void;
+export type OverpassProgressCallback = (
+  progress: number,
+  step: string,
+  currentBlock?: number,
+  totalBlocks?: number,
+  secondsRemaining?: number
+) => void;
 
 /**
  * 向 Overpass API 发送请求并返回 JSON 数据。
@@ -223,7 +225,7 @@ export async function overpassRequest(
   query: string,
   maxRetries = 5,
   onProgress?: OverpassProgressCallback,
-  preFetchedPauseMs?: number,
+  preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>> {
   return _overpassRequestInternal(query, maxRetries, 0, onProgress, preFetchedPauseMs);
 }
@@ -233,7 +235,7 @@ async function _overpassRequestInternal(
   maxRetries: number,
   attempt: number,
   onProgress?: OverpassProgressCallback,
-  preFetchedPauseMs?: number,
+  preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>> {
   const baseUrl = overpassConfig.overpassUrl.replace(/\/+$/, "");
   const interpreterUrl = `${baseUrl}/interpreter`;
@@ -251,16 +253,13 @@ async function _overpassRequestInternal(
     pauseMs = await getOverpassPause(baseUrl);
   }
   if (pauseMs > 0) {
-    log(
-      "info",
-      `Pausing ${(pauseMs / 1000).toFixed(1)}s before POST to '${hostname}'`,
-    );
+    log("info", `Pausing ${(pauseMs / 1000).toFixed(1)}s before POST to '${hostname}'`);
     // 在等待期间每秒更新倒计时
     if (onProgress) {
       let remaining = Math.ceil(pauseMs / 1000);
       while (remaining > 0) {
-        onProgress(0, 'waiting_slot', undefined, undefined, remaining);
-        await new Promise(r => setTimeout(r, 1000));
+        onProgress(0, "waiting_slot", undefined, undefined, remaining);
+        await new Promise((r) => setTimeout(r, 1000));
         remaining--;
       }
     } else {
@@ -293,8 +292,8 @@ async function _overpassRequestInternal(
       if (onProgress) {
         let remaining = 55;
         while (remaining > 0) {
-          onProgress(0, 'retrying_error', undefined, undefined, remaining);
-          await new Promise(r => setTimeout(r, 1000));
+          onProgress(0, "retrying_error", undefined, undefined, remaining);
+          await new Promise((r) => setTimeout(r, 1000));
           remaining--;
         }
       } else {
@@ -316,14 +315,14 @@ async function _overpassRequestInternal(
       log(
         "warn",
         `'${hostname}' responded ${response.status} ${response.statusText}: ` +
-          `retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`,
+          `retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`
       );
       // 调用进度回调，显示重试等待
       if (onProgress) {
         let remaining = 55;
         while (remaining > 0) {
-          onProgress(0, 'retrying_error', undefined, undefined, remaining);
-          await new Promise(r => setTimeout(r, 1000));
+          onProgress(0, "retrying_error", undefined, undefined, remaining);
+          await new Promise((r) => setTimeout(r, 1000));
           remaining--;
         }
       } else {
@@ -333,7 +332,7 @@ async function _overpassRequestInternal(
     }
     throw new OverpassResponseError(
       `Server returned ${response.status} after ${maxRetries} attempts`,
-      response.status,
+      response.status
     );
   }
 
@@ -362,15 +361,12 @@ export async function downloadOverpassNetwork(
   polygonCoordStrs: string[],
   wayFilter: string,
   onProgress?: OverpassProgressCallback,
-  preFetchedPauseMs?: number,
+  preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>[]> {
   const overpassSettings = makeOverpassSettings();
   const results: Record<string, unknown>[] = [];
 
-  log(
-    "info",
-    `Requesting data from API in ${polygonCoordStrs.length} request(s)`,
-  );
+  log("info", `Requesting data from API in ${polygonCoordStrs.length} request(s)`);
 
   // 逐个子块发送请求（不能并发，否则会触发槽位限制）
   for (let i = 0; i < polygonCoordStrs.length; i++) {
@@ -380,7 +376,8 @@ export async function downloadOverpassNetwork(
     log("info", `Sub-request ${i + 1}/${polygonCoordStrs.length}`);
     // 创建带进度上下文的回调
     const progressCallback = onProgress
-      ? (progress: number, step: string, seconds?: number) => onProgress(progress, step, i + 1, polygonCoordStrs.length, seconds)
+      ? (progress: number, step: string, seconds?: number) =>
+          onProgress(progress, step, i + 1, polygonCoordStrs.length, seconds)
       : undefined;
     // 仅在第一个请求时传入预获取的等待时间，后续请求由于rate limit会自动等待
     const pauseForThisRequest = i === 0 ? preFetchedPauseMs : undefined;
@@ -406,15 +403,12 @@ export async function downloadOverpassFeatures(
   polygonCoordStrs: string[],
   tags: Record<string, boolean | string | string[]>,
   onProgress?: OverpassProgressCallback,
-  preFetchedPauseMs?: number,
+  preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>[]> {
   const overpassSettings = makeOverpassSettings();
   const results: Record<string, unknown>[] = [];
 
-  log(
-    "info",
-    `Requesting features from API in ${polygonCoordStrs.length} request(s)`,
-  );
+  log("info", `Requesting features from API in ${polygonCoordStrs.length} request(s)`);
 
   for (let i = 0; i < polygonCoordStrs.length; i++) {
     const coordStr = polygonCoordStrs[i];
@@ -423,7 +417,13 @@ export async function downloadOverpassFeatures(
     log("info", `Sub-request ${i + 1}/${polygonCoordStrs.length}`);
     // 创建带进度上下文的回调
     const progressCallback = onProgress
-      ? (_progress: number, _step: string, _currentBlock?: number, _totalBlocks?: number, secondsRemaining?: number) => onProgress(_progress, _step, i + 1, polygonCoordStrs.length, secondsRemaining)
+      ? (
+          _progress: number,
+          _step: string,
+          _currentBlock?: number,
+          _totalBlocks?: number,
+          secondsRemaining?: number
+        ) => onProgress(_progress, _step, i + 1, polygonCoordStrs.length, secondsRemaining)
       : undefined;
     // 仅在第一个请求时传入预获取的等待时间，后续请求由于rate limit会自动等待
     const pauseForThisRequest = i === 0 ? preFetchedPauseMs : undefined;
@@ -442,7 +442,7 @@ export async function downloadOverpassFeatures(
 function buildFeaturesQuery(
   overpassSettings: string,
   polygonCoordStr: string,
-  tags: Record<string, boolean | string | string[]>,
+  tags: Record<string, boolean | string | string[]>
 ): string {
   // 将 tags 展开为 [{key, value}] 列表
   const tagPairs: Array<{ key: string; value: boolean | string }> = [];

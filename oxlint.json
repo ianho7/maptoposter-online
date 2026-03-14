@@ -1,0 +1,24 @@
+{
+    "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+    "plugins": [
+        "react",
+        "react-hooks"
+    ],
+    "rules": {
+        "no-unused-vars": "warn",
+        "no-console": "off",
+        "react/jsx-key": "error",
+        "react-hooks/rules-of-hooks": "error",
+        "react-hooks/exhaustive-deps": "warn"
+    },
+    "env": {
+        "browser": true,
+        "es2022": true
+    },
+    "ignore": {
+        "patterns": [
+            "dist/**",
+            "node_modules/**"
+        ]
+    }
+}

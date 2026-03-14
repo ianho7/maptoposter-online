@@ -3,17 +3,12 @@
  * Handles CDN data fetching and data associations
  */
 
-import type {
-  Country,
-  State,
-  City,
-  LocationServiceState,
-} from './location-types';
+import type { Country, State, City, LocationServiceState } from "./location-types";
 
 const CDN_URLS = {
-  countries: 'https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/countries_slim.json',
-  states: 'https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/states_slim.json',
-  cities: 'https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/cities_slim.json',
+  countries: "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/countries_slim.json",
+  states: "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/states_slim.json",
+  cities: "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/cities_slim.json",
 };
 
 export class LocationService {
@@ -28,18 +23,18 @@ export class LocationService {
 
     // 1. 如果已有内存缓存，直接返回
     if (this.memoryCache) {
-      console.log('✓ Returning from memory cache');
+      console.log("✓ Returning from memory cache");
       return this.memoryCache;
     }
 
     // 2. 如果正在加载中，返回同一个 Promise（并发控制）
     if (this.loadingPromise) {
-      console.log('⏳ Data loading already in progress, waiting...');
+      console.log("⏳ Data loading already in progress, waiting...");
       return this.loadingPromise;
     }
 
     // 3. 创建新的加载流程
-    console.log('🚀 Starting new data loading flow');
+    console.log("🚀 Starting new data loading flow");
     this.loadingPromise = (async () => {
       const data = await this._fetchFromCDN();
       this.memoryCache = data;
@@ -106,16 +101,20 @@ export class LocationService {
     return cities.find((c) => c.name.toLowerCase() === cityName.toLowerCase());
   }
 
-  private _buildIndexes(countries: Country[], states: State[], cities: City[]): {
-    statesByCountry: Record<number, State[]>,
-    citiesByState: Record<number, City[]>
+  private _buildIndexes(
+    countries: Country[],
+    states: State[],
+    cities: City[]
+  ): {
+    statesByCountry: Record<number, State[]>;
+    citiesByState: Record<number, City[]>;
   } {
     const statesByCountry: Record<number, State[]> = {};
     const citiesByState: Record<number, City[]> = {};
 
     // Helpers for indexing when IDs are missing from CDN
-    const countryIdByIso = new Map(countries.map(c => [c.iso2, c.id]));
-    const stateIdByCode = new Map(states.map(s => [`${s.countryCode}-${s.iso2}`, s.id]));
+    const countryIdByIso = new Map(countries.map((c) => [c.iso2, c.id]));
+    const stateIdByCode = new Map(states.map((s) => [`${s.countryCode}-${s.iso2}`, s.id]));
 
     for (const state of states) {
       // If country_id is missing, try to find it via countryCode (iso2)
@@ -131,8 +130,13 @@ export class LocationService {
 
     for (const city of cities) {
       // If state_id is missing, try to find it via stateCode + countryCode
-      if ((!city.state_id || city.state_id === 0) && (city as any).stateCode && (city as any).countryCode) {
-        city.state_id = stateIdByCode.get(`${(city as any).countryCode}-${(city as any).stateCode}`) || 0;
+      if (
+        (!city.state_id || city.state_id === 0) &&
+        (city as any).stateCode &&
+        (city as any).countryCode
+      ) {
+        city.state_id =
+          stateIdByCode.get(`${(city as any).countryCode}-${(city as any).stateCode}`) || 0;
       }
       // If country_id is missing
       if ((!city.country_id || city.country_id === 0) && (city as any).countryCode) {
@@ -161,7 +165,7 @@ export class LocationService {
 
     try {
       // 并行下载所有数据
-      console.log('Downloading countries, states, cities in parallel...');
+      console.log("Downloading countries, states, cities in parallel...");
       const [countriesRes, statesRes, citiesRes] = await Promise.all([
         fetchWithTimeout(CDN_URLS.countries),
         fetchWithTimeout(CDN_URLS.states),
@@ -173,7 +177,7 @@ export class LocationService {
       if (!citiesRes.ok) throw new Error(`HTTP ${citiesRes.status}: ${CDN_URLS.cities}`);
 
       // 并行解析 JSON
-      console.log('Parsing JSON data...');
+      console.log("Parsing JSON data...");
       const [rawCountries, rawStates, rawCities] = await Promise.all([
         countriesRes.json(),
         statesRes.json(),
@@ -184,20 +188,22 @@ export class LocationService {
       const states = this._normalizeStates(rawStates);
       const cities = this._normalizeCities(rawCities);
 
-      console.log('Processing and indexing data...');
+      console.log("Processing and indexing data...");
       const { statesByCountry, citiesByState } = this._buildIndexes(countries, states, cities);
 
-      console.log(`📊 Data parsed: ${countries.length} countries, ${states.length} states, ${cities.length} cities`);
+      console.log(
+        `📊 Data parsed: ${countries.length} countries, ${states.length} states, ${cities.length} cities`
+      );
 
       return {
         countries,
         statesByCountry,
         citiesByState,
         lastUpdated: Date.now(),
-        version: '1.0.0',
+        version: "1.0.0",
       };
     } catch (error) {
-      console.error('Failed to fetch from CDN:', error);
+      console.error("Failed to fetch from CDN:", error);
       throw error;
     }
   }
@@ -209,8 +215,8 @@ export class LocationService {
   private _normalizeCountries(data: any[]): Country[] {
     return data.map((item: any, index: number) => ({
       id: index,
-      name: item.n || '',
-      iso2: item.i || '',
+      name: item.n || "",
+      iso2: item.i || "",
     }));
   }
 
@@ -222,9 +228,9 @@ export class LocationService {
     return data.map((item: any, index: number) => ({
       id: index,
       country_id: 0,
-      name: item.n || '',
-      iso2: item.i || '',
-      countryCode: item.c || '',
+      name: item.n || "",
+      iso2: item.i || "",
+      countryCode: item.c || "",
     }));
   }
 
@@ -239,11 +245,11 @@ export class LocationService {
           id: index,
           state_id: 0,
           country_id: 0,
-          name: item[0] || '',
+          name: item[0] || "",
           latitude: 0,
           longitude: 0,
-          countryCode: item[1] || '',
-          stateCode: item[2] || '',
+          countryCode: item[1] || "",
+          stateCode: item[2] || "",
         };
       }
 
@@ -251,11 +257,11 @@ export class LocationService {
         id: index,
         state_id: 0,
         country_id: 0,
-        name: item.name || item.n || '',
+        name: item.name || item.n || "",
         latitude: 0,
         longitude: 0,
-        countryCode: item.country_code || item.countryCode || item.c || '',
-        stateCode: item.state_code || item.stateCode || item.s || '',
+        countryCode: item.country_code || item.countryCode || item.c || "",
+        stateCode: item.state_code || item.stateCode || item.s || "",
       };
     });
   }

@@ -1,28 +1,48 @@
-import React from "react"
-import { useState, useRef, useCallback, useEffect, useDeferredValue } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LocationCombobox } from '@/components/location-combobox';
-import { Download, MapPin, Palette, Square, Smartphone, Monitor, FileImage, Loader2, AlertCircle, Type, FileText, FileCheck, Settings2 } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
-import { MapPosterPreview } from '@/components/artistic-map';
-import { cn } from '@/lib/utils';
-import { useLocationData } from '@/hooks/useLocationData';
+import React from "react";
+import { useState, useRef, useCallback, useEffect, useDeferredValue, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LocationCombobox } from "@/components/location-combobox";
+import {
+  Download,
+  MapPin,
+  Palette,
+  Square,
+  Smartphone,
+  Monitor,
+  FileImage,
+  Loader2,
+  AlertCircle,
+  Type,
+  FileText,
+  FileCheck,
+  Settings2,
+} from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { MapPosterPreview } from "@/components/artistic-map";
+import { cn } from "@/lib/utils";
+import { useLocationData } from "@/hooks/useLocationData";
 
 // WASM and Utils
-import init, { init_panic_hook } from './pkg/wasm';
-import { shardRoadsBinary, getCoordinates } from './utils';
-import { type MapColors, MAP_THEMES as THEMES } from '@/lib/types';
-import { mapDataService } from './services/map-data';
+import init, { init_panic_hook } from "./pkg/wasm";
+import { shardRoadsBinary, getCoordinates } from "./utils";
+import { type MapColors, MAP_THEMES as THEMES } from "@/lib/types";
+import { mapDataService } from "./services/map-data";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Paraglide i18n
-import * as m from '@/paraglide/messages';
-import { getLocale, setLocale, locales } from '@/paraglide/runtime';
+import * as m from "@/paraglide/messages";
+import { getLocale, setLocale, locales } from "@/paraglide/runtime";
 import { useDynamicFont } from "./hooks/useDynamicFont";
 
 type AvailableLanguageTag = (typeof locales)[number];
@@ -46,21 +66,59 @@ interface PosterSize {
 
 // Example locations
 const EXAMPLES: { location: Location; themeId: string }[] = [
-  { location: { country: 'France', state: 'Ile-de-France', city: 'Paris', lat: 48.8566, lng: 2.3522 }, themeId: 'vintage-sepia' },
-  { location: { country: 'Japan', state: 'Tokyo', city: 'Tokyo', lat: 35.6762, lng: 139.6503 }, themeId: 'midnight-atlas' },
-  { location: { country: 'United States', state: 'New York', city: 'New York', lat: 40.7128, lng: -74.0060 }, themeId: 'navy-gold' },
-  { location: { country: 'United Kingdom', state: 'England', city: 'London', lat: 51.5074, lng: -0.1278 }, themeId: 'antique-parchment' },
-  { location: { country: 'Italy', state: 'Lazio', city: 'Rome', lat: 41.9028, lng: 12.4964 }, themeId: 'forest-expedition' },
+  {
+    location: {
+      country: "France",
+      state: "Ile-de-France",
+      city: "Paris",
+      lat: 48.8566,
+      lng: 2.3522,
+    },
+    themeId: "vintage-sepia",
+  },
+  {
+    location: { country: "Japan", state: "Tokyo", city: "Tokyo", lat: 35.6762, lng: 139.6503 },
+    themeId: "midnight-atlas",
+  },
+  {
+    location: {
+      country: "United States",
+      state: "New York",
+      city: "New York",
+      lat: 40.7128,
+      lng: -74.006,
+    },
+    themeId: "navy-gold",
+  },
+  {
+    location: {
+      country: "United Kingdom",
+      state: "England",
+      city: "London",
+      lat: 51.5074,
+      lng: -0.1278,
+    },
+    themeId: "antique-parchment",
+  },
+  {
+    location: { country: "Italy", state: "Lazio", city: "Rome", lat: 41.9028, lng: 12.4964 },
+    themeId: "forest-expedition",
+  },
 ];
 
 // Worker task helper
 let taskIdCounter = 0;
-function runInWorker(worker: Worker, type: string, data: any, transfers: Transferable[] = []): Promise<any> {
+function runInWorker(
+  worker: Worker,
+  type: string,
+  data: any,
+  transfers: Transferable[] = []
+): Promise<any> {
   return new Promise((resolve, reject) => {
     const id = taskIdCounter++;
     const handler = (event: MessageEvent) => {
       if (event.data.id === id) {
-        worker.removeEventListener('message', handler);
+        worker.removeEventListener("message", handler);
         if (event.data.success) {
           resolve(event.data.result);
         } else {
@@ -71,17 +129,22 @@ function runInWorker(worker: Worker, type: string, data: any, transfers: Transfe
     const errorHandler = (error: ErrorEvent) => {
       reject(new Error(`Worker Crash: ${error.message}`));
     };
-    worker.addEventListener('message', handler);
-    worker.addEventListener('error', errorHandler, { once: true });
+    worker.addEventListener("message", handler);
+    worker.addEventListener("error", errorHandler, { once: true });
     worker.postMessage({ id, type, data }, transfers);
   });
 }
 
-const yieldMainThread = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+const yieldMainThread = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 const FRONTEND_SCALE = 1;
 
 export default function MapPosterGenerator() {
-  const { countries, getStatesByCountry, getCitiesByState, isLoading: locationLoading } = useLocationData();
+  const {
+    countries,
+    getStatesByCountry,
+    getCitiesByState,
+    isLoading: locationLoading,
+  } = useLocationData();
 
   // i18n language state
   const [activeLang, setActiveLang] = useState<AvailableLanguageTag>(getLocale());
@@ -92,51 +155,82 @@ export default function MapPosterGenerator() {
   const [useCustomColors, setUseCustomColors] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
-  const [generationStep, setGenerationStep] = useState('');
-  const [customTitle, setCustomTitle] = useState('');
+  const [generationStep, setGenerationStep] = useState("");
+  const [customTitle, setCustomTitle] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Localized Sizes
-  const SIZES: PosterSize[] = React.useMemo(() => [
-    { id: 'a4-portrait', name: m.size_a4_portrait(), width: 2480, height: 3508, icon: <FileImage className="w-4 h-4" /> },
-    { id: 'a4-landscape', name: m.size_a4_landscape(), width: 3508, height: 2480, icon: <FileImage className="w-4 h-4 rotate-90" /> },
-    { id: 'square', name: m.size_square(), width: 2048, height: 2048, icon: <Square className="w-4 h-4" /> },
-    { id: 'phone', name: m.size_phone(), width: 1170, height: 2532, icon: <Smartphone className="w-4 h-4" /> },
-    { id: 'desktop', name: m.size_desktop(), width: 3840, height: 2160, icon: <Monitor className="w-4 h-4" /> },
-  ], [activeLang]);
+  const SIZES: PosterSize[] = React.useMemo(
+    () => [
+      {
+        id: "a4-portrait",
+        name: m.size_a4_portrait(),
+        width: 2480,
+        height: 3508,
+        icon: <FileImage className="w-4 h-4" />,
+      },
+      {
+        id: "a4-landscape",
+        name: m.size_a4_landscape(),
+        width: 3508,
+        height: 2480,
+        icon: <FileImage className="w-4 h-4 rotate-90" />,
+      },
+      {
+        id: "square",
+        name: m.size_square(),
+        width: 2048,
+        height: 2048,
+        icon: <Square className="w-4 h-4" />,
+      },
+      {
+        id: "phone",
+        name: m.size_phone(),
+        width: 1170,
+        height: 2532,
+        icon: <Smartphone className="w-4 h-4" />,
+      },
+      {
+        id: "desktop",
+        name: m.size_desktop(),
+        width: 3840,
+        height: 2160,
+        icon: <Monitor className="w-4 h-4" />,
+      },
+    ],
+    [activeLang]
+  );
 
   const [selectedSize, setSelectedSize] = useState(SIZES[0]);
 
   // Map theme IDs to translation functions
   const themeNameMap: Record<string, string> = {
-    'Nordic-Frost': m.theme_nordic_frost(),
-    'Desert-Rose': m.theme_desert_rose(),
-    'Cyberpunk-Neon': m.theme_cyberpunk_neon(),
-    'Sulfur-Slate': m.theme_sulfur_slate(),
-    'Vintage-Nautical': m.theme_vintage_nautical(),
-    'Lavender-Mist': m.theme_lavender_mist(),
-    'Carbon-Fiber': m.theme_carbon_fiber(),
-    'Mediterranean-Summer': m.theme_mediterranean_summer(),
-    'Royal-Velvet': m.theme_royal_velvet(),
-    'Forest-Moss': m.theme_forest_moss(),
-    'Cotton-Candy': m.theme_cotton_candy(),
-    'Brutalist-Concrete': m.theme_brutalist_concrete(),
-    'Solarized-Dark': m.theme_solarized_dark(),
-    'Matcha-Latte': m.theme_matcha_latte(),
-    'Red-Alert': m.theme_red_alert(),
-    'Gilded-Noir': m.theme_gilded_noir(),
-    'Ocean-Abyss': m.theme_ocean_abyss(),
-    'Sakura-Branch': m.theme_sakura_branch(),
-    'Terra-Clay': m.theme_terra_clay(),
-    'Glitch-Purple': m.theme_glitch_purple()
+    "Nordic-Frost": m.theme_nordic_frost(),
+    "Desert-Rose": m.theme_desert_rose(),
+    "Cyberpunk-Neon": m.theme_cyberpunk_neon(),
+    "Sulfur-Slate": m.theme_sulfur_slate(),
+    "Vintage-Nautical": m.theme_vintage_nautical(),
+    "Lavender-Mist": m.theme_lavender_mist(),
+    "Carbon-Fiber": m.theme_carbon_fiber(),
+    "Mediterranean-Summer": m.theme_mediterranean_summer(),
+    "Royal-Velvet": m.theme_royal_velvet(),
+    "Forest-Moss": m.theme_forest_moss(),
+    "Cotton-Candy": m.theme_cotton_candy(),
+    "Brutalist-Concrete": m.theme_brutalist_concrete(),
+    "Solarized-Dark": m.theme_solarized_dark(),
+    "Matcha-Latte": m.theme_matcha_latte(),
+    "Red-Alert": m.theme_red_alert(),
+    "Gilded-Noir": m.theme_gilded_noir(),
+    "Ocean-Abyss": m.theme_ocean_abyss(),
+    "Sakura-Branch": m.theme_sakura_branch(),
+    "Terra-Clay": m.theme_terra_clay(),
+    "Glitch-Purple": m.theme_glitch_purple(),
   };
 
-
-
   // Location selection state
-  const [selectedCountry, setSelectedCountry] = useState<string>('');
-  const [selectedState, setSelectedState] = useState<string>('');
-  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const [selectedState, setSelectedState] = useState<string>("");
+  const [selectedCity, setSelectedCity] = useState<string>("");
   const [states, setStates] = useState<any[]>([]);
   const [cities, setCities] = useState<any[]>([]);
   const [isStatesLoading, setIsStatesLoading] = useState(false);
@@ -144,36 +238,36 @@ export default function MapPosterGenerator() {
 
   // Font upload state
   const [customFont, setCustomFont] = useState<Uint8Array | null>(null);
-  const [fontFileName, setFontFileName] = useState<string>('');
+  const [fontFileName, setFontFileName] = useState<string>("");
   const fontFileInputRef = useRef<HTMLInputElement>(null);
 
   // Data settings state
-  const [lodMode, setLodMode] = useState<'simplified' | 'detailed'>('simplified');
+  const [lodMode, setLodMode] = useState<"simplified" | "detailed">("simplified");
   const [baseRadius, setBaseRadius] = useState(15000);
 
   // Initialize language on mount
   useEffect(() => {
-    const savedLang = localStorage.getItem('lang') as AvailableLanguageTag;
+    const savedLang = localStorage.getItem("lang") as AvailableLanguageTag;
     if (savedLang && locales.includes(savedLang)) {
       setLocale(savedLang, { reload: false });
       setActiveLang(savedLang);
     } else {
       const browserLang = navigator.language;
-      const matchedLang = locales.find(tag => browserLang.startsWith(tag));
-      const finalLang = (matchedLang || 'en') as AvailableLanguageTag;
+      const matchedLang = locales.find((tag) => browserLang.startsWith(tag));
+      const finalLang = (matchedLang || "en") as AvailableLanguageTag;
       setLocale(finalLang, { reload: false });
       setActiveLang(finalLang);
-      localStorage.setItem('lang', finalLang);
+      localStorage.setItem("lang", finalLang);
     }
 
-    document.title = `${m.app_title()} - ${m.app_subtitle()}`
+    document.title = `${m.app_title()} - ${m.app_subtitle()}`;
   }, []);
 
   const handleLanguageChange = (newLang: AvailableLanguageTag) => {
     setLocale(newLang, { reload: false });
     setActiveLang(newLang);
-    localStorage.setItem('lang', newLang);
-    document.title = `${m.app_title()} - ${m.app_subtitle()}`
+    localStorage.setItem("lang", newLang);
+    document.title = `${m.app_title()} - ${m.app_subtitle()}`;
   };
 
   // Persistence Handling
@@ -192,19 +286,28 @@ export default function MapPosterGenerator() {
       lodMode,
       baseRadius,
       selectedSizeId: selectedSize.id,
-      location // Store the lat/lng coordinates too
+      location, // Store the lat/lng coordinates too
     };
-    localStorage.setItem('maptoposter_config', JSON.stringify(config));
-  }, [selectedCountry, selectedState, selectedCity, customTitle, lodMode, baseRadius, selectedSize, location]);
+    localStorage.setItem("maptoposter_config", JSON.stringify(config));
+  }, [
+    selectedCountry,
+    selectedState,
+    selectedCity,
+    customTitle,
+    lodMode,
+    baseRadius,
+    selectedSize,
+    location,
+  ]);
 
   useEffect(() => {
-    const savedConfig = localStorage.getItem('maptoposter_config');
+    const savedConfig = localStorage.getItem("maptoposter_config");
     if (savedConfig && countries.length > 0 && !isRestored.current) {
       try {
         const config = JSON.parse(savedConfig);
 
         // Restore Size
-        const savedSize = SIZES.find(s => s.id === config.selectedSizeId);
+        const savedSize = SIZES.find((s) => s.id === config.selectedSizeId);
         if (savedSize) setSelectedSize(savedSize);
 
         // Restore LOD & Radius
@@ -217,7 +320,7 @@ export default function MapPosterGenerator() {
 
         // Crucial: Restore Country/State/City selections and trigger their data loading
         if (config.selectedCountry) {
-          const country = countries.find(c => c.name === config.selectedCountry);
+          const country = countries.find((c) => c.name === config.selectedCountry);
           if (country) {
             setSelectedCountry(config.selectedCountry);
             (async () => {
@@ -241,14 +344,35 @@ export default function MapPosterGenerator() {
                     const cityName = config.selectedCity;
                     const cached = mapDataService.getCoordinates(cityName, config.selectedCountry);
                     if (cached) {
-                      setLocation({ country: config.selectedCountry, state: config.selectedState, city: cityName, lat: cached.latitude, lng: cached.longitude });
+                      setLocation({
+                        country: config.selectedCountry,
+                        state: config.selectedState,
+                        city: cityName,
+                        lat: cached.latitude,
+                        lng: cached.longitude,
+                      });
                     } else {
                       try {
                         const coords = await getCoordinates(cityName, config.selectedCountry);
-                        mapDataService.saveCoordinates(cityName, config.selectedCountry, coords.latitude, coords.longitude);
-                        setLocation({ country: config.selectedCountry, state: config.selectedState, city: cityName, lat: coords.latitude, lng: coords.longitude });
+                        mapDataService.saveCoordinates(
+                          cityName,
+                          config.selectedCountry,
+                          coords.latitude,
+                          coords.longitude
+                        );
+                        setLocation({
+                          country: config.selectedCountry,
+                          state: config.selectedState,
+                          city: cityName,
+                          lat: coords.latitude,
+                          lng: coords.longitude,
+                        });
                       } catch {
-                        setLocation({ country: config.selectedCountry, state: config.selectedState, city: cityName });
+                        setLocation({
+                          country: config.selectedCountry,
+                          state: config.selectedState,
+                          city: cityName,
+                        });
                       }
                     }
                   }
@@ -287,21 +411,42 @@ export default function MapPosterGenerator() {
               const cityName = stateCities[0].name;
               const cached = mapDataService.getCoordinates(cityName, firstCountry.name);
               if (cached) {
-                setLocation({ country: firstCountry.name, state: firstState.name, city: cityName, lat: cached.latitude, lng: cached.longitude });
+                setLocation({
+                  country: firstCountry.name,
+                  state: firstState.name,
+                  city: cityName,
+                  lat: cached.latitude,
+                  lng: cached.longitude,
+                });
               } else {
                 try {
                   const coords = await getCoordinates(cityName, firstCountry.name);
-                  mapDataService.saveCoordinates(cityName, firstCountry.name, coords.latitude, coords.longitude);
-                  setLocation({ country: firstCountry.name, state: firstState.name, city: cityName, lat: coords.latitude, lng: coords.longitude });
+                  mapDataService.saveCoordinates(
+                    cityName,
+                    firstCountry.name,
+                    coords.latitude,
+                    coords.longitude
+                  );
+                  setLocation({
+                    country: firstCountry.name,
+                    state: firstState.name,
+                    city: cityName,
+                    lat: coords.latitude,
+                    lng: coords.longitude,
+                  });
                 } catch {
-                  setLocation({ country: firstCountry.name, state: firstState.name, city: cityName });
+                  setLocation({
+                    country: firstCountry.name,
+                    state: firstState.name,
+                    city: cityName,
+                  });
                 }
               }
             }
           }
           isRestored.current = true;
         } catch (error) {
-          console.error('Error initializing location data:', error);
+          console.error("Error initializing location data:", error);
           setIsStatesLoading(false);
           setIsCitiesLoading(false);
           isRestored.current = true;
@@ -312,109 +457,179 @@ export default function MapPosterGenerator() {
 
   // Remove the old initialization useEffect (lines 182-211) as it's merged above
 
-
   const deferredCustomColors = useDeferredValue(customColors);
   const colors = useCustomColors ? deferredCustomColors : selectedTheme.colors;
 
-  const handleCountryChange = useCallback(async (countryName: string) => {
-    setSelectedCountry(countryName);
-    setStates([]);
-    setCities([]);
-    setIsStatesLoading(true);
-    setIsCitiesLoading(true);
-    try {
-      const country = countries.find(c => c.name.toLowerCase() === countryName.toLowerCase());
-      const countryStates = await getStatesByCountry(country?.id || 0);
-      setStates(countryStates);
-      setIsStatesLoading(false);
-      if (countryStates.length > 0) {
-        const firstState = countryStates[0];
-        setSelectedState(firstState.name);
-        const stateCities = await getCitiesByState(firstState.id);
-        setCities(stateCities);
-        setIsCitiesLoading(false);
-        if (stateCities.length > 0) {
-          setSelectedCity(stateCities[0].name);
-          const cityName = stateCities[0].name;
-          const cached = mapDataService.getCoordinates(cityName, country?.name || countryName);
-          if (cached) {
-            setLocation({ country: country?.name || countryName, state: firstState.name, city: cityName, lat: cached.latitude, lng: cached.longitude });
-          } else {
-            try {
-              const coords = await getCoordinates(cityName, country?.name || countryName);
-              mapDataService.saveCoordinates(cityName, country?.name || countryName, coords.latitude, coords.longitude);
-              setLocation({ country: country?.name || countryName, state: firstState.name, city: cityName, lat: coords.latitude, lng: coords.longitude });
-            } catch {
-              setLocation({ country: country?.name || countryName, state: firstState.name, city: cityName });
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error loading states:', error);
-      setIsStatesLoading(false);
-      setIsCitiesLoading(false);
-    }
-  }, [countries, getStatesByCountry, getCitiesByState]);
+  const stableTheme = useMemo(
+    () => ({
+      bg: colors.bg,
+      water: colors.water,
+      parks: colors.parks,
+      road_motorway: colors.road_motorway,
+      road_primary: colors.road_primary,
+      road_secondary: colors.road_secondary,
+      road_tertiary: colors.road_tertiary,
+      road_residential: colors.road_residential,
+      road_default: colors.road_default,
+      route: colors.poi_color || colors.text || colors.bg,
+      poi: colors.poi_color || colors.road_default,
+    }),
+    [colors]
+  );
 
-  const handleStateChange = useCallback(async (stateName: string) => {
-    setSelectedState(stateName);
-    setCities([]);
-    setIsCitiesLoading(true);
-    try {
-      const state = states.find(s => s.name.toLowerCase() === stateName.toLowerCase());
-      if (state) {
-        const stateCities = await getCitiesByState(state.id);
-        setCities(stateCities);
-        setIsCitiesLoading(false);
-        if (stateCities.length > 0) {
-          const firstCity = stateCities[0];
-          setSelectedCity(firstCity.name);
-          const cityName = firstCity.name;
-          const cached = mapDataService.getCoordinates(cityName, selectedCountry);
-          if (cached) {
-            setLocation({ country: selectedCountry, state: state.name, city: cityName, lat: cached.latitude, lng: cached.longitude });
-          } else {
-            try {
-              const coords = await getCoordinates(cityName, selectedCountry);
-              mapDataService.saveCoordinates(cityName, selectedCountry, coords.latitude, coords.longitude);
-              setLocation({ country: selectedCountry, state: state.name, city: cityName, lat: coords.latitude, lng: coords.longitude });
-            } catch {
-              setLocation({ country: selectedCountry, state: state.name, city: cityName });
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error loading cities:', error);
-      setIsCitiesLoading(false);
-    }
-  }, [states, selectedCountry, getCitiesByState]);
+  const stableMapLocation = useMemo(
+    () => ({
+      lat: location.lat || 0,
+      lon: location.lng || 0,
+    }),
+    [location.lat, location.lng]
+  );
 
-  const handleCityChange = useCallback(async (cityName: string) => {
-    setSelectedCity(cityName);
-
-    // 获取城市坐标
-    let lat = 0, lng = 0;
-    const cachedCoordinates = mapDataService.getCoordinates(cityName, selectedCountry);
-    if (cachedCoordinates) {
-      lat = cachedCoordinates.latitude;
-      lng = cachedCoordinates.longitude;
-    } else {
+  const handleCountryChange = useCallback(
+    async (countryName: string) => {
+      setSelectedCountry(countryName);
+      setStates([]);
+      setCities([]);
+      setIsStatesLoading(true);
+      setIsCitiesLoading(true);
       try {
-        const coordinates = await getCoordinates(cityName, selectedCountry);
-        lat = coordinates.latitude;
-        lng = coordinates.longitude;
-        mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
+        const country = countries.find((c) => c.name.toLowerCase() === countryName.toLowerCase());
+        const countryStates = await getStatesByCountry(country?.id || 0);
+        setStates(countryStates);
+        setIsStatesLoading(false);
+        if (countryStates.length > 0) {
+          const firstState = countryStates[0];
+          setSelectedState(firstState.name);
+          const stateCities = await getCitiesByState(firstState.id);
+          setCities(stateCities);
+          setIsCitiesLoading(false);
+          if (stateCities.length > 0) {
+            setSelectedCity(stateCities[0].name);
+            const cityName = stateCities[0].name;
+            const cached = mapDataService.getCoordinates(cityName, country?.name || countryName);
+            if (cached) {
+              setLocation({
+                country: country?.name || countryName,
+                state: firstState.name,
+                city: cityName,
+                lat: cached.latitude,
+                lng: cached.longitude,
+              });
+            } else {
+              try {
+                const coords = await getCoordinates(cityName, country?.name || countryName);
+                mapDataService.saveCoordinates(
+                  cityName,
+                  country?.name || countryName,
+                  coords.latitude,
+                  coords.longitude
+                );
+                setLocation({
+                  country: country?.name || countryName,
+                  state: firstState.name,
+                  city: cityName,
+                  lat: coords.latitude,
+                  lng: coords.longitude,
+                });
+              } catch {
+                setLocation({
+                  country: country?.name || countryName,
+                  state: firstState.name,
+                  city: cityName,
+                });
+              }
+            }
+          }
+        }
       } catch (error) {
-        console.error('Failed to get coordinates for city:', error);
+        console.error("Error loading states:", error);
+        setIsStatesLoading(false);
+        setIsCitiesLoading(false);
       }
-    }
+    },
+    [countries, getStatesByCountry, getCitiesByState]
+  );
 
-    setLocation({ country: selectedCountry, state: selectedState, city: cityName, lat, lng });
-  }, [selectedCountry, selectedState]);
+  const handleStateChange = useCallback(
+    async (stateName: string) => {
+      setSelectedState(stateName);
+      setCities([]);
+      setIsCitiesLoading(true);
+      try {
+        const state = states.find((s) => s.name.toLowerCase() === stateName.toLowerCase());
+        if (state) {
+          const stateCities = await getCitiesByState(state.id);
+          setCities(stateCities);
+          setIsCitiesLoading(false);
+          if (stateCities.length > 0) {
+            const firstCity = stateCities[0];
+            setSelectedCity(firstCity.name);
+            const cityName = firstCity.name;
+            const cached = mapDataService.getCoordinates(cityName, selectedCountry);
+            if (cached) {
+              setLocation({
+                country: selectedCountry,
+                state: state.name,
+                city: cityName,
+                lat: cached.latitude,
+                lng: cached.longitude,
+              });
+            } else {
+              try {
+                const coords = await getCoordinates(cityName, selectedCountry);
+                mapDataService.saveCoordinates(
+                  cityName,
+                  selectedCountry,
+                  coords.latitude,
+                  coords.longitude
+                );
+                setLocation({
+                  country: selectedCountry,
+                  state: state.name,
+                  city: cityName,
+                  lat: coords.latitude,
+                  lng: coords.longitude,
+                });
+              } catch {
+                setLocation({ country: selectedCountry, state: state.name, city: cityName });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error loading cities:", error);
+        setIsCitiesLoading(false);
+      }
+    },
+    [states, selectedCountry, getCitiesByState]
+  );
 
+  const handleCityChange = useCallback(
+    async (cityName: string) => {
+      setSelectedCity(cityName);
 
+      // 获取城市坐标
+      let lat = 0,
+        lng = 0;
+      const cachedCoordinates = mapDataService.getCoordinates(cityName, selectedCountry);
+      if (cachedCoordinates) {
+        lat = cachedCoordinates.latitude;
+        lng = cachedCoordinates.longitude;
+      } else {
+        try {
+          const coordinates = await getCoordinates(cityName, selectedCountry);
+          lat = coordinates.latitude;
+          lng = coordinates.longitude;
+          mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
+        } catch (error) {
+          console.error("Failed to get coordinates for city:", error);
+        }
+      }
+
+      setLocation({ country: selectedCountry, state: selectedState, city: cityName, lat, lng });
+    },
+    [selectedCountry, selectedState]
+  );
 
   const handleFontUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -422,16 +637,16 @@ export default function MapPosterGenerator() {
 
     // Validate file type
     const fileName = file.name.toLowerCase();
-    if (!fileName.endsWith('.ttf') && !fileName.endsWith('.otf')) {
+    if (!fileName.endsWith(".ttf") && !fileName.endsWith(".otf")) {
       alert(m.font_upload_error());
-      if (fontFileInputRef.current) fontFileInputRef.current.value = '';
+      if (fontFileInputRef.current) fontFileInputRef.current.value = "";
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       alert(m.font_upload_error());
-      if (fontFileInputRef.current) fontFileInputRef.current.value = '';
+      if (fontFileInputRef.current) fontFileInputRef.current.value = "";
       return;
     }
 
@@ -441,27 +656,29 @@ export default function MapPosterGenerator() {
       setCustomFont(fontData);
       setFontFileName(file.name);
     } catch (error) {
-      console.error('Font upload failed:', error);
+      console.error("Font upload failed:", error);
       alert(m.font_upload_error());
       setCustomFont(null);
-      setFontFileName('');
+      setFontFileName("");
     }
   };
 
   const clearCustomFont = () => {
     setCustomFont(null);
-    setFontFileName('');
+    setFontFileName("");
     if (fontFileInputRef.current) {
-      fontFileInputRef.current.value = '';
+      fontFileInputRef.current.value = "";
     }
   };
 
   useEffect(() => {
-    init().then(() => {
-      init_panic_hook();
-    }).catch(err => {
-      console.error("Failed to initialize WASM:", err);
-    });
+    init()
+      .then(() => {
+        init_panic_hook();
+      })
+      .catch((err) => {
+        console.error("Failed to initialize WASM:", err);
+      });
   }, []);
 
   const handleDownload = useCallback(async () => {
@@ -470,18 +687,19 @@ export default function MapPosterGenerator() {
     setGenerationStep(m.step_init());
     await yieldMainThread();
     const numWorkers = navigator.hardwareConcurrency || 4;
-    const workers = Array.from({ length: numWorkers }, () =>
-      new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+    const workers = Array.from(
+      { length: numWorkers },
+      () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })
     );
 
     // 设置进度回调，用于接收 data-worker 发来的进度更新
     const progressHandler = (progress: number, step: string) => {
       // 处理带等待秒数的步骤 (格式: "step_waiting_api:30" 或 "step_retrying_error:55")
-      if (step.startsWith('step_waiting_api:')) {
-        const seconds = step.split(':')[1];
+      if (step.startsWith("step_waiting_api:")) {
+        const seconds = step.split(":")[1];
         setGenerationStep(m.step_waiting_api({ seconds }));
-      } else if (step.startsWith('step_retrying_error:')) {
-        const seconds = step.split(':')[1];
+      } else if (step.startsWith("step_retrying_error:")) {
+        const seconds = step.split(":")[1];
         setGenerationStep(m.step_retrying_error({ seconds }));
       } else {
         // 处理普通步骤
@@ -501,7 +719,8 @@ export default function MapPosterGenerator() {
       setGenerationProgress(5);
       setGenerationStep(m.step_coordinates());
       await yieldMainThread();
-      let lat = 0, lng = 0;
+      let lat = 0,
+        lng = 0;
       const cachedCoordinates = mapDataService.getCoordinates(location.city, location.country);
       if (cachedCoordinates) {
         lat = cachedCoordinates.latitude;
@@ -520,12 +739,19 @@ export default function MapPosterGenerator() {
       await yieldMainThread();
 
       // 【优化】：获取地图数据 (包含 POI)
-      const mapResults = await mapDataService.getMapData(location.country, location.city, lat, lng, baseRadius, lodMode);
+      const mapResults = await mapDataService.getMapData(
+        location.country,
+        location.city,
+        lat,
+        lng,
+        baseRadius,
+        lodMode
+      );
 
       const { roads, water, parks, pois: poisRaw, fromCache, cacheLevel, isProtomaps } = mapResults;
 
       // 根据缓存层级设置最终消息
-      if (cacheLevel === 'memory') {
+      if (cacheLevel === "memory") {
         setGenerationProgress(60);
         setGenerationStep(m.step_restore_memory());
       } else {
@@ -547,14 +773,14 @@ export default function MapPosterGenerator() {
       // 并行处理：道路、水体、公园
       // 注意：使用取模确保索引永远在 workers 范围内
       const roadProcessingPromises = roadShards.map((shard, i) =>
-        runInWorker(workers[i % numWorkers], 'roads', shard, [shard.buffer])
+        runInWorker(workers[i % numWorkers], "roads", shard, [shard.buffer])
       );
 
       const [processedRoadShards, waterBin, parksBin, poisBin] = await Promise.all([
         Promise.all(roadProcessingPromises),
-        runInWorker(workers[0 % numWorkers], 'polygons', waterTyped, [waterTyped.buffer]),
-        runInWorker(workers[1 % numWorkers], 'polygons', parksTyped, [parksTyped.buffer]),
-        runInWorker(workers[2 % numWorkers], 'pois', poisTyped, [poisTyped.buffer])
+        runInWorker(workers[0 % numWorkers], "polygons", waterTyped, [waterTyped.buffer]),
+        runInWorker(workers[1 % numWorkers], "polygons", parksTyped, [parksTyped.buffer]),
+        runInWorker(workers[2 % numWorkers], "pois", poisTyped, [poisTyped.buffer]),
       ]);
 
       // 数据处理完成
@@ -575,7 +801,7 @@ export default function MapPosterGenerator() {
         selected_size_height: selectedSize.height * FRONTEND_SCALE,
         frontend_scale: FRONTEND_SCALE,
         road_width_boost: isProtomaps ? 1.8 : 1.0, // 关键：如果是 Protomaps，则将全域线宽补偿 1.8 倍以对齐 Overpass 质感
-        pois: Array.from(poisBin)
+        pois: Array.from(poisBin),
       };
 
       setGenerationProgress(90);
@@ -587,14 +813,14 @@ export default function MapPosterGenerator() {
         roads_shards: processedRoadShards,
         water_bin: waterBin,
         parks_bin: parksBin,
-        config_json: JSON.stringify(config)
+        config_json: JSON.stringify(config),
       };
 
       const finalTransfers: Transferable[] = [
-        ...processedRoadShards.map(s => s.buffer),
+        ...processedRoadShards.map((s) => s.buffer),
         waterBin.buffer,
         parksBin.buffer,
-        poisBin.buffer
+        poisBin.buffer,
       ];
 
       // 如果有自定义字体，注入
@@ -605,18 +831,23 @@ export default function MapPosterGenerator() {
       }
 
       // 执行渲染任务
-      const pngData = await runInWorker(workers[0 % numWorkers], 'render', renderOptions, finalTransfers);
+      const pngData = await runInWorker(
+        workers[0 % numWorkers],
+        "render",
+        renderOptions,
+        finalTransfers
+      );
 
       if (pngData) {
         setGenerationProgress(100);
         setGenerationStep(m.step_complete());
         await yieldMainThread();
 
-        const blob = new Blob([pngData], { type: 'image/png' });
+        const blob = new Blob([pngData], { type: "image/png" });
         const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.href = url;
-        link.download = `${(customTitle || location.city).toLowerCase().replace(/\s+/g, '-')}-map-poster.png`;
+        link.download = `${(customTitle || location.city).toLowerCase().replace(/\s+/g, "-")}-map-poster.png`;
         link.click();
       }
     } catch (error) {
@@ -625,12 +856,18 @@ export default function MapPosterGenerator() {
     } finally {
       mapDataService.setProgressCallback(null);
       setIsGenerating(false);
-      workers.forEach(w => w.terminate());
+      workers.forEach((w) => w.terminate());
     }
   }, [colors, location, selectedSize, customTitle, activeLang, customFont, lodMode, baseRadius]);
 
   const languageNames: Record<AvailableLanguageTag, string> = {
-    'en': 'English', 'zh-CN': '简体中文', 'ja': '日本語', 'ko': '한국어', 'fr': 'Français', 'de': 'Deutsch', 'es': 'Español'
+    en: "English",
+    "zh-CN": "简体中文",
+    ja: "日本語",
+    ko: "한국어",
+    fr: "Français",
+    de: "Deutsch",
+    es: "Español",
   };
 
   useDynamicFont(activeLang);
@@ -642,20 +879,39 @@ export default function MapPosterGenerator() {
           <img className="w-10 h-10 mr-2" src="/icon.svg" alt="icon" />
           <div className="mr-auto select-none">
             <h1 className="text-2xl tracking-wide font-serif text-foreground">{m.app_title()}</h1>
-            <p className="text-xs tracking-widest uppercase text-muted-foreground">{m.app_subtitle()}</p>
+            <p className="text-xs tracking-widest uppercase text-muted-foreground">
+              {m.app_subtitle()}
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <Select value={activeLang} onValueChange={(val) => handleLanguageChange(val as AvailableLanguageTag)}>
+            <Select
+              value={activeLang}
+              onValueChange={(val) => handleLanguageChange(val as AvailableLanguageTag)}
+            >
               <SelectTrigger className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {locales.map((tag) => <SelectItem key={tag} value={tag}>{languageNames[tag]}</SelectItem>)}
+                {locales.map((tag) => (
+                  <SelectItem key={tag} value={tag}>
+                    {languageNames[tag]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Button onClick={handleDownload} disabled={isGenerating || locationLoading} className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
-              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              <span className="hidden sm:inline">{isGenerating ? m.generating() : m.download_button()}</span>
+            <Button
+              onClick={handleDownload}
+              disabled={isGenerating || locationLoading}
+              className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {isGenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span className="hidden sm:inline">
+                {isGenerating ? m.generating() : m.download_button()}
+              </span>
             </Button>
           </div>
         </div>
@@ -667,10 +923,14 @@ export default function MapPosterGenerator() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-serif text-lg text-primary">{m.creating_art()}</h3>
-                <span className="text-sm font-mono text-primary/60">{Math.round(generationProgress)}%</span>
+                <span className="text-sm font-mono text-primary/60">
+                  {Math.round(generationProgress)}%
+                </span>
               </div>
               <Progress value={generationProgress} className="h-2 bg-secondary" />
-              <p className="text-sm text-center animate-pulse text-muted-foreground">{generationStep}</p>
+              <p className="text-sm text-center animate-pulse text-muted-foreground">
+                {generationStep}
+              </p>
             </div>
           </Card>
         </div>
@@ -686,20 +946,56 @@ export default function MapPosterGenerator() {
               </div>
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.label_country()}</Label>
-                  <LocationCombobox options={countries} value={selectedCountry} onValueChange={handleCountryChange} placeholder={m.placeholder_select_country()} emptyText={m.empty_country()} disabled={locationLoading} />
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {m.label_country()}
+                  </Label>
+                  <LocationCombobox
+                    options={countries}
+                    value={selectedCountry}
+                    onValueChange={handleCountryChange}
+                    placeholder={m.placeholder_select_country()}
+                    emptyText={m.empty_country()}
+                    disabled={locationLoading}
+                  />
                 </div>
                 <div>
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.label_state()}</Label>
-                  <LocationCombobox options={states} value={selectedState} onValueChange={handleStateChange} placeholder={m.placeholder_select_state()} emptyText={m.empty_state()} disabled={states.length === 0 && !isStatesLoading} isLoading={isStatesLoading} />
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {m.label_state()}
+                  </Label>
+                  <LocationCombobox
+                    options={states}
+                    value={selectedState}
+                    onValueChange={handleStateChange}
+                    placeholder={m.placeholder_select_state()}
+                    emptyText={m.empty_state()}
+                    disabled={states.length === 0 && !isStatesLoading}
+                    isLoading={isStatesLoading}
+                  />
                 </div>
                 <div>
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.label_city()}</Label>
-                  <LocationCombobox options={cities} value={selectedCity} onValueChange={handleCityChange} placeholder={m.placeholder_select_city()} emptyText={m.empty_city()} disabled={cities.length === 0 && !isCitiesLoading} isLoading={isCitiesLoading} />
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {m.label_city()}
+                  </Label>
+                  <LocationCombobox
+                    options={cities}
+                    value={selectedCity}
+                    onValueChange={handleCityChange}
+                    placeholder={m.placeholder_select_city()}
+                    emptyText={m.empty_city()}
+                    disabled={cities.length === 0 && !isCitiesLoading}
+                    isLoading={isCitiesLoading}
+                  />
                 </div>
                 <div>
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.label_custom_title()}</Label>
-                  <Input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} placeholder={location.city} className="border-border bg-card text-foreground" />
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {m.label_custom_title()}
+                  </Label>
+                  <Input
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    placeholder={location.city}
+                    className="border-border bg-card text-foreground"
+                  />
                 </div>
               </div>
             </Card>
@@ -711,18 +1007,36 @@ export default function MapPosterGenerator() {
               </div>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.label_lod_mode()}</Label>
-                  <Tabs value={lodMode} onValueChange={(val) => setLodMode(val as 'simplified' | 'detailed')} className="w-full">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {m.label_lod_mode()}
+                  </Label>
+                  <Tabs
+                    value={lodMode}
+                    onValueChange={(val) => setLodMode(val as "simplified" | "detailed")}
+                    className="w-full"
+                  >
                     <TabsList className="w-full bg-secondary">
-                      <TabsTrigger value="simplified" className="flex-1 text-foreground data-[state=active]:text-vanilla">{m.lod_simplified()}</TabsTrigger>
-                      <TabsTrigger value="detailed" className="flex-1 text-foreground data-[state=active]:text-vanilla">{m.lod_detailed()}</TabsTrigger>
+                      <TabsTrigger
+                        value="simplified"
+                        className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                      >
+                        {m.lod_simplified()}
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="detailed"
+                        className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                      >
+                        {m.lod_detailed()}
+                      </TabsTrigger>
                     </TabsList>
                   </Tabs>
-                  {lodMode === 'detailed' && (
+                  {lodMode === "detailed" && (
                     <div className="mt-2 flex items-start gap-2.5 p-3 bg-primary/5 border border-primary/10 transition-all duration-300 animate-in fade-in slide-in-from-top-2">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary/60" />
                       <div className="space-y-1">
-                        <p className="text-[10px] font-medium uppercase tracking-widest opacity-70 text-primary">{m.label_note()}</p>
+                        <p className="text-[10px] font-medium uppercase tracking-widest opacity-70 text-primary">
+                          {m.label_note()}
+                        </p>
                         <p className="text-[10px] leading-normal italic font-serif text-muted-foreground">
                           {m.lod_detailed_desc()}
                         </p>
@@ -733,16 +1047,23 @@ export default function MapPosterGenerator() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.label_map_radius()}</Label>
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {m.label_map_radius()}
+                    </Label>
                     <span className="text-xs font-mono text-primary">{baseRadius}m</span>
                   </div>
-                  <Select value={baseRadius.toString()} onValueChange={(val) => setBaseRadius(parseInt(val))}>
+                  <Select
+                    value={baseRadius.toString()}
+                    onValueChange={(val) => setBaseRadius(parseInt(val))}
+                  >
                     <SelectTrigger className="w-full h-9 border-border bg-card">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Array.from({ length: 16 }, (_, i) => 1000 + i * 1000).map(radius => (
-                        <SelectItem key={radius} value={radius.toString()}>{radius}m</SelectItem>
+                      {Array.from({ length: 16 }, (_, i) => 1000 + i * 1000).map((radius) => (
+                        <SelectItem key={radius} value={radius.toString()}>
+                          {radius}m
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -758,17 +1079,52 @@ export default function MapPosterGenerator() {
               </div>
               <Tabs defaultValue="presets" className="w-full">
                 <TabsList className="w-full bg-secondary">
-                  <TabsTrigger value="presets" className="flex-1 text-foreground data-[state=active]:text-vanilla" onClick={() => setUseCustomColors(false)}>{m.tab_presets()}</TabsTrigger>
-                  <TabsTrigger value="custom" className="flex-1 text-foreground data-[state=active]:text-vanilla" onClick={() => setUseCustomColors(true)}>{m.tab_custom()}</TabsTrigger>
+                  <TabsTrigger
+                    value="presets"
+                    className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                    onClick={() => setUseCustomColors(false)}
+                  >
+                    {m.tab_presets()}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="custom"
+                    className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                    onClick={() => setUseCustomColors(true)}
+                  >
+                    {m.tab_custom()}
+                  </TabsTrigger>
                 </TabsList>
                 <TabsContent value="presets" className="mt-3">
                   <div className="grid grid-cols-2 gap-2">
-                    {THEMES.map(theme => (
-                      <button key={theme.id} onClick={() => { setSelectedTheme(theme); setCustomColors(theme.colors); setUseCustomColors(false); }} className={cn("p-2 border-1 transition-all flex flex-col items-start gap-2", selectedTheme.id === theme.id && !useCustomColors ? "border-primary bg-background/60" : "border-transparent bg-transparent hover:bg-background/50")}>
+                    {THEMES.map((theme) => (
+                      <button
+                        key={theme.id}
+                        onClick={() => {
+                          setSelectedTheme(theme);
+                          setCustomColors(theme.colors);
+                          setUseCustomColors(false);
+                        }}
+                        className={cn(
+                          "p-2 border-1 transition-all flex flex-col items-start gap-2",
+                          selectedTheme.id === theme.id && !useCustomColors
+                            ? "border-primary bg-background/60"
+                            : "border-transparent bg-transparent hover:bg-background/50"
+                        )}
+                      >
                         <div className="flex -space-x-1.5">
-                          {Object.values(theme.colors).slice(0, 4).map((color, i) => <div key={i} className="w-5 h-5 border border-background shadow-sm" style={{ backgroundColor: color }} />)}
+                          {Object.values(theme.colors)
+                            .slice(0, 4)
+                            .map((color, i) => (
+                              <div
+                                key={i}
+                                className="w-5 h-5 border border-background shadow-sm"
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
                         </div>
-                        <span className="text-[11px] font-medium line-clamp-1 text-foreground">{themeNameMap[theme.id] || theme.name}</span>
+                        <span className="text-[11px] font-medium line-clamp-1 text-foreground">
+                          {themeNameMap[theme.id] || theme.name}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -776,33 +1132,39 @@ export default function MapPosterGenerator() {
                 <TabsContent value="custom" className="mt-3">
                   <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar pt-1">
                     {[
-                      { key: 'bg', label: m.color_bg() },
-                      { key: 'text', label: m.color_text() },
-                      { key: 'gradient_color', label: m.color_gradient() },
-                      { key: 'water', label: m.color_water() },
-                      { key: 'parks', label: m.color_parks() },
-                      { key: 'poi_color', label: m.color_poi() },
-                      { key: 'road_motorway', label: m.color_road_motorway() },
-                      { key: 'road_primary', label: m.color_road_primary() },
-                      { key: 'road_secondary', label: m.color_road_secondary() },
-                      { key: 'road_tertiary', label: m.color_road_tertiary() },
-                      { key: 'road_residential', label: m.color_road_residential() },
-                      { key: 'road_default', label: m.color_road_default() },
+                      { key: "bg", label: m.color_bg() },
+                      { key: "text", label: m.color_text() },
+                      { key: "gradient_color", label: m.color_gradient() },
+                      { key: "water", label: m.color_water() },
+                      { key: "parks", label: m.color_parks() },
+                      { key: "poi_color", label: m.color_poi() },
+                      { key: "road_motorway", label: m.color_road_motorway() },
+                      { key: "road_primary", label: m.color_road_primary() },
+                      { key: "road_secondary", label: m.color_road_secondary() },
+                      { key: "road_tertiary", label: m.color_road_tertiary() },
+                      { key: "road_residential", label: m.color_road_residential() },
+                      { key: "road_default", label: m.color_road_default() },
                     ].map(({ key, label }) => (
                       <div key={key} className="flex items-center justify-between gap-4">
-                        <Label className="text-[11px] whitespace-nowrap text-muted-foreground">{label}</Label>
+                        <Label className="text-[11px] whitespace-nowrap text-muted-foreground">
+                          {label}
+                        </Label>
                         <div className="flex items-center gap-2">
                           <div className="relative group">
                             <input
                               type="color"
                               value={customColors[key as keyof MapColors]}
-                              onChange={(e) => setCustomColors({ ...customColors, [key]: e.target.value })}
+                              onChange={(e) =>
+                                setCustomColors({ ...customColors, [key]: e.target.value })
+                              }
                               className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent p-0 overflow-hidden [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none"
                             />
                           </div>
                           <Input
                             value={customColors[key as keyof MapColors]}
-                            onChange={(e) => setCustomColors({ ...customColors, [key]: e.target.value })}
+                            onChange={(e) =>
+                              setCustomColors({ ...customColors, [key]: e.target.value })
+                            }
                             className="w-20 h-8 text-[11px] font-mono px-2 border-border bg-card text-foreground"
                             placeholder="#000000"
                           />
@@ -821,11 +1183,25 @@ export default function MapPosterGenerator() {
               </div>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">{m.custom_font()}</Label>
-                  {customFont && <Button variant="ghost" size="sm" onClick={clearCustomFont} className="h-6 px-2 text-[10px] text-destructive">Clear</Button>}
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {m.custom_font()}
+                  </Label>
+                  {customFont && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearCustomFont}
+                      className="h-6 px-2 text-[10px] text-destructive"
+                    >
+                      Clear
+                    </Button>
+                  )}
                 </div>
                 {!customFont ? (
-                  <div onClick={() => fontFileInputRef.current?.click()} className="border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors border-border">
+                  <div
+                    onClick={() => fontFileInputRef.current?.click()}
+                    className="border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors border-border"
+                  >
                     <FileText className="w-6 h-6 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">{m.upload_font()}</span>
                     <span className="text-[10px] text-muted-foreground">{m.font_formats()}</span>
@@ -838,15 +1214,30 @@ export default function MapPosterGenerator() {
                     </div>
                   </div>
                 )}
-                <input type="file" ref={fontFileInputRef} onChange={handleFontUpload} accept=".ttf,.otf" className="hidden" />
+                <input
+                  type="file"
+                  ref={fontFileInputRef}
+                  onChange={handleFontUpload}
+                  accept=".ttf,.otf"
+                  className="hidden"
+                />
               </div>
             </Card>
 
             <Card className="p-4 bg-card border-border">
               <h2 className="text-lg mb-3 font-serif text-foreground">{m.poster_size()}</h2>
               <div className="grid grid-cols-2 gap-2">
-                {SIZES.map(size => (
-                  <button key={size.id} onClick={() => setSelectedSize(size)} className={cn("p-3 border-1 transition-all flex items-center gap-2", selectedSize.id === size.id ? "border-primary bg-background/60" : "border-transparent bg-transparent hover:bg-background/50")}>
+                {SIZES.map((size) => (
+                  <button
+                    key={size.id}
+                    onClick={() => setSelectedSize(size)}
+                    className={cn(
+                      "p-3 border-1 transition-all flex items-center gap-2",
+                      selectedSize.id === size.id
+                        ? "border-primary bg-background/60"
+                        : "border-transparent bg-transparent hover:bg-background/50"
+                    )}
+                  >
                     <span className="text-primary">{size.icon}</span>
                     <span className="text-xs text-foreground">{size.name}</span>
                   </button>
@@ -858,20 +1249,24 @@ export default function MapPosterGenerator() {
           <div
             className="flex flex-col items-center justify-center p-8 relative overflow-hidden bg-card border-border md:h-full min-h-[400px]"
             style={{
-              maxHeight: '100%',
-              maxWidth: '100%',
+              maxHeight: "100%",
+              maxWidth: "100%",
               background: `
                       radial-gradient(ellipse at 30% 20%, ${colors.bg}dd 0%, transparent 50%),
                       radial-gradient(ellipse at 70% 80%, ${colors.text}cc 0%, transparent 40%),
                       linear-gradient(135deg, ${colors.parks} 0%, ${colors.water}f0 50%, ${colors.poi_color}dd 100%)
                     `,
-              backdropFilter: 'blur(8px)'
+              backdropFilter: "blur(8px)",
             }}
           >
-            <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
             <div
-              className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full pointer-events-none select-none"
-            >
+              className="absolute inset-0 opacity-[0.03] pointer-events-none"
+              style={{
+                backgroundImage: "radial-gradient(#000 1px, transparent 1px)",
+                backgroundSize: "20px 20px",
+              }}
+            />
+            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full pointer-events-none select-none">
               <span className="text-xs tracking-wide text-white font-light whitespace-nowrap text-shadow-sm">
                 {m.preview_actual_result()} :)
               </span>
@@ -879,36 +1274,24 @@ export default function MapPosterGenerator() {
             <div
               ref={previewRef}
               className="flex items-center justify-center relative transition-all duration-300 ease-in-out w-full h-full p-4"
-              style={{ containerType: 'size' }}
+              style={{ containerType: "size" }}
             >
               <div
                 className="relative shadow-lg"
                 style={{
                   aspectRatio: `${selectedSize.width} / ${selectedSize.height}`,
-                  width: `min(${(selectedSize.width / selectedSize.height * 100).toFixed(4)}cqh, 100cqw)`,
-                  height: `min(${(selectedSize.height / selectedSize.width * 100).toFixed(4)}cqw, 100cqh)`,
+                  width: `min(${((selectedSize.width / selectedSize.height) * 100).toFixed(4)}cqh, 100cqw)`,
+                  height: `min(${((selectedSize.height / selectedSize.width) * 100).toFixed(4)}cqw, 100cqh)`,
                 }}
               >
                 <MapPosterPreview
-                  location={{ lat: location.lat || 0, lon: location.lng || 0 }}
-                  city={customTitle || location.city || ''}
-                  country={location.country || ''}
+                  location={stableMapLocation}
+                  city={customTitle || location.city || ""}
+                  country={location.country || ""}
                   zoom={12}
                   radius={baseRadius}
                   poiDensity="dense"
-                  theme={{
-                    bg: colors.bg,
-                    water: colors.water,
-                    parks: colors.parks,
-                    road_motorway: colors.road_motorway,
-                    road_primary: colors.road_primary,
-                    road_secondary: colors.road_secondary,
-                    road_tertiary: colors.road_tertiary,
-                    road_residential: colors.road_residential,
-                    road_default: colors.road_default,
-                    route: colors.poi_color || colors.text || colors.bg,
-                    poi: colors.poi_color || colors.road_default
-                  }}
+                  theme={stableTheme}
                   textColor={colors.text}
                   gradientColor={colors.gradient_color}
                   posterSize={selectedSize}
