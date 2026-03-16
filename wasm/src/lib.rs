@@ -258,7 +258,10 @@ fn render_map_binary_internal(
 
     // 5. 编码为 PNG
     time("render_map_bin: encode_png");
-    let png_data = renderer.encode_png(300);
+    let png_data = match renderer.encode_png(300) {
+        Ok(data) => data,
+        Err(e) => return RenderResult::error(format!("PNG encoding failed: {}", e)),
+    };
     time_end("render_map_bin: encode_png");
 
     RenderResult::success(config.width, config.height, png_data)
@@ -377,7 +380,10 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
 
     // 7. 编码为 PNG
     time("render_map: encode_png");
-    let png_data = renderer.encode_png(300);
+    let png_data = match renderer.encode_png(300) {
+        Ok(data) => data,
+        Err(e) => return RenderResult::error(format!("PNG encoding failed: {}", e)),
+    };
     time_end("render_map: encode_png");
 
     RenderResult::success(request.width, request.height, png_data)
@@ -396,75 +402,64 @@ fn parse_pois_json(_pois_json: &str) -> Result<Vec<types::POI>, String> {
 }
 
 #[wasm_bindgen]
-pub fn parse_roads_to_bin(geojson_str: &str) -> JsValue {
-    match parse_roads(geojson_str) {
-        Ok(roads) => serde_wasm_bindgen::to_value(&roads).unwrap_or(JsValue::NULL),
-        Err(_) => JsValue::NULL,
-    }
+pub fn parse_roads_to_bin(geojson_str: &str) -> Result<JsValue, JsValue> {
+    let roads = parse_roads(geojson_str)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse roads: {}", e)))?;
+    serde_wasm_bindgen::to_value(&roads)
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
 }
 
 #[wasm_bindgen]
-pub fn parse_roads_val(geojson: JsValue) -> JsValue {
-    match data_processor::parse_roads_js(geojson) {
-        Ok(roads) => serde_wasm_bindgen::to_value(&roads).unwrap_or(JsValue::NULL),
-        Err(e) => {
-            log(&format!("Error parsing roads object: {}", e));
-            JsValue::NULL
-        }
-    }
+pub fn parse_roads_val(geojson: JsValue) -> Result<JsValue, JsValue> {
+    let roads = data_processor::parse_roads_js(geojson)
+        .map_err(|e| JsValue::from_str(&format!("Error parsing roads object: {}", e)))?;
+    serde_wasm_bindgen::to_value(&roads)
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
 }
 
 #[wasm_bindgen]
-pub fn parse_polygons_to_bin(geojson_str: &str) -> JsValue {
-    match parse_polygons(geojson_str) {
-        Ok(polys) => serde_wasm_bindgen::to_value(&polys).unwrap_or(JsValue::NULL),
-        Err(_) => JsValue::NULL,
-    }
+pub fn parse_polygons_to_bin(geojson_str: &str) -> Result<JsValue, JsValue> {
+    let polys = parse_polygons(geojson_str)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse polygons: {}", e)))?;
+    serde_wasm_bindgen::to_value(&polys)
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
 }
 
 #[wasm_bindgen]
-pub fn parse_polygons_val(geojson: JsValue) -> JsValue {
-    match data_processor::parse_polygons_js(geojson) {
-        Ok(polys) => serde_wasm_bindgen::to_value(&polys).unwrap_or(JsValue::NULL),
-        Err(e) => {
-            log(&format!("Error parsing polygons object: {}", e));
-            JsValue::NULL
-        }
-    }
+pub fn parse_polygons_val(geojson: JsValue) -> Result<JsValue, JsValue> {
+    let polys = data_processor::parse_polygons_js(geojson)
+        .map_err(|e| JsValue::from_str(&format!("Error parsing polygons object: {}", e)))?;
+    serde_wasm_bindgen::to_value(&polys)
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
 }
 
 #[wasm_bindgen]
-pub fn parse_roads_typed(data: &[f64]) -> JsValue {
-    match data_processor::parse_roads_bin(data) {
-        Ok(roads) => serde_wasm_bindgen::to_value(&roads).unwrap_or(JsValue::NULL),
-        Err(e) => {
-            log(&format!("Error parsing roads binary: {}", e));
-            JsValue::NULL
-        }
-    }
+pub fn parse_roads_typed(data: &[f64]) -> Result<JsValue, JsValue> {
+    let roads = data_processor::parse_roads_bin(data)
+        .map_err(|e| JsValue::from_str(&format!("Error parsing roads binary: {}", e)))?;
+    serde_wasm_bindgen::to_value(&roads)
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
 }
 
 #[wasm_bindgen]
-pub fn parse_polygons_typed(data: &[f64]) -> JsValue {
-    match data_processor::parse_polygons_bin(data) {
-        Ok(polys) => serde_wasm_bindgen::to_value(&polys).unwrap_or(JsValue::NULL),
-        Err(e) => {
-            log(&format!("Error parsing polygons binary: {}", e));
-            JsValue::NULL
-        }
-    }
+pub fn parse_polygons_typed(data: &[f64]) -> Result<JsValue, JsValue> {
+    let polys = data_processor::parse_polygons_bin(data)
+        .map_err(|e| JsValue::from_str(&format!("Error parsing polygons binary: {}", e)))?;
+    serde_wasm_bindgen::to_value(&polys)
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
 }
 
 /// 极速处理：接收二进制，在 WASM 内部投影并返回新的二进制（Float64Array）
 #[wasm_bindgen]
-pub fn process_roads_bin_wasm(data: &[f64]) -> js_sys::Float64Array {
-    let roads = data_processor::parse_roads_bin(data).unwrap_or_default();
-
-    let mut result = Vec::with_capacity(data.len() + 2);
+pub fn process_roads_bin_wasm(data: &[f64]) -> Result<js_sys::Float64Array, JsValue> {
     if data.is_empty() {
-        return js_sys::Float64Array::new(&JsValue::NULL);
+        return Ok(js_sys::Float64Array::new(&JsValue::NULL));
     }
 
+    let roads = data_processor::parse_roads_bin(data)
+        .map_err(|e| JsValue::from_str(&format!("Error parsing roads binary: {}", e)))?;
+
+    let mut result = Vec::with_capacity(data.len() + 2);
     result.push(roads.len() as f64);
     for road in roads {
         result.push(road.road_type.to_u32() as f64);
@@ -475,14 +470,15 @@ pub fn process_roads_bin_wasm(data: &[f64]) -> js_sys::Float64Array {
         }
     }
 
-    js_sys::Float64Array::from(result.as_slice())
+    Ok(js_sys::Float64Array::from(result.as_slice()))
 }
 
 #[wasm_bindgen]
-pub fn process_polygons_bin_wasm(data: &[f64]) -> js_sys::Float64Array {
-    let polys = data_processor::parse_polygons_bin(data).unwrap_or_default();
-    let mut result = Vec::new();
+pub fn process_polygons_bin_wasm(data: &[f64]) -> Result<js_sys::Float64Array, JsValue> {
+    let polys = data_processor::parse_polygons_bin(data)
+        .map_err(|e| JsValue::from_str(&format!("Error parsing polygons binary: {}", e)))?;
 
+    let mut result = Vec::new();
     result.push(polys.len() as f64);
     for poly in polys {
         result.push(poly.exterior.len() as f64);
@@ -500,7 +496,7 @@ pub fn process_polygons_bin_wasm(data: &[f64]) -> js_sys::Float64Array {
         }
     }
 
-    js_sys::Float64Array::from(result.as_slice())
+    Ok(js_sys::Float64Array::from(result.as_slice()))
 }
 
 /// 测试函数
