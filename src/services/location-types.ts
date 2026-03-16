@@ -42,10 +42,11 @@ export interface City {
   state_id: number;
   country_id: number;
   name: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | string;
+  longitude: number | string;
   countryCode?: string; // 用于与国家关联
   stateCode?: string; // 用于与省份关联
+  stateId?: number; // 原始 state ID
 }
 
 export interface LocationData {
@@ -56,10 +57,13 @@ export interface LocationData {
 
 export interface LocationServiceState {
   countries: Country[];
-  statesByCountry: Record<number, State[]>; // countryId -> states[]
-  citiesByState: Record<number, City[]>; // stateId -> cities[]
+  statesByCountry: Record<string, State[]>; // countryIso2 -> states[] (legacy format)
+  citiesByState: Record<string, Record<string, City[]>>; // countryIso2 -> stateIso2 -> cities[] (legacy format)
   lastUpdated: number;
   version: string;
+  // Lazy loading helpers for @countrystatecity/countries
+  _getStatesOfCountry?: (countryIso2: string) => Promise<State[]>;
+  _getCitiesOfState?: (countryIso2: string, stateIso2: string) => Promise<City[]>;
 }
 
 export interface CacheMetadata {

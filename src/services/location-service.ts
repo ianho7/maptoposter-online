@@ -1,22 +1,55 @@
 /**
  * Location Service
- * Handles CDN data fetching and data associations
+ * Loads location data from jsdelivr CDN
+ * Uses compressed field names: i(id), n(name), i2(iso2), c(countryCode), s(stateCode), la(latitude), lo(longitude), si(stateId)
  */
 
 import type { Country, State, City, LocationServiceState } from "./location-types";
 
-const CDN_URLS = {
-  countries: "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/countries_slim.json",
-  states: "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/states_slim.json",
-  cities: "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main/cities_slim.json",
+const CDN_BASE = "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main";
+
+const DATA_URLS = {
+  countries: `${CDN_BASE}/countries.json`,
+  states: (iso2: string) => `${CDN_BASE}/states-${iso2.toLowerCase()}.json`,
+  cities: (countryIso2: string) => `${CDN_BASE}/cities-${countryIso2.toLowerCase()}.json`,
 };
+
+interface RawCountry {
+  i: number;
+  n: string;
+  i2: string;
+}
+
+interface RawState {
+  i: number;
+  n: string;
+  i2: string;
+  c: string;
+}
+
+interface RawCity {
+  i: number;
+  n: string;
+  la: string;
+  lo: string;
+  si: number;
+  s: string;
+  c: string;
+}
 
 export class LocationService {
   private memoryCache: LocationServiceState | null = null;
   private loadingPromise: Promise<LocationServiceState> | null = null;
 
+  // Cache for lazy-loaded data
+  private statesCache: Record<string, State[]> = {};
+  private citiesCache: Record<string, City[]> = {};
+  private countriesMap: Map<number, Country> = new Map();
+  // New: Map stateId to countryIso2 for quick lookup
+  private stateCountryMap: Map<number, string> = new Map();
+
   /**
-   * Load data (from CDN, using browser HTTP cache)
+   * Load data from jsdelivr CDN
    */
   async loadData(): Promise<LocationServiceState> {
     console.log(`[${new Date().toISOString()}] loadData() called`);
@@ -45,11 +78,15 @@ export class LocationService {
   }
 
   /**
-   * Refresh data from CDN (bypass browser cache)
+   * Refresh data (clear cache and reload)
    */
   async refreshData(): Promise<LocationServiceState> {
     this.memoryCache = null;
     this.loadingPromise = null;
+    this.statesCache = {};
+    this.citiesCache = {};
+    this.countriesMap = new Map();
+    this.stateCountryMap = new Map();
     return this.loadData();
   }
 
@@ -66,7 +103,48 @@ export class LocationService {
    */
   async getStatesByCountry(countryId: number): Promise<State[]> {
     const data = await this.loadData();
-    return data.statesByCountry[countryId] || [];
+
+    // Build countries map for quick lookup
+    if (this.countriesMap.size === 0) {
+      data.countries.forEach((c) => this.countriesMap.set(c.id, c));
+    }
+
+    const country = this.countriesMap.get(countryId);
+    if (!country) return [];
+
+    const iso2 = country.iso2;
+
+    // Return from cache if available
+    if (this.statesCache[iso2]) {
+      return this.statesCache[iso2];
+    }
+
+    // Try to fetch from CDN
+    try {
+      const response = await fetch(DATA_URLS.states(iso2));
+      if (response.ok) {
+        const rawStates: RawState[] = await response.json();
+        const states: State[] = rawStates.map((s) => ({
+          id: s.i,
+          name: s.n,
+          iso2: s.i2,
+          countryCode: s.c,
+          country_id: countryId,
+        }));
+
+        // Cache states and build stateId -> countryIso2 mapping
+        this.statesCache[iso2] = states;
+        states.forEach((s) => {
+          this.stateCountryMap.set(s.id, iso2);
+        });
+
+        return states;
+      }
+    } catch (err) {
+      console.error(`Failed to load states for ${iso2}:`, err);
+    }
+
+    return [];
   }
 
   /**
@@ -74,7 +152,66 @@ export class LocationService {
    */
   async getCitiesByState(stateId: number): Promise<City[]> {
     const data = await this.loadData();
-    return data.citiesByState[stateId] || [];
+
+    // Build countries map for quick lookup (only if needed)
+    if (this.countriesMap.size === 0) {
+      data.countries.forEach((c) => this.countriesMap.set(c.id, c));
+    }
+
+    // Quick lookup: find countryIso2 from stateId
+    let targetCountryIso2: string | undefined;
+
+    // First check if we already have the mapping
+    if (this.stateCountryMap.has(stateId)) {
+      targetCountryIso2 = this.stateCountryMap.get(stateId);
+    } else {
+      // If not, we need to load the correct country's states
+      // Find the country first by checking all loaded states caches
+      for (const [iso2, states] of Object.entries(this.statesCache)) {
+        const state = states.find((s) => s.id === stateId);
+        if (state) {
+          targetCountryIso2 = iso2;
+          break;
+        }
+      }
+    }
+
+    // If still not found, we need to find which country this state belongs to
+    // This should rarely happen if getStatesByCountry was called first
+    if (!targetCountryIso2) {
+      console.warn(`State ${stateId} country not found, may need to call getStatesByCountry first`);
+      return [];
+    }
+
+    // Return from cities cache if available
+    if (this.citiesCache[targetCountryIso2]) {
+      return this.citiesCache[targetCountryIso2].filter((c) => c.state_id === stateId);
+    }
+
+    // Fetch cities for this country
+    try {
+      const response = await fetch(DATA_URLS.cities(targetCountryIso2));
+      if (response.ok) {
+        const rawCities: RawCity[] = await response.json();
+        const cities: City[] = rawCities.map((c) => ({
+          id: c.i,
+          name: c.n,
+          latitude: parseFloat(c.la) || 0,
+          longitude: parseFloat(c.lo) || 0,
+          state_id: c.si,
+          country_id: 0,
+          countryCode: c.c,
+          stateCode: c.s,
+        }));
+
+        this.citiesCache[targetCountryIso2] = cities;
+        return cities.filter((c) => c.state_id === stateId);
+      }
+    } catch (err) {
+      console.error(`Failed to load cities for ${targetCountryIso2}:`, err);
+    }
+
+    return [];
   }
 
   /**
@@ -101,169 +238,39 @@ export class LocationService {
     return cities.find((c) => c.name.toLowerCase() === cityName.toLowerCase());
   }
 
-  private _buildIndexes(
-    countries: Country[],
-    states: State[],
-    cities: City[]
-  ): {
-    statesByCountry: Record<number, State[]>;
-    citiesByState: Record<number, City[]>;
-  } {
-    const statesByCountry: Record<number, State[]> = {};
-    const citiesByState: Record<number, City[]> = {};
-
-    // Helpers for indexing when IDs are missing from CDN
-    const countryIdByIso = new Map(countries.map((c) => [c.iso2, c.id]));
-    const stateIdByCode = new Map(states.map((s) => [`${s.countryCode}-${s.iso2}`, s.id]));
-
-    for (const state of states) {
-      // If country_id is missing, try to find it via countryCode (iso2)
-      if ((!state.country_id || state.country_id === 0) && (state as any).countryCode) {
-        state.country_id = countryIdByIso.get((state as any).countryCode) || 0;
-      }
-
-      if (!statesByCountry[state.country_id]) {
-        statesByCountry[state.country_id] = [];
-      }
-      statesByCountry[state.country_id].push(state);
-    }
-
-    for (const city of cities) {
-      // If state_id is missing, try to find it via stateCode + countryCode
-      if (
-        (!city.state_id || city.state_id === 0) &&
-        (city as any).stateCode &&
-        (city as any).countryCode
-      ) {
-        city.state_id =
-          stateIdByCode.get(`${(city as any).countryCode}-${(city as any).stateCode}`) || 0;
-      }
-      // If country_id is missing
-      if ((!city.country_id || city.country_id === 0) && (city as any).countryCode) {
-        city.country_id = countryIdByIso.get((city as any).countryCode) || 0;
-      }
-
-      if (!citiesByState[city.state_id]) {
-        citiesByState[city.state_id] = [];
-      }
-      citiesByState[city.state_id].push(city);
-    }
-
-    return { statesByCountry, citiesByState };
-  }
-
   private async _fetchFromCDN(): Promise<LocationServiceState> {
-    const timeout = 10000; // 10 seconds timeout
-
-    const fetchWithTimeout = (url: string) =>
-      Promise.race([
-        fetch(url),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Fetch timeout: ${url}`)), timeout)
-        ),
-      ]);
-
     try {
-      // 并行下载所有数据
-      console.log("Downloading countries, states, cities in parallel...");
-      const [countriesRes, statesRes, citiesRes] = await Promise.all([
-        fetchWithTimeout(CDN_URLS.countries),
-        fetchWithTimeout(CDN_URLS.states),
-        fetchWithTimeout(CDN_URLS.cities),
-      ]);
+      console.log("Fetching countries from CDN...");
 
-      if (!countriesRes.ok) throw new Error(`HTTP ${countriesRes.status}: ${CDN_URLS.countries}`);
-      if (!statesRes.ok) throw new Error(`HTTP ${statesRes.status}: ${CDN_URLS.states}`);
-      if (!citiesRes.ok) throw new Error(`HTTP ${citiesRes.status}: ${CDN_URLS.cities}`);
+      const response = await fetch(DATA_URLS.countries);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch countries: ${response.status}`);
+      }
 
-      // 并行解析 JSON
-      console.log("Parsing JSON data...");
-      const [rawCountries, rawStates, rawCities] = await Promise.all([
-        countriesRes.json(),
-        statesRes.json(),
-        citiesRes.json(),
-      ]);
+      const rawCountries: RawCountry[] = await response.json();
+      const countries: Country[] = rawCountries.map((c) => ({
+        id: c.i,
+        name: c.n,
+        iso2: c.i2,
+      }));
 
-      const countries = this._normalizeCountries(rawCountries);
-      const states = this._normalizeStates(rawStates);
-      const cities = this._normalizeCities(rawCities);
+      console.log(`✓ Loaded ${countries.length} countries`);
 
-      console.log("Processing and indexing data...");
-      const { statesByCountry, citiesByState } = this._buildIndexes(countries, states, cities);
-
-      console.log(
-        `📊 Data parsed: ${countries.length} countries, ${states.length} states, ${cities.length} cities`
-      );
+      // Build initial index structures
+      const statesByCountry: Record<string, State[]> = {};
+      const citiesByState: Record<string, Record<string, City[]>> = {};
 
       return {
         countries,
         statesByCountry,
         citiesByState,
         lastUpdated: Date.now(),
-        version: "1.0.0",
+        version: "2.0.0",
       };
     } catch (error) {
-      console.error("Failed to fetch from CDN:", error);
+      console.error("Failed to load from CDN:", error);
       throw error;
     }
-  }
-
-  /**
-   * Normalize country data from CDN
-   * CDN格式: {"n":"Afghanistan","i":"AF"}
-   */
-  private _normalizeCountries(data: any[]): Country[] {
-    return data.map((item: any, index: number) => ({
-      id: index,
-      name: item.n || "",
-      iso2: item.i || "",
-    }));
-  }
-
-  /**
-   * Normalize state data from CDN
-   * CDN格式: {"n":"Canillo","i":"02","c":"AD"}
-   */
-  private _normalizeStates(data: any[]): State[] {
-    return data.map((item: any, index: number) => ({
-      id: index,
-      country_id: 0,
-      name: item.n || "",
-      iso2: item.i || "",
-      countryCode: item.c || "",
-    }));
-  }
-
-  /**
-   * Normalize city data from CDN
-   * CDN格式: ["Canillo","AD","02"] (数组格式)
-   */
-  private _normalizeCities(data: any[]): City[] {
-    return data.map((item: any, index: number) => {
-      if (Array.isArray(item)) {
-        return {
-          id: index,
-          state_id: 0,
-          country_id: 0,
-          name: item[0] || "",
-          latitude: 0,
-          longitude: 0,
-          countryCode: item[1] || "",
-          stateCode: item[2] || "",
-        };
-      }
-
-      return {
-        id: index,
-        state_id: 0,
-        country_id: 0,
-        name: item.name || item.n || "",
-        latitude: 0,
-        longitude: 0,
-        countryCode: item.country_code || item.countryCode || item.c || "",
-        stateCode: item.state_code || item.stateCode || item.s || "",
-      };
-    });
   }
 
   /**
@@ -272,6 +279,10 @@ export class LocationService {
   clearCache(): void {
     this.memoryCache = null;
     this.loadingPromise = null;
+    this.statesCache = {};
+    this.citiesCache = {};
+    this.countriesMap = new Map();
+    this.stateCountryMap = new Map();
   }
 }
 

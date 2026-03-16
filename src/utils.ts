@@ -69,6 +69,9 @@ export function tile2lat(y: number, z: number): number {
  * 包含基础频率限制处理
  */
 export async function getCoordinates(city: string, country: string): Promise<Coordinates> {
+  // Nominatim API 已弃用，CDN 数据已包含坐标
+  throw new Error("Nominatim API disabled - use CDN city data for coordinates");
+
   console.log("Looking up coordinates...");
 
   // 频率限制：1秒延迟

@@ -1,5 +1,4 @@
-import React from "react";
-import { useState, useRef, useCallback, useEffect, useDeferredValue, useMemo } from "react";
+import { useState, useRef, useEffect, useDeferredValue } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -160,46 +159,43 @@ export default function MapPosterGenerator() {
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Localized Sizes
-  const SIZES: PosterSize[] = React.useMemo(
-    () => [
-      {
-        id: "a4-portrait",
-        name: m.size_a4_portrait(),
-        width: 2480,
-        height: 3508,
-        icon: <FileImage className="w-4 h-4" />,
-      },
-      {
-        id: "a4-landscape",
-        name: m.size_a4_landscape(),
-        width: 3508,
-        height: 2480,
-        icon: <FileImage className="w-4 h-4 rotate-90" />,
-      },
-      {
-        id: "square",
-        name: m.size_square(),
-        width: 2048,
-        height: 2048,
-        icon: <Square className="w-4 h-4" />,
-      },
-      {
-        id: "phone",
-        name: m.size_phone(),
-        width: 1170,
-        height: 2532,
-        icon: <Smartphone className="w-4 h-4" />,
-      },
-      {
-        id: "desktop",
-        name: m.size_desktop(),
-        width: 3840,
-        height: 2160,
-        icon: <Monitor className="w-4 h-4" />,
-      },
-    ],
-    [activeLang]
-  );
+  const SIZES: PosterSize[] = [
+    {
+      id: "a4-portrait",
+      name: m.size_a4_portrait(),
+      width: 2480,
+      height: 3508,
+      icon: <FileImage className="w-4 h-4" />,
+    },
+    {
+      id: "a4-landscape",
+      name: m.size_a4_landscape(),
+      width: 3508,
+      height: 2480,
+      icon: <FileImage className="w-4 h-4 rotate-90" />,
+    },
+    {
+      id: "square",
+      name: m.size_square(),
+      width: 3000,
+      height: 3000,
+      icon: <Square className="w-4 h-4" />,
+    },
+    {
+      id: "phone",
+      name: m.size_phone(),
+      width: 1748,
+      height: 3780,
+      icon: <Smartphone className="w-4 h-4" />,
+    },
+    {
+      id: "desktop",
+      name: m.size_desktop(),
+      width: 3840,
+      height: 2160,
+      icon: <Monitor className="w-4 h-4" />,
+    },
+  ];
 
   const [selectedSize, setSelectedSize] = useState(SIZES[0]);
 
@@ -340,41 +336,48 @@ export default function MapPosterGenerator() {
 
                   if (config.selectedCity) {
                     setSelectedCity(config.selectedCity);
-                    // 获取坐标（如果 location 中没有）
+                    // 获取坐标（优先从城市数据获取）
                     const cityName = config.selectedCity;
-                    const cached = mapDataService.getCoordinates(cityName, config.selectedCountry);
-                    if (cached) {
-                      setLocation({
-                        country: config.selectedCountry,
-                        state: config.selectedState,
-                        city: cityName,
-                        lat: cached.latitude,
-                        lng: cached.longitude,
-                      });
-                    } else {
-                      try {
-                        const coords = await getCoordinates(cityName, config.selectedCountry);
-                        mapDataService.saveCoordinates(
-                          cityName,
-                          config.selectedCountry,
-                          coords.latitude,
-                          coords.longitude
-                        );
-                        setLocation({
-                          country: config.selectedCountry,
-                          state: config.selectedState,
-                          city: cityName,
-                          lat: coords.latitude,
-                          lng: coords.longitude,
-                        });
-                      } catch {
-                        setLocation({
-                          country: config.selectedCountry,
-                          state: config.selectedState,
-                          city: cityName,
-                        });
+
+                    // 优先从城市数据中获取坐标（CDN 数据包含坐标）
+                    let lat = 0,
+                      lng = 0;
+                    const city = stateCities.find(
+                      (c: any) => c.name.toLowerCase() === cityName.toLowerCase()
+                    );
+                    if (city && city.latitude && city.longitude) {
+                      lat =
+                        typeof city.latitude === "number"
+                          ? city.latitude
+                          : parseFloat(city.latitude as string) || 0;
+                      lng =
+                        typeof city.longitude === "number"
+                          ? city.longitude
+                          : parseFloat(city.longitude as string) || 0;
+                      if (lat !== 0 && lng !== 0) {
+                        mapDataService.saveCoordinates(cityName, config.selectedCountry, lat, lng);
                       }
                     }
+
+                    // 如果没有从城市数据获取到坐标，尝试从缓存获取
+                    if (lat === 0 && lng === 0) {
+                      const cached = mapDataService.getCoordinates(
+                        cityName,
+                        config.selectedCountry
+                      );
+                      if (cached) {
+                        lat = cached.latitude;
+                        lng = cached.longitude;
+                      }
+                    }
+
+                    setLocation({
+                      country: config.selectedCountry,
+                      state: config.selectedState,
+                      city: cityName,
+                      lat,
+                      lng,
+                    });
                   }
                 }
               }
@@ -409,39 +412,41 @@ export default function MapPosterGenerator() {
             if (stateCities.length > 0) {
               setSelectedCity(stateCities[0].name);
               const cityName = stateCities[0].name;
-              const cached = mapDataService.getCoordinates(cityName, firstCountry.name);
-              if (cached) {
-                setLocation({
-                  country: firstCountry.name,
-                  state: firstState.name,
-                  city: cityName,
-                  lat: cached.latitude,
-                  lng: cached.longitude,
-                });
-              } else {
-                try {
-                  const coords = await getCoordinates(cityName, firstCountry.name);
-                  mapDataService.saveCoordinates(
-                    cityName,
-                    firstCountry.name,
-                    coords.latitude,
-                    coords.longitude
-                  );
-                  setLocation({
-                    country: firstCountry.name,
-                    state: firstState.name,
-                    city: cityName,
-                    lat: coords.latitude,
-                    lng: coords.longitude,
-                  });
-                } catch {
-                  setLocation({
-                    country: firstCountry.name,
-                    state: firstState.name,
-                    city: cityName,
-                  });
+
+              // 优先从城市数据中获取坐标（CDN 数据包含坐标）
+              let lat = 0,
+                lng = 0;
+              const firstCity = stateCities[0];
+              if (firstCity.latitude && firstCity.longitude) {
+                lat =
+                  typeof firstCity.latitude === "number"
+                    ? firstCity.latitude
+                    : parseFloat(firstCity.latitude as string) || 0;
+                lng =
+                  typeof firstCity.longitude === "number"
+                    ? firstCity.longitude
+                    : parseFloat(firstCity.longitude as string) || 0;
+                if (lat !== 0 && lng !== 0) {
+                  mapDataService.saveCoordinates(cityName, firstCountry.name, lat, lng);
                 }
               }
+
+              // 如果没有从城市数据获取到坐标，尝试从缓存获取
+              if (lat === 0 && lng === 0) {
+                const cached = mapDataService.getCoordinates(cityName, firstCountry.name);
+                if (cached) {
+                  lat = cached.latitude;
+                  lng = cached.longitude;
+                }
+              }
+
+              setLocation({
+                country: firstCountry.name,
+                state: firstState.name,
+                city: cityName,
+                lat,
+                lng,
+              });
             }
           }
           isRestored.current = true;
@@ -460,162 +465,229 @@ export default function MapPosterGenerator() {
   const deferredCustomColors = useDeferredValue(customColors);
   const colors = useCustomColors ? deferredCustomColors : selectedTheme.colors;
 
-  const stableTheme = useMemo(
-    () => ({
-      bg: colors.bg,
-      water: colors.water,
-      parks: colors.parks,
-      road_motorway: colors.road_motorway,
-      road_primary: colors.road_primary,
-      road_secondary: colors.road_secondary,
-      road_tertiary: colors.road_tertiary,
-      road_residential: colors.road_residential,
-      road_default: colors.road_default,
-      route: colors.poi_color || colors.text || colors.bg,
-      poi: colors.poi_color || colors.road_default,
-    }),
-    [colors]
-  );
+  const stableTheme = {
+    bg: colors.bg,
+    water: colors.water,
+    parks: colors.parks,
+    road_motorway: colors.road_motorway,
+    road_primary: colors.road_primary,
+    road_secondary: colors.road_secondary,
+    road_tertiary: colors.road_tertiary,
+    road_residential: colors.road_residential,
+    road_default: colors.road_default,
+    route: colors.poi_color || colors.text || colors.bg,
+    poi: colors.poi_color || colors.road_default,
+  };
 
-  const stableMapLocation = useMemo(
-    () => ({
-      lat: location.lat || 0,
-      lon: location.lng || 0,
-    }),
-    [location.lat, location.lng]
-  );
+  const stableMapLocation = {
+    lat: location.lat || 0,
+    lon: location.lng || 0,
+  };
 
-  const handleCountryChange = useCallback(
-    async (countryName: string) => {
-      setSelectedCountry(countryName);
-      setStates([]);
-      setCities([]);
-      setIsStatesLoading(true);
-      setIsCitiesLoading(true);
-      try {
-        const country = countries.find((c) => c.name.toLowerCase() === countryName.toLowerCase());
-        const countryStates = await getStatesByCountry(country?.id || 0);
-        setStates(countryStates);
-        setIsStatesLoading(false);
-        if (countryStates.length > 0) {
-          const firstState = countryStates[0];
-          setSelectedState(firstState.name);
-          const stateCities = await getCitiesByState(firstState.id);
-          setCities(stateCities);
-          setIsCitiesLoading(false);
-          if (stateCities.length > 0) {
-            setSelectedCity(stateCities[0].name);
-            const cityName = stateCities[0].name;
+  const handleCountryChange = async (countryName: string) => {
+    setSelectedCountry(countryName);
+    setStates([]);
+    setCities([]);
+    setIsStatesLoading(true);
+    setIsCitiesLoading(true);
+    try {
+      const country = countries.find((c) => c.name.toLowerCase() === countryName.toLowerCase());
+      const countryStates = await getStatesByCountry(country?.id || 0);
+      setStates(countryStates);
+      setIsStatesLoading(false);
+      if (countryStates.length > 0) {
+        const firstState = countryStates[0];
+        setSelectedState(firstState.name);
+        const stateCities = await getCitiesByState(firstState.id);
+        setCities(stateCities);
+        setIsCitiesLoading(false);
+        if (stateCities.length > 0) {
+          setSelectedCity(stateCities[0].name);
+          const cityName = stateCities[0].name;
+
+          // 优先从城市数据中获取坐标（CDN 数据包含坐标）
+          let lat = 0,
+            lng = 0;
+          const firstCity = stateCities[0];
+          if (firstCity.latitude && firstCity.longitude) {
+            lat =
+              typeof firstCity.latitude === "number"
+                ? firstCity.latitude
+                : parseFloat(firstCity.latitude as string) || 0;
+            lng =
+              typeof firstCity.longitude === "number"
+                ? firstCity.longitude
+                : parseFloat(firstCity.longitude as string) || 0;
+            if (lat !== 0 && lng !== 0) {
+              mapDataService.saveCoordinates(cityName, country?.name || countryName, lat, lng);
+            }
+          }
+
+          // 如果没有从城市数据获取到坐标，尝试从缓存获取
+          if (lat === 0 && lng === 0) {
             const cached = mapDataService.getCoordinates(cityName, country?.name || countryName);
             if (cached) {
-              setLocation({
-                country: country?.name || countryName,
-                state: firstState.name,
-                city: cityName,
-                lat: cached.latitude,
-                lng: cached.longitude,
-              });
+              lat = cached.latitude;
+              lng = cached.longitude;
+            }
+          }
+
+          setLocation({
+            country: country?.name || countryName,
+            state: firstState.name,
+            city: cityName,
+            lat,
+            lng,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error loading states:", error);
+      setIsStatesLoading(false);
+      setIsCitiesLoading(false);
+    }
+  };
+
+  const handleStateChange = async (stateName: string) => {
+    setSelectedState(stateName);
+    setCities([]);
+    setIsCitiesLoading(true);
+    try {
+      const state = states.find((s) => s.name.toLowerCase() === stateName.toLowerCase());
+      if (state) {
+        const stateCities = await getCitiesByState(state.id);
+        setCities(stateCities);
+        setIsCitiesLoading(false);
+        if (stateCities.length > 0) {
+          const firstCity = stateCities[0];
+          setSelectedCity(firstCity.name);
+          const cityName = firstCity.name;
+
+          // 优先从城市数据中获取坐标（CDN 数据包含坐标）
+          let lat = 0,
+            lng = 0;
+          if (firstCity.latitude && firstCity.longitude) {
+            lat =
+              typeof firstCity.latitude === "number"
+                ? firstCity.latitude
+                : parseFloat(firstCity.latitude as string) || 0;
+            lng =
+              typeof firstCity.longitude === "number"
+                ? firstCity.longitude
+                : parseFloat(firstCity.longitude as string) || 0;
+            if (lat !== 0 && lng !== 0) {
+              mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
+            }
+          }
+
+          // 如果没有从城市数据获取到坐标，尝试从缓存获取
+          if (lat === 0 && lng === 0) {
+            const cached = mapDataService.getCoordinates(cityName, selectedCountry);
+            if (cached) {
+              lat = cached.latitude;
+              lng = cached.longitude;
             } else {
               try {
-                const coords = await getCoordinates(cityName, country?.name || countryName);
-                mapDataService.saveCoordinates(
-                  cityName,
-                  country?.name || countryName,
-                  coords.latitude,
-                  coords.longitude
-                );
-                setLocation({
-                  country: country?.name || countryName,
-                  state: firstState.name,
-                  city: cityName,
-                  lat: coords.latitude,
-                  lng: coords.longitude,
-                });
+                const coords = await getCoordinates(cityName, selectedCountry);
+                lat = coords.latitude;
+                lng = coords.longitude;
+                mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
               } catch {
-                setLocation({
-                  country: country?.name || countryName,
-                  state: firstState.name,
-                  city: cityName,
-                });
+                // Keep lat=0, lng=0
               }
             }
           }
-        }
-      } catch (error) {
-        console.error("Error loading states:", error);
-        setIsStatesLoading(false);
-        setIsCitiesLoading(false);
-      }
-    },
-    [countries, getStatesByCountry, getCitiesByState]
-  );
 
-  const handleStateChange = useCallback(
-    async (stateName: string) => {
-      setSelectedState(stateName);
-      setCities([]);
-      setIsCitiesLoading(true);
-      try {
-        const state = states.find((s) => s.name.toLowerCase() === stateName.toLowerCase());
-        if (state) {
-          const stateCities = await getCitiesByState(state.id);
-          setCities(stateCities);
-          setIsCitiesLoading(false);
-          if (stateCities.length > 0) {
-            const firstCity = stateCities[0];
-            setSelectedCity(firstCity.name);
-            const cityName = firstCity.name;
-            const cached = mapDataService.getCoordinates(cityName, selectedCountry);
-            if (cached) {
+          setLocation({
+            country: selectedCountry,
+            state: state.name,
+            city: cityName,
+            lat,
+            lng,
+          });
+        } else {
+          // No cities found, use state name as city
+          const cityName = stateName;
+          setSelectedCity(cityName);
+          setCities([]);
+          const cached = mapDataService.getCoordinates(cityName, selectedCountry);
+          if (cached) {
+            setLocation({
+              country: selectedCountry,
+              state: state.name,
+              city: cityName,
+              lat: cached.latitude,
+              lng: cached.longitude,
+            });
+          } else {
+            try {
+              const coords = await getCoordinates(cityName, selectedCountry);
+              mapDataService.saveCoordinates(
+                cityName,
+                selectedCountry,
+                coords.latitude,
+                coords.longitude
+              );
               setLocation({
                 country: selectedCountry,
                 state: state.name,
                 city: cityName,
-                lat: cached.latitude,
-                lng: cached.longitude,
+                lat: coords.latitude,
+                lng: coords.longitude,
               });
-            } else {
-              try {
-                const coords = await getCoordinates(cityName, selectedCountry);
-                mapDataService.saveCoordinates(
-                  cityName,
-                  selectedCountry,
-                  coords.latitude,
-                  coords.longitude
-                );
-                setLocation({
-                  country: selectedCountry,
-                  state: state.name,
-                  city: cityName,
-                  lat: coords.latitude,
-                  lng: coords.longitude,
-                });
-              } catch {
-                setLocation({ country: selectedCountry, state: state.name, city: cityName });
-              }
+            } catch {
+              setLocation({ country: selectedCountry, state: state.name, city: cityName });
             }
           }
         }
-      } catch (error) {
-        console.error("Error loading cities:", error);
-        setIsCitiesLoading(false);
       }
-    },
-    [states, selectedCountry, getCitiesByState]
-  );
+    } catch (error) {
+      console.error("Error loading cities:", error);
+      setIsCitiesLoading(false);
+    }
+  };
 
-  const handleCityChange = useCallback(
-    async (cityName: string) => {
-      setSelectedCity(cityName);
+  const handleCityChange = async (cityName: string) => {
+    setSelectedCity(cityName);
 
-      // 获取城市坐标
-      let lat = 0,
-        lng = 0;
+    // 获取城市坐标
+    let lat = 0,
+      lng = 0;
+
+    // 首先尝试从已加载的城市数据中获取坐标（CDN 数据包含坐标）
+    const state = states.find((s) => s.name.toLowerCase() === selectedState.toLowerCase());
+    if (state) {
+      try {
+        const stateCities = await getCitiesByState(state.id);
+        const city = stateCities.find((c: any) => c.name.toLowerCase() === cityName.toLowerCase());
+        if (city && city.latitude && city.longitude) {
+          lat =
+            typeof city.latitude === "number"
+              ? city.latitude
+              : parseFloat(city.latitude as string) || 0;
+          lng =
+            typeof city.longitude === "number"
+              ? city.longitude
+              : parseFloat(city.longitude as string) || 0;
+
+          // 保存到缓存
+          if (lat !== 0 && lng !== 0) {
+            mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to get coordinates from city data:", error);
+      }
+    }
+
+    // 如果从城市数据中没找到坐标，尝试从缓存获取
+    if (lat === 0 && lng === 0) {
       const cachedCoordinates = mapDataService.getCoordinates(cityName, selectedCountry);
       if (cachedCoordinates) {
         lat = cachedCoordinates.latitude;
         lng = cachedCoordinates.longitude;
       } else {
+        // 最后尝试调用 Nominatim API
         try {
           const coordinates = await getCoordinates(cityName, selectedCountry);
           lat = coordinates.latitude;
@@ -625,11 +697,10 @@ export default function MapPosterGenerator() {
           console.error("Failed to get coordinates for city:", error);
         }
       }
+    }
 
-      setLocation({ country: selectedCountry, state: selectedState, city: cityName, lat, lng });
-    },
-    [selectedCountry, selectedState]
-  );
+    setLocation({ country: selectedCountry, state: selectedState, city: cityName, lat, lng });
+  };
 
   const handleFontUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -681,7 +752,7 @@ export default function MapPosterGenerator() {
       });
   }, []);
 
-  const handleDownload = useCallback(async () => {
+  const handleDownload = async () => {
     setIsGenerating(true);
     setGenerationProgress(0);
     setGenerationStep(m.step_init());
@@ -719,17 +790,17 @@ export default function MapPosterGenerator() {
       setGenerationProgress(5);
       setGenerationStep(m.step_coordinates());
       await yieldMainThread();
-      let lat = 0,
-        lng = 0;
-      const cachedCoordinates = mapDataService.getCoordinates(location.city, location.country);
-      if (cachedCoordinates) {
-        lat = cachedCoordinates.latitude;
-        lng = cachedCoordinates.longitude;
-      } else {
-        const coordinates = await getCoordinates(location.city, location.country);
-        lat = coordinates.latitude;
-        lng = coordinates.longitude;
-        mapDataService.saveCoordinates(location.city, location.country, lat, lng);
+      // 直接使用 location 中已有的坐标（来自城市数据）
+      let lat = location.lat || 0;
+      let lng = location.lng || 0;
+
+      // 如果 location 中没有坐标，尝试从缓存获取
+      if (lat === 0 && lng === 0) {
+        const cachedCoordinates = mapDataService.getCoordinates(location.city, location.country);
+        if (cachedCoordinates) {
+          lat = cachedCoordinates.latitude;
+          lng = cachedCoordinates.longitude;
+        }
       }
       const width = selectedSize.width * FRONTEND_SCALE;
       const height = selectedSize.height * FRONTEND_SCALE;
@@ -858,7 +929,7 @@ export default function MapPosterGenerator() {
       setIsGenerating(false);
       workers.forEach((w) => w.terminate());
     }
-  }, [colors, location, selectedSize, customTitle, activeLang, customFont, lodMode, baseRadius]);
+  };
 
   const languageNames: Record<AvailableLanguageTag, string> = {
     en: "English",

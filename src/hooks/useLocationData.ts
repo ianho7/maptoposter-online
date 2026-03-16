@@ -3,7 +3,7 @@
  * Manages location data loading from CDN/IndexDB
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import type { Country, State, City } from "@/services/location-types";
 import { locationService } from "@/services/location-service";
 
@@ -24,25 +24,7 @@ export function useLocationData(): UseLocationDataResult {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const loadData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const data = await locationService.loadData();
-      setCountries(data.countries);
-      console.log(`✓ Location data loaded: ${data.countries.length} countries`);
-      console.log("isLoading will be set to false");
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error");
-      setError(error);
-      console.error("Failed to load location data:", error);
-    } finally {
-      setIsLoading(false);
-      console.log("isLoading = false");
-    }
-  }, []);
-
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -56,12 +38,29 @@ export function useLocationData(): UseLocationDataResult {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
   // Load data on mount
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await locationService.loadData();
+        setCountries(data.countries);
+        console.log(`✓ Location data loaded: ${data.countries.length} countries`);
+        console.log("isLoading will be set to false");
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error("Unknown error");
+        setError(error);
+        console.error("Failed to load location data:", error);
+      } finally {
+        setIsLoading(false);
+        console.log("isLoading = false");
+      }
+    };
     loadData();
-  }, [loadData]);
+  }, []);
 
   return {
     countries,

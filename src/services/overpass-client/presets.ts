@@ -233,8 +233,18 @@ export async function downloadParks(
   const coordStrs = makeOverpassPolygonCoordStrs(polygon);
   log("info", `Polygon split into ${coordStrs.length} sub-region(s)`);
 
-  // 查询 leisure 标签下的公园相关值
-  const tags = { leisure: ["park", "garden", "nature_reserve"] };
+  // 查询公园和山脉相关标签
+  // leisure: 公园 (park, garden, nature_reserve)
+  // natural: 山脉 (peak-山峰, mountain_range-山脉, ridge-山脊线)
+  const tags = {
+    // leisure 类：公园、花园、自然保护区、高尔夫、休闲用地
+    leisure: ["park", "garden", "nature_reserve", "golf_course", "recreation_ground"],
+    // natural 类：林地、灌木、草地、荒原、湿地、高地草甸、沙滩
+    // 注意：不含 water/coastline（由 downloadWater 负责）
+    natural: ["wood", "scrub", "grassland", "heath", "wetland", "fell", "beach"],
+    // landuse 植被类：人工林、草坪、草甸、村庄绿地、菜园
+    landuse: ["forest", "grass", "meadow", "village_green", "allotments"],
+  };
   const results = await downloadOverpassFeatures(coordStrs, tags, onProgress, preFetchedPauseMs);
 
   log("info", `=== downloadParks complete: ${results.length} response(s) ===`);
@@ -263,8 +273,15 @@ export async function downloadWater(
   const coordStrs = makeOverpassPolygonCoordStrs(polygon);
   log("info", `Polygon split into ${coordStrs.length} sub-region(s)`);
 
-  // natural=water 匹配静态水体, waterway=true 匹配所有动态水体
-  const tags = { natural: "water", waterway: true as const };
+  // natural=water 匹配静态水体, natural=sea 匹配海洋, natural=bay 匹配海湾, waterway=true 匹配所有动态水体
+  const tags = {
+    // 静态水体 + 海岸线 + 海湾海峡
+    natural: ["water", "coastline", "bay", "strait", "cape"],
+    // 所有动态水体（river/stream/canal/drain/ditch/riverbank 等）
+    waterway: true,
+    // 海洋/大洋（大型 relation，覆盖范围可能超出查询区域）
+    place: ["sea", "ocean"],
+  };
   const results = await downloadOverpassFeatures(coordStrs, tags, onProgress, preFetchedPauseMs);
 
   log("info", `=== downloadWater complete: ${results.length} response(s) ===`);

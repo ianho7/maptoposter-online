@@ -64,6 +64,9 @@ function createProgressCallback(
     } else if (step === "retrying_error" && secondsRemaining !== undefined) {
       // 错误重试等待
       sendProgress(baseProgress, `step_retrying_error:${secondsRemaining}`);
+    } else if (step === "retrying_complete") {
+      // 重试倒计时结束，恢复显示当前的步骤
+      sendProgress(baseProgress, baseStep);
     } else {
       // 其他情况，使用基础进度和步骤
       sendProgress(baseProgress, baseStep);
@@ -201,13 +204,21 @@ self.onmessage = async (event: MessageEvent) => {
             fetchFeatures(
               [lat, lng],
               radius,
-              { natural: ["water", "wetland"], waterway: ["riverbank", "river", "canal"] },
+              {
+                natural: ["water", "wetland", "sea", "bay"],
+                waterway: ["riverbank", "river", "canal"],
+                landuse: ["reservoir"],
+              },
               "water"
             ),
             fetchFeatures(
               [lat, lng],
               radius,
-              { leisure: ["park", "garden", "playground"], landuse: ["grass", "forest", "park"] },
+              {
+                leisure: ["park", "garden", "playground"],
+                landuse: ["grass", "forest", "park"],
+                natural: ["wood", "scrub"],
+              },
               "parks"
             ),
           ]);

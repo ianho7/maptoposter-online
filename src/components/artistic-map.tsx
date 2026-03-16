@@ -6,7 +6,7 @@
  * 2. 传入你的自定义配色
  */
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -247,7 +247,9 @@ function applyThemePaintProperties(map: maplibregl.Map, theme: ArtisticTheme) {
   const safe = (layerId: string, prop: string, value: unknown) => {
     try {
       if (map.getLayer(layerId)) map.setPaintProperty(layerId, prop, value);
-    } catch (_) {}
+    } catch (err) {
+      console.warn(`Failed to set paint property for ${layerId}:`, err);
+    }
   };
   safe("background", "background-color", theme.bg);
   safe("water", "fill-color", theme.water);
@@ -439,7 +441,8 @@ export function MapPosterPreview({
         await fontFace.load();
         document.fonts.add(fontFace);
         setFontFamily("CustomFont");
-      } catch {
+      } catch (err) {
+        console.warn("Failed to load custom font:", err);
         setFontFamily("sans-serif");
       }
     };
@@ -542,10 +545,7 @@ export function MapPosterPreview({
     });
   }, [location.lat, location.lon, zoom, radius, isLoaded]);
 
-  const aspectRatio = useMemo(
-    () => (posterSize ? posterSize.width / posterSize.height : undefined),
-    [posterSize]
-  );
+  const aspectRatio = posterSize ? posterSize.width / posterSize.height : undefined;
 
   return (
     <div

@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ interface LocationComboboxProps {
   isLoading?: boolean;
 }
 
-export const LocationCombobox = React.memo(function LocationCombobox({
+export function LocationCombobox({
   options,
   value,
   onValueChange,
@@ -35,11 +35,11 @@ export const LocationCombobox = React.memo(function LocationCombobox({
   disabled = false,
   isLoading = false,
 }: LocationComboboxProps) {
-  const [open, setOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState("");
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // 性能关键：只显示匹配的前 100 条结果，避免 DOM 节点过多导致卡顿
-  const filteredOptions = React.useMemo(() => {
+  const filteredOptions = (() => {
     if (!searchQuery) return options.slice(0, 100);
 
     const lowerQuery = searchQuery.toLowerCase();
@@ -51,7 +51,7 @@ export const LocationCombobox = React.memo(function LocationCombobox({
       }
     }
     return matches;
-  }, [options, searchQuery]);
+  })();
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -64,7 +64,7 @@ export const LocationCombobox = React.memo(function LocationCombobox({
           disabled={disabled || isLoading}
         >
           <span className="truncate">{isLoading ? m.loading() : value || placeholder}</span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform duration-150 ease-out" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 bg-card border-border">
@@ -91,7 +91,7 @@ export const LocationCombobox = React.memo(function LocationCombobox({
                 >
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4 text-primary",
+                      "mr-2 h-4 w-4 text-primary transition-opacity duration-150 ease-out",
                       value === option.name ? "opacity-100" : "opacity-0"
                     )}
                   />
@@ -104,4 +104,4 @@ export const LocationCombobox = React.memo(function LocationCombobox({
       </PopoverContent>
     </Popover>
   );
-});
+}

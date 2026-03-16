@@ -57,7 +57,7 @@ export function useDynamicFont(locale: string) {
         const pc2 = document.createElement("link");
         pc2.rel = "preconnect";
         pc2.href = "https://fonts.gstatic.com";
-        (pc2 as any).crossOrigin = "anonymous";
+        pc2.crossOrigin = "anonymous";
         document.head.appendChild(pc2);
       }
 

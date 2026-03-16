@@ -296,6 +296,8 @@ async function _overpassRequestInternal(
           await new Promise((r) => setTimeout(r, 1000));
           remaining--;
         }
+        // 倒计时结束，通知开始新请求
+        onProgress(0, "retrying_complete");
       } else {
         await sleep(errorPause);
       }
@@ -325,6 +327,8 @@ async function _overpassRequestInternal(
           await new Promise((r) => setTimeout(r, 1000));
           remaining--;
         }
+        // 倒计时结束，通知开始新请求
+        onProgress(0, "retrying_complete");
       } else {
         await sleep(errorPause);
       }
