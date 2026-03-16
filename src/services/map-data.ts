@@ -61,14 +61,6 @@ class MapDataService {
     this.progressCallback = callback;
   }
 
-  getCoordinates(city: string, country: string): Coordinates | null {
-    return this.coordinatesCache.get(`${city},${country}`) || null;
-  }
-
-  saveCoordinates(city: string, country: string, lat: number, lng: number) {
-    this.coordinatesCache.set(`${city},${country}`, { latitude: lat, longitude: lng });
-  }
-
   async getMapData(
     country: string,
     city: string,

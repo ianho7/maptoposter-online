@@ -27,7 +27,7 @@ import { useLocationData } from "@/hooks/useLocationData";
 
 // WASM and Utils
 import init, { init_panic_hook } from "./pkg/wasm";
-import { shardRoadsBinary, getCoordinates } from "./utils";
+import { shardRoadsBinary } from "./utils";
 import { type MapColors, MAP_THEMES as THEMES } from "@/lib/types";
 import { mapDataService } from "./services/map-data";
 
@@ -354,21 +354,6 @@ export default function MapPosterGenerator() {
                         typeof city.longitude === "number"
                           ? city.longitude
                           : parseFloat(city.longitude as string) || 0;
-                      if (lat !== 0 && lng !== 0) {
-                        mapDataService.saveCoordinates(cityName, config.selectedCountry, lat, lng);
-                      }
-                    }
-
-                    // 如果没有从城市数据获取到坐标，尝试从缓存获取
-                    if (lat === 0 && lng === 0) {
-                      const cached = mapDataService.getCoordinates(
-                        cityName,
-                        config.selectedCountry
-                      );
-                      if (cached) {
-                        lat = cached.latitude;
-                        lng = cached.longitude;
-                      }
                     }
 
                     setLocation({
@@ -426,18 +411,6 @@ export default function MapPosterGenerator() {
                   typeof firstCity.longitude === "number"
                     ? firstCity.longitude
                     : parseFloat(firstCity.longitude as string) || 0;
-                if (lat !== 0 && lng !== 0) {
-                  mapDataService.saveCoordinates(cityName, firstCountry.name, lat, lng);
-                }
-              }
-
-              // 如果没有从城市数据获取到坐标，尝试从缓存获取
-              if (lat === 0 && lng === 0) {
-                const cached = mapDataService.getCoordinates(cityName, firstCountry.name);
-                if (cached) {
-                  lat = cached.latitude;
-                  lng = cached.longitude;
-                }
               }
 
               setLocation({
@@ -518,18 +491,6 @@ export default function MapPosterGenerator() {
               typeof firstCity.longitude === "number"
                 ? firstCity.longitude
                 : parseFloat(firstCity.longitude as string) || 0;
-            if (lat !== 0 && lng !== 0) {
-              mapDataService.saveCoordinates(cityName, country?.name || countryName, lat, lng);
-            }
-          }
-
-          // 如果没有从城市数据获取到坐标，尝试从缓存获取
-          if (lat === 0 && lng === 0) {
-            const cached = mapDataService.getCoordinates(cityName, country?.name || countryName);
-            if (cached) {
-              lat = cached.latitude;
-              lng = cached.longitude;
-            }
           }
 
           setLocation({
@@ -540,6 +501,15 @@ export default function MapPosterGenerator() {
             lng,
           });
         }
+      } else {
+        // 没有州/省份数据（如澳门），使用国家名作为城市名
+        setSelectedState("");
+        setSelectedCity("");
+        setCities([]);
+        setIsCitiesLoading(false);
+        const cityName = countryName;
+        // 无法获取坐标，仅设置地区名称
+        setLocation({ country: countryName, state: "", city: cityName });
       }
     } catch (error) {
       console.error("Error loading states:", error);
@@ -575,27 +545,6 @@ export default function MapPosterGenerator() {
               typeof firstCity.longitude === "number"
                 ? firstCity.longitude
                 : parseFloat(firstCity.longitude as string) || 0;
-            if (lat !== 0 && lng !== 0) {
-              mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
-            }
-          }
-
-          // 如果没有从城市数据获取到坐标，尝试从缓存获取
-          if (lat === 0 && lng === 0) {
-            const cached = mapDataService.getCoordinates(cityName, selectedCountry);
-            if (cached) {
-              lat = cached.latitude;
-              lng = cached.longitude;
-            } else {
-              try {
-                const coords = await getCoordinates(cityName, selectedCountry);
-                lat = coords.latitude;
-                lng = coords.longitude;
-                mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
-              } catch {
-                // Keep lat=0, lng=0
-              }
-            }
           }
 
           setLocation({
@@ -610,35 +559,7 @@ export default function MapPosterGenerator() {
           const cityName = stateName;
           setSelectedCity(cityName);
           setCities([]);
-          const cached = mapDataService.getCoordinates(cityName, selectedCountry);
-          if (cached) {
-            setLocation({
-              country: selectedCountry,
-              state: state.name,
-              city: cityName,
-              lat: cached.latitude,
-              lng: cached.longitude,
-            });
-          } else {
-            try {
-              const coords = await getCoordinates(cityName, selectedCountry);
-              mapDataService.saveCoordinates(
-                cityName,
-                selectedCountry,
-                coords.latitude,
-                coords.longitude
-              );
-              setLocation({
-                country: selectedCountry,
-                state: state.name,
-                city: cityName,
-                lat: coords.latitude,
-                lng: coords.longitude,
-              });
-            } catch {
-              setLocation({ country: selectedCountry, state: state.name, city: cityName });
-            }
-          }
+          setLocation({ country: selectedCountry, state: state.name, city: cityName });
         }
       }
     } catch (error) {
@@ -669,33 +590,9 @@ export default function MapPosterGenerator() {
             typeof city.longitude === "number"
               ? city.longitude
               : parseFloat(city.longitude as string) || 0;
-
-          // 保存到缓存
-          if (lat !== 0 && lng !== 0) {
-            mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
-          }
         }
       } catch (error) {
         console.error("Failed to get coordinates from city data:", error);
-      }
-    }
-
-    // 如果从城市数据中没找到坐标，尝试从缓存获取
-    if (lat === 0 && lng === 0) {
-      const cachedCoordinates = mapDataService.getCoordinates(cityName, selectedCountry);
-      if (cachedCoordinates) {
-        lat = cachedCoordinates.latitude;
-        lng = cachedCoordinates.longitude;
-      } else {
-        // 最后尝试调用 Nominatim API
-        try {
-          const coordinates = await getCoordinates(cityName, selectedCountry);
-          lat = coordinates.latitude;
-          lng = coordinates.longitude;
-          mapDataService.saveCoordinates(cityName, selectedCountry, lat, lng);
-        } catch (error) {
-          console.error("Failed to get coordinates for city:", error);
-        }
       }
     }
 
@@ -791,17 +688,9 @@ export default function MapPosterGenerator() {
       setGenerationStep(m.step_coordinates());
       await yieldMainThread();
       // 直接使用 location 中已有的坐标（来自城市数据）
-      let lat = location.lat || 0;
-      let lng = location.lng || 0;
+      const lat = location.lat || 0;
+      const lng = location.lng || 0;
 
-      // 如果 location 中没有坐标，尝试从缓存获取
-      if (lat === 0 && lng === 0) {
-        const cachedCoordinates = mapDataService.getCoordinates(location.city, location.country);
-        if (cachedCoordinates) {
-          lat = cachedCoordinates.latitude;
-          lng = cachedCoordinates.longitude;
-        }
-      }
       const width = selectedSize.width * FRONTEND_SCALE;
       const height = selectedSize.height * FRONTEND_SCALE;
       setGenerationProgress(10);

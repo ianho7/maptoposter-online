@@ -1,4 +1,4 @@
-import type { Coordinates, NominatimResult, Point } from "./types";
+import type { Point } from "./types";
 import osmtogeojson from "osmtogeojson";
 import Pbf from "pbf";
 import { VectorTile } from "@mapbox/vector-tile";
@@ -62,53 +62,6 @@ export function tile2lon(x: number, z: number): number {
 export function tile2lat(y: number, z: number): number {
   const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
   return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-}
-
-/**
- * 获取指定城市和国家的坐标
- * 包含基础频率限制处理
- */
-export async function getCoordinates(city: string, country: string): Promise<Coordinates> {
-  // Nominatim API 已弃用，CDN 数据已包含坐标
-  throw new Error("Nominatim API disabled - use CDN city data for coordinates");
-
-  console.log("Looking up coordinates...");
-
-  // 频率限制：1秒延迟
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${city}, ${country}`)}&format=json&addressdetails=1`;
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "city_map_poster",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Nominatim error: ${response.statusText}`);
-    }
-
-    const results = (await response.json()) as NominatimResult[];
-
-    if (results && results.length > 0) {
-      const location = results[0];
-      console.log(`✓ Found: ${location.display_name}`);
-
-      const coords: Coordinates = {
-        latitude: parseFloat(location.lat),
-        longitude: parseFloat(location.lon),
-      };
-
-      console.log(`✓ Coordinates: ${coords.latitude}, ${coords.longitude}`);
-      return coords;
-    }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Geocoding failed for ${city}, ${country}: ${message}`);
-  }
-
-  throw new Error(`Could not find coordinates for ${city}, ${country}`);
 }
 
 /**

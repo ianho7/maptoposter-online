@@ -6,7 +6,7 @@
 
 import type { Country, State, City, LocationServiceState } from "./location-types";
 
-const CDN_BASE = "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@main";
+const CDN_BASE = "https://cdn.jsdelivr.net/gh/ianho7/location-data-slim@8ef462b877208e600635b9dc8aef404ca02e1fa1";
 
 const DATA_URLS = {
   countries: `${CDN_BASE}/countries.json`,
