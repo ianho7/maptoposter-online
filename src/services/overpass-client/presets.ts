@@ -307,19 +307,26 @@ export async function downloadWater(
  */
 export async function downloadPOIs(
   polygon: Feature<Polygon> | Feature<MultiPolygon>,
-  amenityTypes?: string[],
   onProgress?: OverpassProgressCallback,
   preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>[]> {
-  const typeDesc = amenityTypes ? amenityTypes.join(", ") : "all";
-  log("info", `=== downloadPOIs: types=[${typeDesc}] ===`);
+  // const typeDesc = amenityTypes ? amenityTypes.join(", ") : "all";
+  // log("info", `=== downloadPOIs: types=[${typeDesc}] ===`);
 
   const coordStrs = makeOverpassPolygonCoordStrs(polygon);
   log("info", `Polygon split into ${coordStrs.length} sub-region(s)`);
 
   // 如果指定了类型列表，使用数组形式；否则用 true 匹配所有
   const tags: Record<string, boolean | string | string[]> = {
-    amenity: amenityTypes ?? true,
+    // amenity: amenityTypes ?? true,
+    // 旅游相关 (景点、博物馆、观景点)
+    tourism: ["attraction", "museum", "viewpoint", "gallery", "artwork"],
+
+    // 历史相关 (纪念碑、文化遗产)
+    historic: ["monument", "memorial", "heritage"],
+
+    // 建筑形态 (地标性建筑、塔)
+    building: ["landmark", "tower"],
   };
   const results = await downloadOverpassFeatures(coordStrs, tags, onProgress, preFetchedPauseMs);
 

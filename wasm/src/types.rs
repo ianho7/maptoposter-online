@@ -7,7 +7,7 @@ const PYTHON_STANDARD_HEIGHT_PX: f32 = 4800.0;
 
 /// 分辨率缩放因子 - 用于高分辨率输出（如 8x 放大）
 /// 当输出分辨率增加 N 倍时，道路线宽也需要相应增加以保持视觉一致性
-const RESOLUTION_SCALE: f32 = 8.0;
+// const RESOLUTION_SCALE: f32 = 8.0;
 
 /// 计算道路线宽的动态缩放因子
 ///
@@ -120,16 +120,17 @@ impl RoadType {
     /// - Residential/Default: 0.4 * 8 = 3.2
     ///
     /// 注意：此方法使用固定的 RESOLUTION_SCALE (8.0)，如需动态缩放请使用 get_width_scaled()
-    pub fn get_width(self) -> f32 {
-        let base_width = match self {
-            RoadType::Motorway => 1.2,
-            RoadType::Primary => 1.0,
-            RoadType::Secondary => 0.8,
-            RoadType::Tertiary => 0.6,
-            RoadType::Residential | RoadType::Default => 0.4,
-        };
-        base_width * RESOLUTION_SCALE
-    }
+    // pub fn get_width(self) -> f32 {
+    //     const RESOLUTION_SCALE: f32 = 8.0;
+    //     let base_width = match self {
+    //         RoadType::Motorway => 1.2,
+    //         RoadType::Primary => 1.0,
+    //         RoadType::Secondary => 0.8,
+    //         RoadType::Tertiary => 0.6,
+    //         RoadType::Residential | RoadType::Default => 0.4,
+    //     };
+    //     base_width * RESOLUTION_SCALE
+    // }
 
     /// 获取道路线宽（使用动态缩放因子）
     ///

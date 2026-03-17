@@ -153,10 +153,10 @@ impl MapRenderer {
     }
 
     /// 绘制道路 (二进制直读版 - 极致单次扫描优化)
-    pub fn draw_roads_bin(&mut self, data: &[f64]) {
-        // 【优化】委托给 scaled 版本，消除重复代码；scale_factor=1.0 等同于原无缩放行为
-        self.draw_roads_bin_scaled(data, 1.0);
-    }
+    // pub fn draw_roads_bin(&mut self, data: &[f64]) {
+    //     // 【优化】委托给 scaled 版本，消除重复代码；scale_factor=1.0 等同于原无缩放行为
+    //     self.draw_roads_bin_scaled(data, 1.0);
+    // }
 
     /// 绘制道路 (二进制直读版) 使用动态缩放因子
     pub fn draw_roads_bin_scaled(&mut self, data: &[f64], scale_factor: f32) {
@@ -377,10 +377,10 @@ impl MapRenderer {
     }
 
     /// 绘制道路
-    pub fn draw_roads(&mut self, roads: &[Road]) {
-        // 【优化】委托给 scaled 版本，消除重复代码；scale_factor=1.0 等同于原无缩放行为
-        self.draw_roads_scaled(roads, 1.0);
-    }
+    // pub fn draw_roads(&mut self, roads: &[Road]) {
+    //     // 【优化】委托给 scaled 版本，消除重复代码；scale_factor=1.0 等同于原无缩放行为
+    //     self.draw_roads_scaled(roads, 1.0);
+    // }
 
     /// 绘制道路（使用动态缩放因子）
     pub fn draw_roads_scaled(&mut self, roads: &[Road], scale_factor: f32) {
@@ -608,7 +608,7 @@ impl MapRenderer {
 
         let poi_radius = 8.0 * scale_factor; // POI 圆点半径随分辨率缩放
         let min_spacing = 5.0 * scale_factor; // POI 之间最小间距随分辨率缩放
-        const MAX_POIS: usize = 200;
+        const MAX_POIS: usize = 50;
         let min_distance_sq = (poi_radius * 2.0 + min_spacing) * (poi_radius * 2.0 + min_spacing);
 
         // 【优化】空间网格替代 O(n²) 线性扫描，平均 O(1) 碰撞检测
@@ -888,11 +888,13 @@ impl MapRenderer {
         // 之前的 0.03 (3%) 在 1000px 高度下是 30px
         let city_offset = 50.0 * scale_factor;
         let coords_offset = -40.0 * scale_factor;
-        let decor_offset = 30.0 * scale_factor;
+        // let decor_offset = 30.0 * scale_factor;
 
         // 绘制城市名 (增加基准大小到 80.0)
         let formatted_city = format_city_name(city);
-        let city_size = calculate_font_size(&formatted_city, 80.0 * scale_factor, 10);
+        // 字号阈值
+        let threshold = 30;
+        let city_size = calculate_font_size(&formatted_city, 80.0 * scale_factor, threshold);
         // 位置：锚点 + 偏移
         self.draw_text_centered(
             &font,
@@ -1041,10 +1043,10 @@ impl MapRenderer {
         let pixels = self.pixmap.pixels_mut();
 
         // 【优化】预计算颜色分量到整数域（0-255），消除逐像素 f32 转换和除法
-        let cr = (color.red() * 255.0 + 0.5) as u32;
-        let cg = (color.green() * 255.0 + 0.5) as u32;
-        let cb = (color.blue() * 255.0 + 0.5) as u32;
-        let ca = (color.alpha() * 255.0 + 0.5) as u32;
+        // let cr = (color.red() * 255.0 + 0.5) as u32;
+        // let cg = (color.green() * 255.0 + 0.5) as u32;
+        // let cb = (color.blue() * 255.0 + 0.5) as u32;
+        // let ca = (color.alpha() * 255.0 + 0.5) as u32;
 
         // [Gamma校正] 将文字颜色预转到线性光空间，避免逐像素重复计算
         let src_r_lin = srgb_to_linear(color.red());
@@ -1117,30 +1119,30 @@ impl MapRenderer {
     }
 
     /// 绘制装饰线
-    fn draw_decoration_line(&mut self, color: Color, scale_factor: f32, y_px: f32) {
-        let y = y_px;
-        // [超采样] 使用实际画布宽度计算装饰线端点，确保线段视觉居中
-        let x1 = self.render_width() as f32 * 0.4;
-        let x2 = self.render_width() as f32 * 0.6;
+    // fn draw_decoration_line(&mut self, color: Color, scale_factor: f32, y_px: f32) {
+    //     let y = y_px;
+    //     // [超采样] 使用实际画布宽度计算装饰线端点，确保线段视觉居中
+    //     let x1 = self.render_width() as f32 * 0.4;
+    //     let x2 = self.render_width() as f32 * 0.6;
 
-        let mut pb = PathBuilder::new();
-        pb.move_to(x1, y);
-        pb.line_to(x2, y);
+    //     let mut pb = PathBuilder::new();
+    //     pb.move_to(x1, y);
+    //     pb.line_to(x2, y);
 
-        if let Some(path) = pb.finish() {
-            let mut paint = Paint::default();
-            paint.set_color(color);
-            paint.anti_alias = true;
+    //     if let Some(path) = pb.finish() {
+    //         let mut paint = Paint::default();
+    //         paint.set_color(color);
+    //         paint.anti_alias = true;
 
-            let stroke = Stroke {
-                width: 1.0 * scale_factor,
-                ..Default::default()
-            };
+    //         let stroke = Stroke {
+    //             width: 1.0 * scale_factor,
+    //             ..Default::default()
+    //         };
 
-            self.pixmap
-                .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
-        }
-    }
+    //         self.pixmap
+    //             .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    //     }
+    // }
 
     /// 世界坐标 -> 屏幕坐标
     fn world_to_screen(&self, coord: (f64, f64)) -> (f32, f32) {

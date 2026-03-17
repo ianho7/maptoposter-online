@@ -289,8 +289,16 @@ function isLatinScript(text: string): boolean {
 }
 
 function formatCityName(city: string): string {
-  if (isLatinScript(city)) return city.toUpperCase().split("").join("  ");
+  if (isLatinScript(city)) return city.split("").join("  ");
   return city;
+}
+
+/// 动态计算字体大小（与 WASM 端 calculate_font_size 逻辑一致）
+function calculateFontSize(text: string, baseSize: number, threshold: number): number {
+  if (text.length > threshold) {
+    return Math.max(10, (baseSize * threshold) / text.length);
+  }
+  return baseSize;
 }
 
 function formatCoordinates(lat: number, lon: number): string {
@@ -328,7 +336,9 @@ function TextOverlay({
   const heightScale = (containerHeight / 1200) * 1.1;
   const scaleFactor = Math.min(widthScale, heightScale);
 
-  const cityFontSize = 80 * scaleFactor;
+  // 城市名需要先格式化再计算字号（与 WASM 端逻辑一致）
+  const formattedCity = formatCityName(city);
+  const cityFontSize = calculateFontSize(formattedCity, 80 * scaleFactor, 30);
   const countryFontSize = 28 * scaleFactor;
   const coordsFontSize = 18 * scaleFactor;
 
@@ -370,7 +380,7 @@ function TextOverlay({
           ...baseStyle,
           top: coordsY,
           fontSize: `${coordsFontSize}px`,
-          fontWeight: 300,
+          fontWeight: 400,
           opacity: 0.8,
         }}
       >

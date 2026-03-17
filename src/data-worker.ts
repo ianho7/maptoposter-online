@@ -61,6 +61,9 @@ function createProgressCallback(
     if (step === "waiting_slot" && secondsRemaining !== undefined) {
       // API 槽位等待
       sendProgress(baseProgress, `step_waiting_api:${secondsRemaining}`);
+    } else if (step === "waiting_slot_complete") {
+      // 槽位等待结束，恢复显示当前的步骤
+      sendProgress(baseProgress, baseStep);
     } else if (step === "retrying_error" && secondsRemaining !== undefined) {
       // 错误重试等待
       sendProgress(baseProgress, `step_retrying_error:${secondsRemaining}`);

@@ -262,6 +262,8 @@ async function _overpassRequestInternal(
         await new Promise((r) => setTimeout(r, 1000));
         remaining--;
       }
+      // 等待结束，通知恢复原来的步骤
+      onProgress(0, "waiting_slot_complete");
     } else {
       await sleep(pauseMs);
     }

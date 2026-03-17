@@ -24,6 +24,7 @@ import { Progress } from "@/components/ui/progress";
 import { MapPosterPreview } from "@/components/artistic-map";
 import { cn } from "@/lib/utils";
 import { useLocationData } from "@/hooks/useLocationData";
+import { getUserGeolocation } from "@/services/ip-geolocation";
 
 // WASM and Utils
 import init, { init_panic_hook } from "./pkg/wasm";
@@ -378,57 +379,145 @@ export default function MapPosterGenerator() {
         isRestored.current = true;
       }
     } else if (countries.length > 0 && !selectedCountry && !isRestored.current) {
-      // Default initialization if no config exists
-      const firstCountry = countries[0];
-      setSelectedCountry(firstCountry.name);
+      // Try to auto-detect user location based on IP when no saved config exists
       (async () => {
         try {
-          setIsStatesLoading(true);
-          setIsCitiesLoading(true);
-          const countryStates = await getStatesByCountry(firstCountry.id);
-          setStates(countryStates);
-          setIsStatesLoading(false);
-          if (countryStates.length > 0) {
-            const firstState = countryStates[0];
-            setSelectedState(firstState.name);
-            const stateCities = await getCitiesByState(firstState.id);
-            setCities(stateCities);
-            setIsCitiesLoading(false);
-            if (stateCities.length > 0) {
-              setSelectedCity(stateCities[0].name);
-              const cityName = stateCities[0].name;
+          const geo = await getUserGeolocation();
+          if (geo) {
+            // 1. Find country by ISO2 code
+            const country = countries.find(
+              (c) => c.iso2.toUpperCase() === geo.country.toUpperCase()
+            );
 
-              // 优先从城市数据中获取坐标（CDN 数据包含坐标）
-              let lat = 0,
-                lng = 0;
-              const firstCity = stateCities[0];
-              if (firstCity.latitude && firstCity.longitude) {
-                lat =
-                  typeof firstCity.latitude === "number"
-                    ? firstCity.latitude
-                    : parseFloat(firstCity.latitude as string) || 0;
-                lng =
-                  typeof firstCity.longitude === "number"
-                    ? firstCity.longitude
-                    : parseFloat(firstCity.longitude as string) || 0;
+            if (country) {
+              setIsStatesLoading(true);
+              setIsCitiesLoading(true);
+              setSelectedCountry(country.name);
+
+              const countryStates = await getStatesByCountry(country.id);
+              setStates(countryStates);
+              setIsStatesLoading(false);
+
+              // 2. Find state by region name (fuzzy match)
+              let matchedState = countryStates.find(
+                (s) => s.name.toLowerCase() === geo.region.toLowerCase()
+              );
+
+              // If exact match fails, try fuzzy match
+              if (!matchedState && geo.region !== "Unknown") {
+                matchedState = countryStates.find(
+                  (s) =>
+                    s.name.toLowerCase().includes(geo.region.toLowerCase()) ||
+                    geo.region.toLowerCase().includes(s.name.toLowerCase())
+                );
               }
 
-              setLocation({
-                country: firstCountry.name,
-                state: firstState.name,
-                city: cityName,
-                lat,
-                lng,
-              });
+              // Fallback to first state
+              const state = matchedState || countryStates[0];
+              if (state) {
+                setSelectedState(state.name);
+                const stateCities = await getCitiesByState(state.id);
+                setCities(stateCities);
+                setIsCitiesLoading(false);
+
+                // 3. Find city by name (fuzzy match)
+                let matchedCity = stateCities.find(
+                  (c) => c.name.toLowerCase() === geo.city.toLowerCase()
+                );
+
+                // If exact match fails, try fuzzy match
+                if (!matchedCity) {
+                  matchedCity = stateCities.find(
+                    (c) =>
+                      c.name.toLowerCase().includes(geo.city.toLowerCase()) ||
+                      geo.city.toLowerCase().includes(c.name.toLowerCase())
+                  );
+                }
+
+                // Fallback to first city
+                const city = matchedCity || stateCities[0];
+                if (city) {
+                  setSelectedCity(city.name);
+
+                  // Use city coordinates if available, otherwise fallback to IP coordinates
+                  let lat =
+                    typeof city.latitude === "number"
+                      ? city.latitude
+                      : parseFloat(city.latitude as string) || parseFloat(geo.latitude) || 0;
+                  let lng =
+                    typeof city.longitude === "number"
+                      ? city.longitude
+                      : parseFloat(city.longitude as string) || parseFloat(geo.longitude) || 0;
+
+                  setLocation({
+                    country: country.name,
+                    state: state.name,
+                    city: city.name,
+                    lat,
+                    lng,
+                  });
+                }
+              }
+              isRestored.current = true;
+              return; // Skip default logic
             }
           }
-          isRestored.current = true;
         } catch (error) {
-          console.error("Error initializing location data:", error);
-          setIsStatesLoading(false);
-          setIsCitiesLoading(false);
-          isRestored.current = true;
+          console.error("Failed to detect user location:", error);
         }
+
+        // Default initialization if IP detection fails or no match found
+        const firstCountry = countries[0];
+        setSelectedCountry(firstCountry.name);
+        (async () => {
+          try {
+            setIsStatesLoading(true);
+            setIsCitiesLoading(true);
+            const countryStates = await getStatesByCountry(firstCountry.id);
+            setStates(countryStates);
+            setIsStatesLoading(false);
+            if (countryStates.length > 0) {
+              const firstState = countryStates[0];
+              setSelectedState(firstState.name);
+              const stateCities = await getCitiesByState(firstState.id);
+              setCities(stateCities);
+              setIsCitiesLoading(false);
+              if (stateCities.length > 0) {
+                setSelectedCity(stateCities[0].name);
+                const cityName = stateCities[0].name;
+
+                // 优先从城市数据中获取坐标（CDN 数据包含坐标）
+                let lat = 0,
+                  lng = 0;
+                const firstCity = stateCities[0];
+                if (firstCity.latitude && firstCity.longitude) {
+                  lat =
+                    typeof firstCity.latitude === "number"
+                      ? firstCity.latitude
+                      : parseFloat(firstCity.latitude as string) || 0;
+                  lng =
+                    typeof firstCity.longitude === "number"
+                      ? firstCity.longitude
+                      : parseFloat(firstCity.longitude as string) || 0;
+                }
+
+                setLocation({
+                  country: firstCountry.name,
+                  state: firstState.name,
+                  city: cityName,
+                  lat,
+                  lng,
+                });
+              }
+            }
+            isRestored.current = true;
+          } catch (error) {
+            console.error("Error initializing location data:", error);
+            setIsStatesLoading(false);
+            setIsCitiesLoading(false);
+            isRestored.current = true;
+          }
+        })();
       })();
     }
   }, [countries]);

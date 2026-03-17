@@ -214,7 +214,7 @@ export async function fetchPOIsOverpass(
 
   try {
     // 下载所有 amenity 类型的 POI (amenityTypes 传 undefined 表示获取所有类型)
-    const results = await downloadPOIs(polygon, undefined, onProgress, preFetchedPauseMs);
+    const results = await downloadPOIs(polygon, onProgress, preFetchedPauseMs);
     return convertToGeoJSON(results);
   } catch (error) {
     log("error", `fetchPOIsOverpass failed: ${error}`);

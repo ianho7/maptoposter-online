@@ -54,11 +54,10 @@ pub fn is_latin_script(text: &str) -> bool {
 pub fn format_city_name(city: &str) -> String {
     if is_latin_script(city) {
         // 拉丁文：大写 + 双空格字间距
-        city.to_uppercase()
-            .chars()
+        city.chars()
             .map(|c| c.to_string())
             .collect::<Vec<String>>()
-            .join("  ")
+            .join(" ")
     } else {
         // 非拉丁文：保持原样
         city.to_string()
@@ -80,6 +79,7 @@ pub fn format_coordinates(lat: f64, lon: f64) -> String {
 }
 
 /// 动态计算字体大小
+/// 当字符数超过阈值时，字体大小按比例缩小，阈值越大，字体越大
 pub fn calculate_font_size(text: &str, base_size: f32, threshold: usize) -> f32 {
     if text.len() > threshold {
         (base_size * threshold as f32 / text.len() as f32).max(10.0)
