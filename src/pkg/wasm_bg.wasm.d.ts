@@ -1,0 +1,34 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_renderresult_free: (a: number, b: number) => void;
+export const get_version: () => [number, number];
+export const hello_wasm: (a: number, b: number) => [number, number];
+export const init_panic_hook: () => void;
+export const parse_polygons_to_bin: (a: number, b: number) => [number, number, number];
+export const parse_polygons_typed: (a: number, b: number) => [number, number, number];
+export const parse_polygons_val: (a: any) => [number, number, number];
+export const parse_roads_to_bin: (a: number, b: number) => [number, number, number];
+export const parse_roads_typed: (a: number, b: number) => [number, number, number];
+export const parse_roads_val: (a: any) => [number, number, number];
+export const process_polygons_bin_wasm: (a: number, b: number) => [number, number, number];
+export const process_roads_bin_wasm: (a: number, b: number) => [number, number, number];
+export const render_map: (a: number, b: number) => number;
+export const render_map_binary: (a: any, b: number, c: number, d: number, e: number, f: number, g: number) => number;
+export const render_map_binary_with_font: (a: any, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => number;
+export const render_map_msgpack: (a: number, b: number) => number;
+export const renderresult_error: (a: number, b: number) => number;
+export const renderresult_get_data: (a: number) => [number, number];
+export const renderresult_get_error: (a: number) => [number, number];
+export const renderresult_get_height: (a: number) => number;
+export const renderresult_get_width: (a: number) => number;
+export const renderresult_is_success: (a: number) => number;
+export const renderresult_success: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;
