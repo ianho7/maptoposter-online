@@ -576,6 +576,9 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).length;
             return ret;
         },
+        __wbg_log_80c94b23c6d868ca: function(arg0, arg1) {
+            console.log(getStringFromWasm0(arg0, arg1));
+        },
         __wbg_new_361308b2356cecd0: function() {
             const ret = new Object();
             return addHeapObject(ret);
@@ -607,6 +610,10 @@ function __wbg_get_imports() {
         __wbg_next_418f80d8f5303233: function(arg0) {
             const ret = getObject(arg0).next;
             return addHeapObject(ret);
+        },
+        __wbg_now_c671ae6e9e72fffc: function() {
+            const ret = performance.now();
+            return ret;
         },
         __wbg_prototypesetcall_aefe6319f589ab4b: function(arg0, arg1, arg2) {
             Float64Array.prototype.set.call(getArrayF64FromWasm0(arg0, arg1), getObject(arg2));

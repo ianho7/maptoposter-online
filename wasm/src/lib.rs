@@ -175,7 +175,84 @@ fn render_map_binary_internal(
         config.height,
     );
 
-    // 2. 创建渲染器
+    // 2. 统计元素总数
+    let water_count = if water_bin.is_empty() {
+        0
+    } else {
+        water_bin[0] as usize
+    };
+    let parks_count = if parks_bin.is_empty() {
+        0
+    } else {
+        parks_bin[0] as usize
+    };
+    let poi_count = config
+        .pois
+        .as_ref()
+        .map(|p| if p.is_empty() { 0 } else { p[0] as usize })
+        .unwrap_or(0);
+
+    let mut total_roads = 0usize;
+    let mut road_type_counts = [0usize; 6];
+
+    if js_sys::Array::is_array(&roads_shards) {
+        let shards_array = js_sys::Array::from(&roads_shards);
+        for shard_val in shards_array.iter() {
+            if let Some(shard_typed) = shard_val.dyn_ref::<js_sys::Float64Array>() {
+                let vec = shard_typed.to_vec();
+                if !vec.is_empty() {
+                    let road_count = vec[0] as usize;
+                    total_roads += road_count;
+
+                    let mut offset = 1;
+                    for _ in 0..road_count {
+                        if offset + 2 <= vec.len() {
+                            let type_val = vec[offset] as usize;
+                            let point_count = vec[offset + 1] as usize;
+                            if type_val < 6 {
+                                road_type_counts[type_val] += 1;
+                            }
+                            offset += 2 + point_count * 2;
+                        }
+                    }
+                }
+            }
+        }
+    } else if let Some(shard_typed) = roads_shards.dyn_ref::<js_sys::Float64Array>() {
+        let vec = shard_typed.to_vec();
+        if !vec.is_empty() {
+            let road_count = vec[0] as usize;
+            total_roads = road_count;
+
+            let mut offset = 1;
+            for _ in 0..road_count {
+                if offset + 2 <= vec.len() {
+                    let type_val = vec[offset] as usize;
+                    let point_count = vec[offset + 1] as usize;
+                    if type_val < 6 {
+                        road_type_counts[type_val] += 1;
+                    }
+                    offset += 2 + point_count * 2;
+                }
+            }
+        }
+    }
+
+    log(&format!(
+        "[Render] Elements: {} roads, {} water polygons, {} parks, {} POIs",
+        total_roads, water_count, parks_count, poi_count
+    ));
+    log(&format!(
+        "[Render] Roads by type: Motorway={}, Primary={}, Secondary={}, Tertiary={}, Residential={}, Default={}",
+        road_type_counts[0],
+        road_type_counts[1],
+        road_type_counts[2],
+        road_type_counts[3],
+        road_type_counts[4],
+        road_type_counts[5]
+    ));
+
+    // 3. 创建渲染器
     let text_pos = config.text_position.unwrap_or(types::TextPosition::Top);
     let mut renderer =
         match MapRenderer::new(config.width, config.height, config.theme, bounds, text_pos) {
@@ -183,7 +260,7 @@ fn render_map_binary_internal(
             None => return RenderResult::error("Failed to create renderer".to_string()),
         };
 
-    // 3. 绘制
+    // 4. 绘制
     time("render_map_bin: draw_background");
     renderer.draw_background();
     time_end("render_map_bin: draw_background");
@@ -207,18 +284,32 @@ fn render_map_binary_internal(
         config.road_width_boost,
     );
 
+    let mut total_timings = [0.0; 6];
+
     if js_sys::Array::is_array(&roads_shards) {
         let shards_array = js_sys::Array::from(&roads_shards);
         for shard_val in shards_array.iter() {
             if let Some(shard_typed) = shard_val.dyn_ref::<js_sys::Float64Array>() {
-                renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
+                let timings =
+                    renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
+                for i in 0..6 {
+                    total_timings[i] += timings[i];
+                }
             }
         }
     } else if let Some(shard_typed) = roads_shards.dyn_ref::<js_sys::Float64Array>() {
-        renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
+        total_timings = renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
     }
 
     time_end("render_map_bin: draw_roads");
+
+    log("render_map_bin: draw_roads breakdown:");
+    log(&format!("  Motorway: {:.2}ms", total_timings[0]));
+    log(&format!("  Primary: {:.2}ms", total_timings[1]));
+    log(&format!("  Secondary: {:.2}ms", total_timings[2]));
+    log(&format!("  Tertiary: {:.2}ms", total_timings[3]));
+    log(&format!("  Residential: {:.2}ms", total_timings[4]));
+    log(&format!("  Default: {:.2}ms", total_timings[5]));
 
     // 投影并绘制 POI
     if let Some(pois_data) = &config.pois {

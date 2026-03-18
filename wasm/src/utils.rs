@@ -11,6 +11,9 @@ unsafe extern "C" {
 
     #[wasm_bindgen(js_namespace = console, js_name = timeEnd)]
     pub fn time_end(s: &str);
+
+    #[wasm_bindgen(js_namespace = ["performance"], js_name = now)]
+    pub fn performance_now() -> f64;
 }
 
 /// 解析 hex 颜色为 tiny-skia Color

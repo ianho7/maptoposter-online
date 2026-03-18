@@ -844,7 +844,7 @@ export default function MapPosterGenerator() {
         theme: colors,
         width,
         height,
-        display_city: customTitle || location.city,
+        display_city: customTitle || location.city.toUpperCase(),
         display_country: location.country,
         text_position: "bottom",
         selected_size_height: selectedSize.height * FRONTEND_SCALE,
@@ -1109,7 +1109,7 @@ export default function MapPosterGenerator() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Array.from({ length: 16 }, (_, i) => 1000 + i * 1000).map((radius) => (
+                      {Array.from({ length: 18 }, (_, i) => 3000 + i * 1000).map((radius) => (
                         <SelectItem key={radius} value={radius.toString()}>
                           {radius}m
                         </SelectItem>
@@ -1335,7 +1335,7 @@ export default function MapPosterGenerator() {
               >
                 <MapPosterPreview
                   location={stableMapLocation}
-                  city={customTitle || location.city || ""}
+                  city={customTitle || location.city.toUpperCase() || ""}
                   country={location.country || ""}
                   zoom={12}
                   radius={baseRadius}

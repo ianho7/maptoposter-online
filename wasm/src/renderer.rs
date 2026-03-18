@@ -159,10 +159,12 @@ impl MapRenderer {
     // }
 
     /// 绘制道路 (二进制直读版) 使用动态缩放因子
-    pub fn draw_roads_bin_scaled(&mut self, data: &[f64], scale_factor: f32) {
+    pub fn draw_roads_bin_scaled(&mut self, data: &[f64], scale_factor: f32) -> [f64; 6] {
         if data.is_empty() {
-            return;
+            return [0.0; 6];
         }
+
+        let mut timings = [0.0; 6];
 
         // [超采样] 将外部传入的缩放因子乘以内部超采样倍数，
         // 使道路宽度在 2× 画布上保持与逻辑分辨率一致的视觉比例
@@ -230,6 +232,8 @@ impl MapRenderer {
                 continue;
             };
 
+            let start = crate::utils::performance_now();
+
             let road_type = RoadType::from_u32(t_idx as u32);
             let base_color = parse_hex_color(self.road_color_hex(road_type));
 
@@ -260,6 +264,8 @@ impl MapRenderer {
             };
             self.pixmap
                 .stroke_path(path, &paint, &stroke, Transform::identity(), None);
+
+            timings[t_idx] += crate::utils::performance_now() - start;
         }
 
         // [Road Casing] 第二遍：按 Z 序绘制所有道路的「填充色」（Fill）
@@ -267,6 +273,8 @@ impl MapRenderer {
             let Some(path) = &paths[t_idx] else {
                 continue;
             };
+
+            let start = crate::utils::performance_now();
 
             let road_type = RoadType::from_u32(t_idx as u32);
 
@@ -282,7 +290,11 @@ impl MapRenderer {
             };
             self.pixmap
                 .stroke_path(path, &paint, &stroke, Transform::identity(), None);
+
+            timings[t_idx] += crate::utils::performance_now() - start;
         }
+
+        timings
     }
 
     /// 绘制多边形 (二进制直读版)

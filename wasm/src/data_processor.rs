@@ -73,7 +73,6 @@ pub fn parse_roads_js(js_val: JsValue) -> Result<Vec<Road>, String> {
 
 /// 解析道路 (从二进制 TypedArray)
 pub fn parse_roads_bin(data: &[f64]) -> Result<Vec<Road>, String> {
-    time("parse_roads_bin: Total");
     if data.is_empty() {
         return Ok(vec![]);
     }
@@ -99,18 +98,17 @@ pub fn parse_roads_bin(data: &[f64]) -> Result<Vec<Road>, String> {
             offset += 2;
         }
 
+        let road_type = RoadType::from_u32(type_val);
         roads.push(Road {
             coords: project_points(&coords),
-            road_type: RoadType::from_u32(type_val),
+            road_type,
         });
     }
-    time_end("parse_roads_bin: Total");
     Ok(roads)
 }
 
 /// 解析多边形 (从二进制 TypedArray)
 pub fn parse_polygons_bin(data: &[f64]) -> Result<Vec<PolyFeature>, String> {
-    time("parse_polygons_bin: Total");
     if data.is_empty() {
         return Ok(vec![]);
     }
@@ -162,7 +160,6 @@ pub fn parse_polygons_bin(data: &[f64]) -> Result<Vec<PolyFeature>, String> {
             interiors,
         });
     }
-    time_end("parse_polygons_bin: Total");
     Ok(polys)
 }
 
