@@ -886,13 +886,30 @@ impl MapRenderer {
         let height_scale = (self.render_height() as f32 / 1200.0) * 1.1;
         let scale_factor = width_scale.min(height_scale);
 
+        // 计算画幅宽高比，用于动态调整 Bottom anchor
+        let aspect_ratio = self.height as f32 / self.width as f32;
+
+        // 根据画幅比例计算 Bottom 的动态 anchor
+        // - 竖版 (aspect > 1): 文字视觉偏上，增加 anchor 使其靠下
+        // - 横版/方形 (aspect <= 1): 当前 0.85 效果理想
+        // 公式: 0.85 + (aspect_ratio - 1.0) * 0.1，上限 0.88
+        let bottom_anchor = if aspect_ratio > 1.0 {
+            (0.85 + (aspect_ratio - 1.0) * 0.1).min(0.88)
+        } else {
+            0.85
+        };
+
         // 计算基准锚点 Y 坐标 (屏幕绝对坐标)
-        // [超采样] 使用实际画布高度计算锚点，确保文字位于正确的视觉位置
         let base_y_px = match self.text_position {
             TextPosition::Top => self.render_height() as f32 * 0.10,
             TextPosition::Center => self.render_height() as f32 * 0.50,
-            TextPosition::Bottom => self.render_height() as f32 * 0.88,
+            TextPosition::Bottom => self.render_height() as f32 * bottom_anchor,
         };
+
+        // 减去 padding_offset，与 TSX 端的 rootFontSize 逻辑一致
+        // 这样文字 baseline 不会紧贴容器底部，而是留出约一个 font-size 的边距
+        let padding_offset: f32 = 16.0;
+        let base_y_px = base_y_px - padding_offset;
 
         // 定义相对偏移量 (基于 800px 宽度的标准像素值)
         // 之前的 0.05 (5%) 在 1000px 高度下是 50px

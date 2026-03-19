@@ -788,12 +788,17 @@ export default function MapPosterGenerator() {
       await yieldMainThread();
 
       // 【优化】：获取地图数据 (包含 POI)
+      // 根据画幅比例计算补偿后的 radius，确保数据覆盖渲染区域
+      // Landscape: width > height, aspect > 1, need radius * aspect
+      // Portrait: height > width, aspect < 1, need radius / aspect
+      const aspect = selectedSize.width / selectedSize.height;
+      const compensatedRadius = baseRadius * Math.max(aspect, 1 / aspect);
       const mapResults = await mapDataService.getMapData(
         location.country,
         location.city,
         lat,
         lng,
-        baseRadius,
+        compensatedRadius,
         lodMode
       );
 
