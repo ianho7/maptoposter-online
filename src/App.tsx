@@ -48,6 +48,7 @@ import {
 import * as m from "@/paraglide/messages";
 import { getLocale, setLocale, locales } from "@/paraglide/runtime";
 import { useDynamicFont } from "./hooks/useDynamicFont";
+import { PosterGallery } from "./components/gallery";
 
 type AvailableLanguageTag = (typeof locales)[number];
 
@@ -1119,7 +1120,7 @@ export default function MapPosterGenerator() {
         </div>
       )}
 
-      <main className="md:flex-1 md:overflow-hidden container mx-auto px-4 py-6">
+      <main className="flex-1 overflow-auto custom-scrollbar container mx-auto px-4 py-6">
         <div className="grid md:grid-cols-[380px_1fr] gap-8 md:h-full">
           <div className="space-y-5 md:overflow-y-auto custom-scrollbar md:min-h-0">
             <Card className="p-4 bg-card border-border">
@@ -1498,6 +1499,7 @@ export default function MapPosterGenerator() {
             </div>
           </div>
         </div>
+        <PosterGallery />
       </main>
     </div>
   );

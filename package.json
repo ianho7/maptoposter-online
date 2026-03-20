@@ -12,7 +12,8 @@
     "lint": "oxlint src/",
     "lint:fix": "oxlint --fix src/",
     "fix": "oxfmt src/ && oxlint --fix src/",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "scan:images": "powershell.exe -ExecutionPolicy Bypass -File scripts/scan-images.ps1"
   },
   "dependencies": {
     "@countrystatecity/countries": "^1.0.5",
