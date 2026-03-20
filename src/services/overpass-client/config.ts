@@ -71,3 +71,30 @@ export const overpassConfig = {
 };
 
 export type OverpassConfig = typeof overpassConfig;
+
+// ─── 多服务器 Race 功能配置 ─────────────────────────────
+
+/**
+ * 【功能开关】是否启用多服务器 Race 模式
+ *
+ * - true:  启用多服务器 race（并发查询多个服务器的 /status）
+ * - false: 禁用，沿用原有单服务器逻辑（默认）
+ *
+ * 当关闭时，所有行为与修改前完全一致，保证老逻辑可用。
+ */
+export const OVERPASS_RACE_ENABLED = true;
+
+/**
+ * 【Race 配置】用于多服务器 race 模式的 Overpass API 服务器列表
+ *
+ * 包含多个公共 Overpass 镜像，当 OVERPASS_RACE_ENABLED = true 时，
+ * 会并发向这些服务器发起 /status 请求，选取最快返回"有槽可用"的服务器。
+ *
+ * 注意：需与 utils.ts 中的 OVERPASS_SERVERS 列表保持同步。
+ */
+export const OVERPASS_RACE_SERVERS: string[] = [
+  "https://overpass-api.de/api",
+  "https://overpass.kumi.systems/api",
+  "https://lz4.overpass-api.de/api",
+  "https://z.overpass-api.de/api",
+];

@@ -66,6 +66,7 @@ function createProgressCallback(
       sendProgress(baseProgress, baseStep);
     } else if (step === "retrying_error" && secondsRemaining !== undefined) {
       // 错误重试等待
+      console.log(`[DataWorker] retrying_error: secondsRemaining=${secondsRemaining}`);
       sendProgress(baseProgress, `step_retrying_error:${secondsRemaining}`);
     } else if (step === "retrying_complete") {
       // 重试倒计时结束，恢复显示当前的步骤

@@ -14,14 +14,18 @@ import {
   Monitor,
   FileImage,
   Loader2,
-  AlertCircle,
+  // AlertCircle,
   Type,
   FileText,
   FileCheck,
-  Settings2,
+  // Settings2,
+  // ClipboardPaste,
+  Clock,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { MapPosterPreview } from "@/components/artistic-map";
+import SnakeGame from "@/components/SnakeGame";
+// import { ColorPasteHowToUse } from "@/components/ColorPasteHowToUse";
 import { cn } from "@/lib/utils";
 import { useLocationData } from "@/hooks/useLocationData";
 import { getUserGeolocation } from "@/services/ip-geolocation";
@@ -156,6 +160,9 @@ export default function MapPosterGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generationStep, setGenerationStep] = useState("");
+  const [isGameOpen, setIsGameOpen] = useState(false);
+  const isGameOpenRef = useRef(false); // track isGameOpen without waiting for React re-render
+  const generationCompleteRef = useRef(false);
   const [customTitle, setCustomTitle] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -728,6 +735,58 @@ export default function MapPosterGenerator() {
     }
   };
 
+  // const handlePasteFromClipboard = async () => {
+  //   try {
+  //     const text = await navigator.clipboard.readText();
+  //     const json = JSON.parse(text);
+
+  //     // Validate required fields
+  //     const requiredFields = [
+  //       "background",
+  //       "text",
+  //       "mask_gradient",
+  //       "water",
+  //       "park_greenery",
+  //       "poi",
+  //       "roads",
+  //     ];
+  //     const hasAllFields = requiredFields.every((field) => field in json);
+  //     const hasRoadsFields =
+  //       json.roads &&
+  //       "highway" in json.roads &&
+  //       "primary" in json.roads &&
+  //       "secondary" in json.roads &&
+  //       "tertiary" in json.roads &&
+  //       "residential" in json.roads &&
+  //       "other" in json.roads;
+
+  //     if (!hasAllFields || !hasRoadsFields) {
+  //       alert(m.paste_json_invalid_format());
+  //       return;
+  //     }
+
+  //     // Map JSON fields to customColors
+  //     setCustomColors({
+  //       bg: json.background,
+  //       text: json.text,
+  //       gradient_color: json.mask_gradient,
+  //       water: json.water,
+  //       parks: json.park_greenery,
+  //       poi_color: json.poi,
+  //       road_motorway: json.roads.highway,
+  //       road_primary: json.roads.primary,
+  //       road_secondary: json.roads.secondary,
+  //       road_tertiary: json.roads.tertiary,
+  //       road_residential: json.roads.residential,
+  //       road_default: json.roads.other,
+  //     });
+  //     setUseCustomColors(true);
+  //   } catch (error) {
+  //     console.error("Failed to paste from clipboard:", error);
+  //     alert(m.paste_json_invalid_format());
+  //   }
+  // };
+
   useEffect(() => {
     init()
       .then(() => {
@@ -742,6 +801,8 @@ export default function MapPosterGenerator() {
     setIsGenerating(true);
     setGenerationProgress(0);
     setGenerationStep(m.step_init());
+    generationCompleteRef.current = false;
+    isGameOpenRef.current = false;
     await yieldMainThread();
     const numWorkers = navigator.hardwareConcurrency || 4;
     const workers = Array.from(
@@ -757,6 +818,7 @@ export default function MapPosterGenerator() {
         setGenerationStep(m.step_waiting_api({ seconds }));
       } else if (step.startsWith("step_retrying_error:")) {
         const seconds = step.split(":")[1];
+        console.log(`[App] step_retrying_error: seconds=${seconds}, message=${m.step_retrying_error({ seconds })}`);
         setGenerationStep(m.step_retrying_error({ seconds }));
       } else {
         // 处理普通步骤
@@ -895,6 +957,8 @@ export default function MapPosterGenerator() {
       if (pngData) {
         setGenerationProgress(100);
         setGenerationStep(m.step_complete());
+        console.log('[App] generationCompleteRef set to true, isGameOpen:', isGameOpen, new Date().toISOString())
+        generationCompleteRef.current = true;
         await yieldMainThread();
 
         const blob = new Blob([pngData], { type: "image/png" });
@@ -908,8 +972,14 @@ export default function MapPosterGenerator() {
       console.error(m.error_generating(), error);
       alert(m.error_generating() + (error instanceof Error ? error.message : String(error)));
     } finally {
+      console.log('[App] finally block, isGameOpenRef:', isGameOpenRef.current, 'isGameOpen(state):', isGameOpen, 'generationCompleteRef:', generationCompleteRef.current, new Date().toISOString())
       mapDataService.setProgressCallback(null);
-      setIsGenerating(false);
+      if (!isGameOpenRef.current) {
+        console.log('[App] finally: closing loading because game is not open')
+        setIsGenerating(false);
+      } else {
+        console.log('[App] finally: game is open, NOT closing loading')
+      }
       workers.forEach((w) => w.terminate());
     }
   };
@@ -922,6 +992,7 @@ export default function MapPosterGenerator() {
     fr: "Français",
     de: "Deutsch",
     es: "Español",
+    ru: "Русский",
   };
 
   useDynamicFont(activeLang);
@@ -982,9 +1053,46 @@ export default function MapPosterGenerator() {
                 </span>
               </div>
               <Progress value={generationProgress} className="h-2 bg-secondary" />
-              <p className="text-sm text-center animate-pulse text-muted-foreground">
-                {generationStep}
+              <p className="text-xs text-center text-muted-foreground/70 flex items-center justify-center gap-1.5">
+                <Clock className="w-3 h-3" />
+                {/* {generationProgress === 100 && isGameOpen
+                  ? m.step_complete()
+                  : m.generating_time_estimate()} */}
+                {m.generating_time_estimate()}
               </p>
+              <p className={`text-sm text-center ${generationProgress === 100 && isGameOpen ? '' : 'animate-pulse'} text-muted-foreground`}>
+                {generationProgress === 100 && isGameOpen
+                  ? m.game_complete_hint?.() ?? "图片已生成完毕！请关闭游戏后继续"
+                  : generationStep}
+              </p>
+              <SnakeGame
+                inline={true}
+                onOpenChange={(open) => {
+                  // console.log('[App] onOpenChange:', open, 'generationCompleteRef:', generationCompleteRef.current, new Date().toISOString())
+                  // console.trace('[App] onOpenChange stack')
+                  setIsGameOpen(open);
+                  isGameOpenRef.current = open; // sync ref immediately
+                  if (!open && generationCompleteRef.current) {
+                    console.log('[App] conditions met, closing loading')
+                    setIsGenerating(false);
+                    generationCompleteRef.current = false;
+                  }
+                }}
+                triggerLabel={m.snake_game_trigger?.() ?? "消消时间"}
+              />
+              <div className="flex justify-end pt-2" style={{ visibility: generationProgress === 100 && isGameOpen ? 'visible' : 'hidden' }}>
+                <Button
+                  size="sm"
+                  className="text-muted-foreground bg-secondary hover:bg-primary hover:text-primary-foreground cursor-pointer"
+                  onClick={() => {
+                    console.log('[App] manual close loading')
+                    setIsGenerating(false);
+                    generationCompleteRef.current = false;
+                  }}
+                >
+                  关闭
+                </Button>
+              </div>
             </div>
           </Card>
         </div>
@@ -1054,7 +1162,7 @@ export default function MapPosterGenerator() {
               </div>
             </Card>
 
-            <Card className="p-4 bg-card border-border">
+            {/* <Card className="p-4 bg-card border-border">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-4 h-4 text-primary" />
                 <h2 className="text-lg font-serif text-foreground">{m.label_lod_mode()}</h2>
@@ -1124,7 +1232,7 @@ export default function MapPosterGenerator() {
                   <p className="text-[10px] italic px-1 text-muted-foreground">{m.radius_desc()}</p>
                 </div>
               </div>
-            </Card>
+            </Card> */}
 
             <Card className="p-4 bg-card border-border">
               <div className="flex items-center gap-2">
@@ -1184,6 +1292,18 @@ export default function MapPosterGenerator() {
                   </div>
                 </TabsContent>
                 <TabsContent value="custom" className="mt-3">
+                  {/* <div className="mb-4 flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePasteFromClipboard}
+                      className="flex-1 bg-background/60 transition-all border-1 border-primary/30 hover:bg-primary cursor-pointer"
+                    >
+                      <ClipboardPaste className="w-4 h-4 mr-2" />
+                      {m.paste_json_from_clipboard()}
+                    </Button>
+                    <ColorPasteHowToUse />
+                  </div> */}
                   <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar pt-1">
                     {[
                       { key: "bg", label: m.color_bg() },

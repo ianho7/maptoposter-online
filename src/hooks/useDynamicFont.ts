@@ -34,6 +34,10 @@ const FONTS: Record<string, { url?: string; family: string }> = {
     url: "https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&display=swap",
     family: "'Noto Serif KR', 'Sitea', 'Apple Myungjo', serif",
   },
+  ru: {
+    url: "https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;500;700&display=swap",
+    family: "'Noto Serif', 'Sitea', Georgia, serif",
+  },
 };
 
 // 已加载过的 URL 缓存，避免重复插入 <link>

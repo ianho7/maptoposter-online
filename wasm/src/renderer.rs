@@ -227,7 +227,12 @@ impl MapRenderer {
 
         // [Road Casing] 第一遍：按 Z 序绘制所有道路的「描边底色」（Casing）
         // 所有 Casing 先于所有 Fill 渲染，防止低等级 Casing 压住高等级 Fill
+        // [优化] Residential 跳过 Casing：宽度仅 0.4px，casing 效果几乎不可见
         for &t_idx in &DRAW_ORDER {
+            if t_idx == RoadType::Residential as usize {
+                continue;
+            }
+
             let Some(path) = &paths[t_idx] else {
                 continue;
             };

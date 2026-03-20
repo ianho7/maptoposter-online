@@ -7,7 +7,7 @@
  * 这是整个库中最核心的文件。
  */
 
-import { overpassConfig } from "./config";
+import { overpassConfig, OVERPASS_RACE_ENABLED, OVERPASS_RACE_SERVERS } from "./config";
 import {
   buildHeaders,
   hostnameFromUrl,
@@ -187,6 +187,146 @@ export async function getOverpassPause(
   }
 }
 
+// ─── 多服务器 Race 功能 ─────────────────────────────────
+
+// 官方 Overpass API 地址（优先使用）
+const OFFICIAL_OVERPASS_URL = "https://overpass-api.de/api";
+
+/**
+ * 【Race 功能】并发查询多个服务器的 /status，返回最快"有可用槽位"的服务器
+ *
+ * 核心策略（按优先级）：
+ * 1. 优先返回 pauseMs=0 的服务器（有槽可用）
+ * 2. 若多个服务器都有槽（pauseMs=0），优先选择官方接口
+ * 3. 若没有有槽的服务器，选择 pauseMs 最小的
+ * 4. 若所有服务器都失败/超时，使用官方接口
+ *
+ * 特性：
+ * - status 请求不重试，只请求一次
+ * - 每个请求有 3 秒超时
+ *
+ * @param servers        服务器 URL 列表
+ * @returns              { url: 获胜服务器URL, pauseMs: 需要等待的毫秒数 }
+ */
+export async function raceForAvailableSlot(
+  servers: string[]
+): Promise<{ url: string; pauseMs: number }> {
+  const STATUS_TIMEOUT_MS = 3000; // 3 秒超时
+
+  // 步骤1：构造所有服务器的 /status 请求 Promise（不重试，只请求一次）
+  const statusPromises = servers.map(async (baseUrl) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), STATUS_TIMEOUT_MS);
+
+    try {
+      const statusUrl = baseUrl.replace(/\/+$/, "") + "/status";
+      const response = await fetch(statusUrl, {
+        headers: buildHeaders(),
+        signal: controller.signal as AbortSignal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        return { url: baseUrl, pauseMs: Infinity, succeeded: false };
+      }
+
+      const responseText = await response.text();
+      const pauseMs = parseStatusOnce(responseText); // 不重试的解析
+
+      return { url: baseUrl, pauseMs, succeeded: true };
+    } catch (e) {
+      clearTimeout(timeout);
+      return { url: baseUrl, pauseMs: Infinity, succeeded: false, error: e };
+    }
+  });
+
+  // 步骤2：并发执行所有请求，收集结果
+  const results = await Promise.all(statusPromises);
+
+  // 步骤3：筛选成功的服务器
+  const succeeded = results.filter((r) => r.succeeded && r.pauseMs < Infinity);
+
+  if (succeeded.length === 0) {
+    // 所有服务器都失败，使用官方接口
+    log("warn", `[Overpass Race] All servers failed, falling back to official: ${OFFICIAL_OVERPASS_URL}`);
+    return { url: OFFICIAL_OVERPASS_URL, pauseMs: 0 };
+  }
+
+  // 步骤4：分类
+  // 有槽的（pauseMs=0）和需要等的（pauseMs>0）
+  const withSlots = succeeded.filter((r) => r.pauseMs === 0);
+  const waiting = succeeded.filter((r) => r.pauseMs > 0).sort((a, b) => a.pauseMs - b.pauseMs);
+
+  let winner: { url: string; pauseMs: number };
+
+  if (withSlots.length > 0) {
+    // 多个有槽？优先官方接口
+    const officialWinner = withSlots.find((r) => r.url === OFFICIAL_OVERPASS_URL);
+    winner = officialWinner || withSlots[0];
+    log("info", `[Overpass Race] Winner (has slots): ${winner.url} (pauseMs=${winner.pauseMs})`);
+  } else {
+    // 没有有槽的，选等待时间最短的
+    winner = waiting[0];
+    log("info", `[Overpass Race] Winner (shortest wait): ${winner.url} (pauseMs=${winner.pauseMs})`);
+  }
+
+  return { url: winner.url, pauseMs: winner.pauseMs };
+}
+
+/**
+ * 解析 /status 响应文本（单次，不重试）
+ *
+ * @param responseText /status 返回的纯文本
+ * @returns pauseMs: 0 表示有槽可用，>0 表示需要等待的毫秒数
+ */
+function parseStatusOnce(responseText: string): number {
+  try {
+    const lines = responseText.split("\n");
+    let statusLine = "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (
+        trimmed.startsWith("Connected") ||
+        trimmed.startsWith("Current time") ||
+        trimmed.startsWith("Rate limit") ||
+        trimmed.startsWith("Announced endpoint")
+      ) {
+        continue;
+      }
+      statusLine = trimmed;
+      break;
+    }
+
+    if (!statusLine) {
+      return Infinity;
+    }
+
+    const firstToken = statusLine.split(" ")[0];
+
+    // 有槽可用
+    const slotCount = parseInt(firstToken, 10);
+    if (!isNaN(slotCount) && slotCount >= 1) {
+      return 0;
+    }
+
+    // 需要等待到指定时间
+    if (firstToken === "Slot") {
+      const match = statusLine.match(/in\s+(\d+)\s+seconds/);
+      if (match) {
+        return Math.max(parseInt(match[1], 10) * 1000, 1000);
+      }
+      return Infinity;
+    }
+
+    // 正在运行/无明确信息
+    return Infinity;
+  } catch (e) {
+    return Infinity;
+  }
+}
+
 // ─── 请求闭环 ────────────────────────────────────────────
 
 /**
@@ -205,18 +345,15 @@ export type OverpassProgressCallback = (
  *
  * 对标 OSMnx/_overpass.py 的 _overpass_request() (L435-L493)
  *
- * 完整执行链：
- *   1. 调用 getOverpassPause() 检查槽位 → 计算等待时间
- *   2. sleep 等待
- *   3. 向 {overpassUrl}/interpreter 发起 POST 请求
- *   4. 如果收到 429 (Too Many Requests) 或 504 (Gateway Timeout)：
- *      强制冷却 55 秒后递归重试（对标 OSMnx L478-L486）
- *   5. 调用 parseResponse() 解析 JSON + Remark 检测
- *   6. 返回干净的数据
+ * 【包装入口】根据 OVERPASS_RACE_ENABLED 开关选择老/新方案：
+ *
+ * - OVERPASS_RACE_ENABLED = false（默认）：调用原有 _overpassRequestInternal，保持完全一致的行为
+ * - OVERPASS_RACE_ENABLED = true：新逻辑，race 多服务器找最快有槽的
  *
  * @param query Overpass QL 查询字符串（完整的，包含 settings 头）
  * @param maxRetries 最大重试次数，防止无限递归。默认 5。
  * @param onProgress 进度回调函数，用于在等待/重试时更新进度
+ * @param preFetchedPauseMs 预先获取的等待毫秒数（可选）
  * @returns Overpass API 返回的 JSON 数据
  * @throws {OverpassResponseError} 数据不完整或含 remark
  * @throws {OverpassStatusCodeError} HTTP 状态码错误
@@ -227,7 +364,13 @@ export async function overpassRequest(
   onProgress?: OverpassProgressCallback,
   preFetchedPauseMs?: number
 ): Promise<Record<string, unknown>> {
-  return _overpassRequestInternal(query, maxRetries, 0, onProgress, preFetchedPauseMs);
+  // 方案A（老逻辑）：关闭开关时，完全沿用原逻辑
+  if (!OVERPASS_RACE_ENABLED) {
+    return _overpassRequestInternal(query, maxRetries, 0, onProgress, preFetchedPauseMs);
+  }
+
+  // 方案B（新逻辑）：多服务器 race
+  return _overpassRequestWithRace(query, maxRetries, 0, onProgress, preFetchedPauseMs);
 }
 
 async function _overpassRequestInternal(
@@ -347,6 +490,142 @@ async function _overpassRequestInternal(
   const data = await parseResponse(response);
 
   log("info", `Successfully received data from '${hostname}'`);
+  return data;
+}
+
+// ─── 多服务器 Race 模式的请求实现 ───────────────────────
+
+/**
+ * 【新逻辑】使用多服务器 race 的方式发起 Overpass 请求
+ *
+ * 流程：
+ * 1. 若有 preFetchedPauseMs（预计算的等待时间），跳过 race，直接请求
+ * 2. 否则，race 多服务器的 /status，选取最快有槽的
+ * 3. 等待（如需要）后发起数据请求
+ * 4. 若请求失败（429/504），触发单服务器回退重试（回退到单服务器模式）
+ *
+ * @param query        Overpass QL 查询字符串
+ * @param maxRetries   最大重试次数
+ * @param attempt      当前尝试次数
+ * @param onProgress   进度回调函数
+ * @param preFetchedPauseMs 预计算的等待时间（如有）
+ */
+async function _overpassRequestWithRace(
+  query: string,
+  maxRetries: number,
+  attempt: number,
+  onProgress?: OverpassProgressCallback,
+  preFetchedPauseMs?: number
+): Promise<Record<string, unknown>> {
+  const servers = OVERPASS_RACE_SERVERS;
+  const hostname = hostnameFromUrl(servers[0]); // 用于日志
+
+  // ── 步骤 1：槽位检查（Race 模式） ──
+  let pauseMs: number;
+  let selectedServer: string;
+
+  if (preFetchedPauseMs !== undefined) {
+    // 外部已预计算 pause（如分块请求的第一块），跳过 race
+    pauseMs = preFetchedPauseMs;
+    selectedServer = overpassConfig.overpassUrl.replace(/\/+$/, "");
+    log("info", `[Race] Using pre-fetched pause: ${pauseMs}ms on ${selectedServer}`);
+  } else {
+    // 【核心新逻辑】race 多服务器找可用槽
+    log("info", `[Race] Racing ${servers.length} servers for available slot...`);
+    const result = await raceForAvailableSlot(servers);
+    pauseMs = result.pauseMs;
+    selectedServer = result.url;
+    log("info", `[Race] Selected server: ${selectedServer}, pauseMs=${pauseMs}`);
+  }
+
+  // ── 步骤 2：等待（如需要） ──
+  if (pauseMs > 0) {
+    log("info", `Racing: Pausing ${(pauseMs / 1000).toFixed(1)}s before POST to '${hostname}'`);
+    if (onProgress) {
+      let remaining = Math.ceil(pauseMs / 1000);
+      while (remaining > 0) {
+        onProgress(0, "waiting_slot", undefined, undefined, remaining);
+        await new Promise((r) => setTimeout(r, 1000));
+        remaining--;
+      }
+      onProgress(0, "waiting_slot_complete");
+    } else {
+      await sleep(pauseMs);
+    }
+  }
+
+  // ── 步骤 3：发起 POST 请求（单服务器模式） ──
+  // 注意：race 只是选服务器，实际请求还是单服务器的逻辑
+  const interpreterUrl = `${selectedServer}/interpreter`;
+  log("info", `Race: POST ${interpreterUrl} (attempt ${attempt + 1}/${maxRetries})`);
+
+  let response: Response;
+  try {
+    response = await fetch(interpreterUrl, {
+      method: "POST",
+      headers: {
+        ...buildHeaders(),
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: AbortSignal.timeout(overpassConfig.requestsTimeout),
+    });
+  } catch (e) {
+    // 网络层错误：回退到单服务器重试
+    if (attempt < maxRetries - 1) {
+      const errorPause = 10_000;
+      log("warn", `Race: Network error: ${e}. Retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`);
+      if (onProgress) {
+        let remaining = 10;
+        while (remaining > 0) {
+          onProgress(0, "retrying_error", undefined, undefined, remaining);
+          await new Promise((r) => setTimeout(r, 1000));
+          remaining--;
+        }
+        onProgress(0, "retrying_complete");
+      } else {
+        await sleep(errorPause);
+      }
+      return _overpassRequestWithRace(query, maxRetries, attempt + 1, onProgress);
+    }
+    throw new OverpassResponseError(`Network error after ${maxRetries} attempts: ${e}`);
+  }
+
+  // ── 步骤 4：处理 429/504 错误码（回退到单服务器模式） ──
+  if (response.status === 429 || response.status === 504) {
+    if (attempt < maxRetries - 1) {
+      const errorPause = 10_000;
+      log(
+        "warn",
+        `Race: '${hostname}' responded ${response.status} ${response.statusText}: ` +
+          `retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`
+      );
+      if (onProgress) {
+        let remaining = 10;
+        console.log(`[Overpass] Race 504 retrying_error callback starting, onProgress is defined`);
+        while (remaining > 0) {
+          console.log(`[Overpass] calling onProgress with retrying_error, remaining=${remaining}`);
+          onProgress(0, "retrying_error", undefined, undefined, remaining);
+          await new Promise((r) => setTimeout(r, 1000));
+          remaining--;
+        }
+        console.log(`[Overpass] retrying_error countdown complete, calling retrying_complete`);
+        onProgress(0, "retrying_complete");
+      } else {
+        await sleep(errorPause);
+      }
+      // 回退到单服务器模式（使用原 _overpassRequestInternal）
+      return _overpassRequestInternal(query, maxRetries, attempt + 1, onProgress);
+    }
+    throw new OverpassResponseError(
+      `Server returned ${response.status} after ${maxRetries} attempts`,
+      response.status
+    );
+  }
+
+  // ── 步骤 5：解析响应 + Remark 校验 ──
+  const data = await parseResponse(response);
+  log("info", `Race: Successfully received data from '${hostname}'`);
   return data;
 }
 
