@@ -818,7 +818,9 @@ export default function MapPosterGenerator() {
         setGenerationStep(m.step_waiting_api({ seconds }));
       } else if (step.startsWith("step_retrying_error:")) {
         const seconds = step.split(":")[1];
-        console.log(`[App] step_retrying_error: seconds=${seconds}, message=${m.step_retrying_error({ seconds })}`);
+        console.log(
+          `[App] step_retrying_error: seconds=${seconds}, message=${m.step_retrying_error({ seconds })}`
+        );
         setGenerationStep(m.step_retrying_error({ seconds }));
       } else {
         // 处理普通步骤
@@ -957,7 +959,11 @@ export default function MapPosterGenerator() {
       if (pngData) {
         setGenerationProgress(100);
         setGenerationStep(m.step_complete());
-        console.log('[App] generationCompleteRef set to true, isGameOpen:', isGameOpen, new Date().toISOString())
+        console.log(
+          "[App] generationCompleteRef set to true, isGameOpen:",
+          isGameOpen,
+          new Date().toISOString()
+        );
         generationCompleteRef.current = true;
         await yieldMainThread();
 
@@ -972,13 +978,21 @@ export default function MapPosterGenerator() {
       console.error(m.error_generating(), error);
       alert(m.error_generating() + (error instanceof Error ? error.message : String(error)));
     } finally {
-      console.log('[App] finally block, isGameOpenRef:', isGameOpenRef.current, 'isGameOpen(state):', isGameOpen, 'generationCompleteRef:', generationCompleteRef.current, new Date().toISOString())
+      console.log(
+        "[App] finally block, isGameOpenRef:",
+        isGameOpenRef.current,
+        "isGameOpen(state):",
+        isGameOpen,
+        "generationCompleteRef:",
+        generationCompleteRef.current,
+        new Date().toISOString()
+      );
       mapDataService.setProgressCallback(null);
       if (!isGameOpenRef.current) {
-        console.log('[App] finally: closing loading because game is not open')
+        console.log("[App] finally: closing loading because game is not open");
         setIsGenerating(false);
       } else {
-        console.log('[App] finally: game is open, NOT closing loading')
+        console.log("[App] finally: game is open, NOT closing loading");
       }
       workers.forEach((w) => w.terminate());
     }
@@ -1060,9 +1074,11 @@ export default function MapPosterGenerator() {
                   : m.generating_time_estimate()} */}
                 {m.generating_time_estimate()}
               </p>
-              <p className={`text-sm text-center ${generationProgress === 100 && isGameOpen ? '' : 'animate-pulse'} text-muted-foreground`}>
+              <p
+                className={`text-sm text-center ${generationProgress === 100 && isGameOpen ? "" : "animate-pulse"} text-muted-foreground`}
+              >
                 {generationProgress === 100 && isGameOpen
-                  ? m.game_complete_hint?.() ?? "图片已生成完毕！请关闭游戏后继续"
+                  ? (m.game_complete_hint?.() ?? "图片已生成完毕！请关闭游戏后继续")
                   : generationStep}
               </p>
               <SnakeGame
@@ -1073,19 +1089,24 @@ export default function MapPosterGenerator() {
                   setIsGameOpen(open);
                   isGameOpenRef.current = open; // sync ref immediately
                   if (!open && generationCompleteRef.current) {
-                    console.log('[App] conditions met, closing loading')
+                    console.log("[App] conditions met, closing loading");
                     setIsGenerating(false);
                     generationCompleteRef.current = false;
                   }
                 }}
                 triggerLabel={m.snake_game_trigger?.() ?? "消消时间"}
               />
-              <div className="flex justify-end pt-2" style={{ visibility: generationProgress === 100 && isGameOpen ? 'visible' : 'hidden' }}>
+              <div
+                className="flex justify-end pt-2"
+                style={{
+                  visibility: generationProgress === 100 && isGameOpen ? "visible" : "hidden",
+                }}
+              >
                 <Button
                   size="sm"
                   className="text-muted-foreground bg-secondary hover:bg-primary hover:text-primary-foreground cursor-pointer"
                   onClick={() => {
-                    console.log('[App] manual close loading')
+                    console.log("[App] manual close loading");
                     setIsGenerating(false);
                     generationCompleteRef.current = false;
                   }}

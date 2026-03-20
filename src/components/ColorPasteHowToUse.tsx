@@ -354,9 +354,7 @@ export function ColorPasteHowToUse() {
             <div className="space-y-2">
               <Label className="text-xs font-medium">{m.how_to_use_prompt_label()}</Label>
               <div className="relative">
-                <div
-                  className="w-full min-h-[120px] sm:min-h-[150px] p-3 text-[10px] leading-relaxed font-mono bg-secondary/50 border border-border rounded-md text-foreground whitespace-pre-wrap break-words overflow-y-auto max-h-[200px]"
-                >
+                <div className="w-full min-h-[120px] sm:min-h-[150px] p-3 text-[10px] leading-relaxed font-mono bg-secondary/50 border border-border rounded-md text-foreground whitespace-pre-wrap break-words overflow-y-auto max-h-[200px]">
                   {prompt}
                 </div>
                 <Button

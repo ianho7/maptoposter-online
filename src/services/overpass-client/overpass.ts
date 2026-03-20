@@ -248,7 +248,10 @@ export async function raceForAvailableSlot(
 
   if (succeeded.length === 0) {
     // 所有服务器都失败，使用官方接口
-    log("warn", `[Overpass Race] All servers failed, falling back to official: ${OFFICIAL_OVERPASS_URL}`);
+    log(
+      "warn",
+      `[Overpass Race] All servers failed, falling back to official: ${OFFICIAL_OVERPASS_URL}`
+    );
     return { url: OFFICIAL_OVERPASS_URL, pauseMs: 0 };
   }
 
@@ -267,7 +270,10 @@ export async function raceForAvailableSlot(
   } else {
     // 没有有槽的，选等待时间最短的
     winner = waiting[0];
-    log("info", `[Overpass Race] Winner (shortest wait): ${winner.url} (pauseMs=${winner.pauseMs})`);
+    log(
+      "info",
+      `[Overpass Race] Winner (shortest wait): ${winner.url} (pauseMs=${winner.pauseMs})`
+    );
   }
 
   return { url: winner.url, pauseMs: winner.pauseMs };
@@ -574,7 +580,10 @@ async function _overpassRequestWithRace(
     // 网络层错误：回退到单服务器重试
     if (attempt < maxRetries - 1) {
       const errorPause = 10_000;
-      log("warn", `Race: Network error: ${e}. Retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`);
+      log(
+        "warn",
+        `Race: Network error: ${e}. Retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`
+      );
       if (onProgress) {
         let remaining = 10;
         while (remaining > 0) {
