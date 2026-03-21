@@ -333,9 +333,7 @@ export function ColorPasteHowToUse() {
         <DialogContent className="max-w-md w-[calc(100%-2rem)] sm:w-full max-h-[90vh] overflow-y-auto">
           <div className="space-y-4 sm:space-y-5">
             {/* Header */}
-            <DialogTitle className="text-lg font-serif font-semibold">
-              {m.how_to_use_title()}
-            </DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{m.how_to_use_title()}</DialogTitle>
 
             {/* Step 1 */}
             <div className="space-y-2">

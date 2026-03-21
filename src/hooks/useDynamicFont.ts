@@ -8,7 +8,8 @@ const CORMORANT_URL =
 
 const FONTS: Record<string, { url?: string; family: string }> = {
   en: {
-    family: "'Sitea', 'Playfair Display', Georgia, serif",
+    url: "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,400&display=swap",
+    family: "'Fraunces', Georgia, serif",
   },
   fr: {
     url: CORMORANT_URL,
@@ -22,7 +23,7 @@ const FONTS: Record<string, { url?: string; family: string }> = {
     url: CORMORANT_URL,
     family: "'Cormorant Garamond', 'Sitea', Georgia, serif",
   },
-  "zh-CN": {
+  zh: {
     url: "https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;700&display=swap",
     family: "'Noto Serif SC', 'Sitea', STSong, serif",
   },

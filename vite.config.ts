@@ -5,6 +5,7 @@ import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
+import Sitemap from 'vite-plugin-sitemap'
 // import oxlint from 'vite-plugin-oxlint';
 
 // https://vite.dev/config/
@@ -12,6 +13,7 @@ export default defineConfig({
   base: './',
   plugins: [paraglideVitePlugin({ project: './project.inlang', outdir: './src/paraglide' }),
   react(),
+  Sitemap({ hostname: 'http://maptoposter.0v0.one' }),
   // oxlint({ path: 'oxlint.json' }),
   wasm(),
   topLevelAwait(),

@@ -1,15 +1,6 @@
 @import "tailwindcss";
 /* @import 'tw-animate-css'; */
 
-/* Sitea Font */
-@font-face {
-  font-family: "Sitea";
-  src: url("./assets/Sitea.woff2") format("woff2");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -88,7 +79,6 @@
 
 @theme inline {
   --font-sans: var(--font-crimson), "Crimson Text", Georgia, serif;
-  --font-serif: "Sitea", "Playfair Display", Georgia, serif;
   /* 新增 */
   --font-body: "Sitea", "Playfair Display", Georgia, serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback";

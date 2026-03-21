@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { MapPosterPreview } from "@/components/artistic-map";
-import SnakeGame from "@/components/SnakeGame";
+import SnakeGame from "@/components/snake-game";
 // import { ColorPasteHowToUse } from "@/components/ColorPasteHowToUse";
 import { cn } from "@/lib/utils";
 import { useLocationData } from "@/hooks/useLocationData";
@@ -49,6 +49,8 @@ import * as m from "@/paraglide/messages";
 import { getLocale, setLocale, locales } from "@/paraglide/runtime";
 import { useDynamicFont } from "./hooks/useDynamicFont";
 import { PosterGallery } from "./components/gallery";
+import Footer from "./components/footer";
+import { SEOHead } from "./hooks/useSEO";
 
 type AvailableLanguageTag = (typeof locales)[number];
 
@@ -170,6 +172,13 @@ export default function MapPosterGenerator() {
   // Localized Sizes
   const SIZES: PosterSize[] = [
     {
+      id: "iphone",
+      name: m.size_iphone(),
+      width: 1500,
+      height: 3200,
+      icon: <Smartphone className="w-4 h-4" />,
+    },
+    {
       id: "a4-portrait",
       name: m.size_a4_portrait(),
       width: 2480,
@@ -252,19 +261,30 @@ export default function MapPosterGenerator() {
 
   // Initialize language on mount
   useEffect(() => {
-    const savedLang = localStorage.getItem("lang") as AvailableLanguageTag;
-    if (savedLang && locales.includes(savedLang)) {
-      setLocale(savedLang, { reload: false });
-      setActiveLang(savedLang);
-    } else {
-      const browserLang = navigator.language;
-      const matchedLang = locales.find((tag) => browserLang.startsWith(tag));
-      const finalLang = (matchedLang || "en") as AvailableLanguageTag;
-      setLocale(finalLang, { reload: false });
-      setActiveLang(finalLang);
-      localStorage.setItem("lang", finalLang);
+    let lang: AvailableLanguageTag;
+
+    // Priority 1: URL path (e.g., /fr/ or /zh/)
+    const pathLang = window.location.pathname.replace(/^\//, "").split("/")[0];
+    if (pathLang && locales.includes(pathLang as AvailableLanguageTag)) {
+      lang = pathLang as AvailableLanguageTag;
+    }
+    // Priority 2: localStorage
+    else {
+      const savedLang = localStorage.getItem("lang") as AvailableLanguageTag;
+      if (savedLang && locales.includes(savedLang)) {
+        lang = savedLang;
+      }
+      // Priority 3: Browser language
+      else {
+        const browserLang = navigator.language;
+        const matchedLang = locales.find((tag) => browserLang.startsWith(tag));
+        lang = (matchedLang || "en") as AvailableLanguageTag;
+      }
     }
 
+    setLocale(lang, { reload: false });
+    setActiveLang(lang);
+    localStorage.setItem("lang", lang);
     document.title = `${m.app_title()} - ${m.app_subtitle()}`;
   }, []);
 
@@ -1001,7 +1021,7 @@ export default function MapPosterGenerator() {
 
   const languageNames: Record<AvailableLanguageTag, string> = {
     en: "English",
-    "zh-CN": "简体中文",
+    zh: "简体中文",
     ja: "日本語",
     ko: "한국어",
     fr: "Français",
@@ -1013,181 +1033,183 @@ export default function MapPosterGenerator() {
   useDynamicFont(activeLang);
 
   return (
-    <div className="flex flex-col bg-background md:h-screen md:overflow-hidden">
-      <header className="shrink-0 bg-background">
-        <div className="container mx-auto px-4 py-4 flex items-center">
-          <img className="w-10 h-10 mr-2" src="/icon.svg" alt="icon" />
-          <div className="mr-auto select-none">
-            <h1 className="text-2xl tracking-wide font-serif text-foreground">{m.app_title()}</h1>
-            <p className="text-xs tracking-widest uppercase text-muted-foreground">
-              {m.app_subtitle()}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Select
-              value={activeLang}
-              onValueChange={(val) => handleLanguageChange(val as AvailableLanguageTag)}
-            >
-              <SelectTrigger className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {locales.map((tag) => (
-                  <SelectItem key={tag} value={tag}>
-                    {languageNames[tag]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={handleDownload}
-              disabled={isGenerating || locationLoading}
-              className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {isGenerating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              <span className="hidden sm:inline">
-                {isGenerating ? m.generating() : m.download_button()}
-              </span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {isGenerating && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <Card className="w-[400px] p-6 shadow-2xl bg-card border-primary">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-serif text-lg text-primary">{m.creating_art()}</h3>
-                <span className="text-sm font-mono text-primary/60">
-                  {Math.round(generationProgress)}%
+    <>
+      <SEOHead />
+      <div className="flex flex-col bg-background md:h-screen md:overflow-hidden">
+        <header className="shrink-0 bg-background">
+          <div className="mx-0 md:mx-20 px-4 py-4 flex items-center">
+            <img className="w-10 h-10 mr-2" src="/icon.svg" alt="icon" />
+            <div className="mr-auto select-none">
+              <h1 className="text-2xl tracking-wide  text-foreground">{m.app_title()}</h1>
+              <p className="text-xs tracking-widest uppercase text-muted-foreground">
+                {m.app_subtitle()}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Select
+                value={activeLang}
+                onValueChange={(val) => handleLanguageChange(val as AvailableLanguageTag)}
+              >
+                <SelectTrigger className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {locales.map((tag) => (
+                    <SelectItem key={tag} value={tag}>
+                      {languageNames[tag]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={handleDownload}
+                disabled={isGenerating || locationLoading}
+                className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {isGenerating ? m.generating() : m.download_button()}
                 </span>
-              </div>
-              <Progress value={generationProgress} className="h-2 bg-secondary" />
-              <p className="text-xs text-center text-muted-foreground/70 flex items-center justify-center gap-1.5">
-                <Clock className="w-3 h-3" />
-                {/* {generationProgress === 100 && isGameOpen
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {isGenerating && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <Card className="w-[400px] p-6 shadow-2xl bg-card border-primary">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className=" text-lg text-primary">{m.creating_art()}</h3>
+                  <span className="text-sm font-mono text-primary/60">
+                    {Math.round(generationProgress)}%
+                  </span>
+                </div>
+                <Progress value={generationProgress} className="h-2 bg-secondary" />
+                <p className="text-xs text-center text-muted-foreground/70 flex items-center justify-center gap-1.5">
+                  <Clock className="w-3 h-3" />
+                  {/* {generationProgress === 100 && isGameOpen
                   ? m.step_complete()
                   : m.generating_time_estimate()} */}
-                {m.generating_time_estimate()}
-              </p>
-              <p
-                className={`text-sm text-center ${generationProgress === 100 && isGameOpen ? "" : "animate-pulse"} text-muted-foreground`}
-              >
-                {generationProgress === 100 && isGameOpen
-                  ? (m.game_complete_hint?.() ?? "图片已生成完毕！请关闭游戏后继续")
-                  : generationStep}
-              </p>
-              <SnakeGame
-                inline={true}
-                onOpenChange={(open) => {
-                  // console.log('[App] onOpenChange:', open, 'generationCompleteRef:', generationCompleteRef.current, new Date().toISOString())
-                  // console.trace('[App] onOpenChange stack')
-                  setIsGameOpen(open);
-                  isGameOpenRef.current = open; // sync ref immediately
-                  if (!open && generationCompleteRef.current) {
-                    console.log("[App] conditions met, closing loading");
-                    setIsGenerating(false);
-                    generationCompleteRef.current = false;
-                  }
-                }}
-                triggerLabel={m.snake_game_trigger?.() ?? "消消时间"}
-              />
-              <div
-                className="flex justify-end pt-2"
-                style={{
-                  visibility: generationProgress === 100 && isGameOpen ? "visible" : "hidden",
-                }}
-              >
-                <Button
-                  size="sm"
-                  className="text-muted-foreground bg-secondary hover:bg-primary hover:text-primary-foreground cursor-pointer"
-                  onClick={() => {
-                    console.log("[App] manual close loading");
-                    setIsGenerating(false);
-                    generationCompleteRef.current = false;
+                  {m.generating_time_estimate()}
+                </p>
+                <p
+                  className={`text-sm text-center ${generationProgress === 100 && isGameOpen ? "" : "animate-pulse"} text-muted-foreground`}
+                >
+                  {generationProgress === 100 && isGameOpen
+                    ? (m.game_complete_hint?.() ?? "图片已生成完毕！请关闭游戏后继续")
+                    : generationStep}
+                </p>
+                <SnakeGame
+                  inline={true}
+                  onOpenChange={(open) => {
+                    // console.log('[App] onOpenChange:', open, 'generationCompleteRef:', generationCompleteRef.current, new Date().toISOString())
+                    // console.trace('[App] onOpenChange stack')
+                    setIsGameOpen(open);
+                    isGameOpenRef.current = open; // sync ref immediately
+                    if (!open && generationCompleteRef.current) {
+                      console.log("[App] conditions met, closing loading");
+                      setIsGenerating(false);
+                      generationCompleteRef.current = false;
+                    }
+                  }}
+                  triggerLabel={m.snake_game_trigger?.() ?? "消消时间"}
+                />
+                <div
+                  className="flex justify-end pt-2"
+                  style={{
+                    visibility: generationProgress === 100 && isGameOpen ? "visible" : "hidden",
                   }}
                 >
-                  关闭
-                </Button>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      <main className="flex-1 overflow-auto custom-scrollbar container mx-auto px-4 py-6">
-        <div className="grid md:grid-cols-[380px_1fr] gap-8 md:h-full">
-          <div className="space-y-5 md:overflow-y-auto custom-scrollbar md:min-h-0">
-            <Card className="p-4 bg-card border-border">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" />
-                <h2 className="text-lg font-serif text-foreground">{m.location()}</h2>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {m.label_country()}
-                  </Label>
-                  <LocationCombobox
-                    options={countries}
-                    value={selectedCountry}
-                    onValueChange={handleCountryChange}
-                    placeholder={m.placeholder_select_country()}
-                    emptyText={m.empty_country()}
-                    disabled={locationLoading}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {m.label_state()}
-                  </Label>
-                  <LocationCombobox
-                    options={states}
-                    value={selectedState}
-                    onValueChange={handleStateChange}
-                    placeholder={m.placeholder_select_state()}
-                    emptyText={m.empty_state()}
-                    disabled={states.length === 0 && !isStatesLoading}
-                    isLoading={isStatesLoading}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {m.label_city()}
-                  </Label>
-                  <LocationCombobox
-                    options={cities}
-                    value={selectedCity}
-                    onValueChange={handleCityChange}
-                    placeholder={m.placeholder_select_city()}
-                    emptyText={m.empty_city()}
-                    disabled={cities.length === 0 && !isCitiesLoading}
-                    isLoading={isCitiesLoading}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {m.label_custom_title()}
-                  </Label>
-                  <Input
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    placeholder={location.city}
-                    className="border-border bg-card text-foreground"
-                  />
+                  <Button
+                    size="sm"
+                    className="text-muted-foreground bg-secondary hover:bg-primary hover:text-primary-foreground cursor-pointer"
+                    onClick={() => {
+                      console.log("[App] manual close loading");
+                      setIsGenerating(false);
+                      generationCompleteRef.current = false;
+                    }}
+                  >
+                    关闭
+                  </Button>
                 </div>
               </div>
             </Card>
+          </div>
+        )}
 
-            {/* <Card className="p-4 bg-card border-border">
+        <main className="flex-1 overflow-auto custom-scrollbar w-full mx-auto px-4 py-6">
+          <div className="grid md:grid-cols-[380px_1fr] px-0 md:px-20 gap-8 md:h-full">
+            <div className="space-y-5 md:overflow-y-auto custom-scrollbar md:min-h-0">
+              <Card className="p-4 bg-card border-border">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-primary" />
+                  <h2 className="text-lg  text-foreground">{m.location()}</h2>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {m.label_country()}
+                    </Label>
+                    <LocationCombobox
+                      options={countries}
+                      value={selectedCountry}
+                      onValueChange={handleCountryChange}
+                      placeholder={m.placeholder_select_country()}
+                      emptyText={m.empty_country()}
+                      disabled={locationLoading}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {m.label_state()}
+                    </Label>
+                    <LocationCombobox
+                      options={states}
+                      value={selectedState}
+                      onValueChange={handleStateChange}
+                      placeholder={m.placeholder_select_state()}
+                      emptyText={m.empty_state()}
+                      disabled={states.length === 0 && !isStatesLoading}
+                      isLoading={isStatesLoading}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {m.label_city()}
+                    </Label>
+                    <LocationCombobox
+                      options={cities}
+                      value={selectedCity}
+                      onValueChange={handleCityChange}
+                      placeholder={m.placeholder_select_city()}
+                      emptyText={m.empty_city()}
+                      disabled={cities.length === 0 && !isCitiesLoading}
+                      isLoading={isCitiesLoading}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {m.label_custom_title()}
+                    </Label>
+                    <Input
+                      value={customTitle}
+                      onChange={(e) => setCustomTitle(e.target.value)}
+                      placeholder={location.city}
+                      className="border-border bg-card text-foreground"
+                    />
+                  </div>
+                </div>
+              </Card>
+
+              {/* <Card className="p-4 bg-card border-border">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-4 h-4 text-primary" />
-                <h2 className="text-lg font-serif text-foreground">{m.label_lod_mode()}</h2>
+                <h2 className="text-lg  text-foreground">{m.label_lod_mode()}</h2>
               </div>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -1221,7 +1243,7 @@ export default function MapPosterGenerator() {
                         <p className="text-[10px] font-medium uppercase tracking-widest opacity-70 text-primary">
                           {m.label_note()}
                         </p>
-                        <p className="text-[10px] leading-normal italic font-serif text-muted-foreground">
+                        <p className="text-[10px] leading-normal italic  text-muted-foreground">
                           {m.lod_detailed_desc()}
                         </p>
                       </div>
@@ -1256,65 +1278,65 @@ export default function MapPosterGenerator() {
               </div>
             </Card> */}
 
-            <Card className="p-4 bg-card border-border">
-              <div className="flex items-center gap-2">
-                <Palette className="w-4 h-4 text-primary" />
-                <h2 className="text-lg font-serif text-foreground">{m.theme_colors()}</h2>
-              </div>
-              <Tabs defaultValue="presets" className="w-full">
-                <TabsList className="w-full bg-secondary">
-                  <TabsTrigger
-                    value="presets"
-                    className="flex-1 text-foreground data-[state=active]:text-vanilla"
-                    onClick={() => setUseCustomColors(false)}
-                  >
-                    {m.tab_presets()}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="custom"
-                    className="flex-1 text-foreground data-[state=active]:text-vanilla"
-                    onClick={() => setUseCustomColors(true)}
-                  >
-                    {m.tab_custom()}
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="presets" className="mt-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    {THEMES.map((theme) => (
-                      <button
-                        key={theme.id}
-                        onClick={() => {
-                          setSelectedTheme(theme);
-                          setCustomColors(theme.colors);
-                          setUseCustomColors(false);
-                        }}
-                        className={cn(
-                          "p-2 border-1 transition-all flex flex-col items-start gap-2",
-                          selectedTheme.id === theme.id && !useCustomColors
-                            ? "border-primary bg-background/60"
-                            : "border-transparent bg-transparent hover:bg-background/50"
-                        )}
-                      >
-                        <div className="flex -space-x-1.5">
-                          {Object.values(theme.colors)
-                            .slice(0, 4)
-                            .map((color, i) => (
-                              <div
-                                key={i}
-                                className="w-5 h-5 border border-background shadow-sm"
-                                style={{ backgroundColor: color }}
-                              />
-                            ))}
-                        </div>
-                        <span className="text-[11px] font-medium line-clamp-1 text-foreground">
-                          {themeNameMap[theme.id] || theme.name}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </TabsContent>
-                <TabsContent value="custom" className="mt-3">
-                  {/* <div className="mb-4 flex items-center gap-2">
+              <Card className="p-4 bg-card border-border">
+                <div className="flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-primary" />
+                  <h2 className="text-lg  text-foreground">{m.theme_colors()}</h2>
+                </div>
+                <Tabs defaultValue="presets" className="w-full">
+                  <TabsList className="w-full bg-secondary">
+                    <TabsTrigger
+                      value="presets"
+                      className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                      onClick={() => setUseCustomColors(false)}
+                    >
+                      {m.tab_presets()}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="custom"
+                      className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                      onClick={() => setUseCustomColors(true)}
+                    >
+                      {m.tab_custom()}
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="presets" className="mt-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      {THEMES.map((theme) => (
+                        <button
+                          key={theme.id}
+                          onClick={() => {
+                            setSelectedTheme(theme);
+                            setCustomColors(theme.colors);
+                            setUseCustomColors(false);
+                          }}
+                          className={cn(
+                            "p-2 border-1 transition-all flex flex-col items-start gap-2",
+                            selectedTheme.id === theme.id && !useCustomColors
+                              ? "border-primary bg-background/60"
+                              : "border-transparent bg-transparent hover:bg-background/50"
+                          )}
+                        >
+                          <div className="flex -space-x-1.5">
+                            {Object.values(theme.colors)
+                              .slice(0, 4)
+                              .map((color, i) => (
+                                <div
+                                  key={i}
+                                  className="w-5 h-5 border border-background shadow-sm"
+                                  style={{ backgroundColor: color }}
+                                />
+                              ))}
+                          </div>
+                          <span className="text-[11px] font-medium line-clamp-1 text-foreground">
+                            {themeNameMap[theme.id] || theme.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="custom" className="mt-3">
+                    {/* <div className="mb-4 flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -1326,181 +1348,183 @@ export default function MapPosterGenerator() {
                     </Button>
                     <ColorPasteHowToUse />
                   </div> */}
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar pt-1">
-                    {[
-                      { key: "bg", label: m.color_bg() },
-                      { key: "text", label: m.color_text() },
-                      { key: "gradient_color", label: m.color_gradient() },
-                      { key: "water", label: m.color_water() },
-                      { key: "parks", label: m.color_parks() },
-                      { key: "poi_color", label: m.color_poi() },
-                      { key: "road_motorway", label: m.color_road_motorway() },
-                      { key: "road_primary", label: m.color_road_primary() },
-                      { key: "road_secondary", label: m.color_road_secondary() },
-                      { key: "road_tertiary", label: m.color_road_tertiary() },
-                      { key: "road_residential", label: m.color_road_residential() },
-                      { key: "road_default", label: m.color_road_default() },
-                    ].map(({ key, label }) => (
-                      <div key={key} className="flex items-center justify-between gap-4">
-                        <Label className="text-[11px] whitespace-nowrap text-muted-foreground">
-                          {label}
-                        </Label>
-                        <div className="flex items-center gap-2">
-                          <div className="relative group">
-                            <input
-                              type="color"
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar pt-1">
+                      {[
+                        { key: "bg", label: m.color_bg() },
+                        { key: "text", label: m.color_text() },
+                        { key: "gradient_color", label: m.color_gradient() },
+                        { key: "water", label: m.color_water() },
+                        { key: "parks", label: m.color_parks() },
+                        { key: "poi_color", label: m.color_poi() },
+                        { key: "road_motorway", label: m.color_road_motorway() },
+                        { key: "road_primary", label: m.color_road_primary() },
+                        { key: "road_secondary", label: m.color_road_secondary() },
+                        { key: "road_tertiary", label: m.color_road_tertiary() },
+                        { key: "road_residential", label: m.color_road_residential() },
+                        { key: "road_default", label: m.color_road_default() },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="flex items-center justify-between gap-4">
+                          <Label className="text-[11px] whitespace-nowrap text-muted-foreground">
+                            {label}
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <div className="relative group">
+                              <input
+                                type="color"
+                                value={customColors[key as keyof MapColors]}
+                                onChange={(e) =>
+                                  setCustomColors({ ...customColors, [key]: e.target.value })
+                                }
+                                className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent p-0 overflow-hidden [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none"
+                              />
+                            </div>
+                            <Input
                               value={customColors[key as keyof MapColors]}
                               onChange={(e) =>
                                 setCustomColors({ ...customColors, [key]: e.target.value })
                               }
-                              className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent p-0 overflow-hidden [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none"
+                              className="w-20 h-8 text-[11px] font-mono px-2 border-border bg-card text-foreground"
+                              placeholder="#000000"
                             />
                           </div>
-                          <Input
-                            value={customColors[key as keyof MapColors]}
-                            onChange={(e) =>
-                              setCustomColors({ ...customColors, [key]: e.target.value })
-                            }
-                            className="w-20 h-8 text-[11px] font-mono px-2 border-border bg-card text-foreground"
-                            placeholder="#000000"
-                          />
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </Card>
-
-            <Card className="p-4 bg-card border-border">
-              <div className="flex items-center gap-2">
-                <Type className="w-4 h-4 text-primary" />
-                <h2 className="text-lg font-serif text-foreground">{m.font_settings()}</h2>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {m.custom_font()}
-                  </Label>
-                  {customFont && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearCustomFont}
-                      className="h-6 px-2 text-[10px] text-destructive"
-                    >
-                      Clear
-                    </Button>
-                  )}
-                </div>
-                {!customFont ? (
-                  <div
-                    onClick={() => fontFileInputRef.current?.click()}
-                    className="border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors border-border"
-                  >
-                    <FileText className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">{m.upload_font()}</span>
-                    <span className="text-[10px] text-muted-foreground">{m.font_formats()}</span>
-                  </div>
-                ) : (
-                  <div className="border p-3 flex items-center justify-between border-border bg-card">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileCheck className="w-4 h-4 shrink-0 text-green-600" />
-                      <span className="text-sm truncate text-foreground">{fontFileName}</span>
+                      ))}
                     </div>
-                  </div>
-                )}
-                <input
-                  type="file"
-                  ref={fontFileInputRef}
-                  onChange={handleFontUpload}
-                  accept=".ttf,.otf"
-                  className="hidden"
-                />
-              </div>
-            </Card>
+                  </TabsContent>
+                </Tabs>
+              </Card>
 
-            <Card className="p-4 bg-card border-border">
-              <h2 className="text-lg mb-3 font-serif text-foreground">{m.poster_size()}</h2>
-              <div className="grid grid-cols-2 gap-2">
-                {SIZES.map((size) => (
-                  <button
-                    key={size.id}
-                    onClick={() => setSelectedSize(size)}
-                    className={cn(
-                      "p-3 border-1 transition-all flex items-center gap-2",
-                      selectedSize.id === size.id
-                        ? "border-primary bg-background/60"
-                        : "border-transparent bg-transparent hover:bg-background/50"
+              <Card className="p-4 bg-card border-border">
+                <div className="flex items-center gap-2">
+                  <Type className="w-4 h-4 text-primary" />
+                  <h2 className="text-lg  text-foreground">{m.font_settings()}</h2>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {m.custom_font()}
+                    </Label>
+                    {customFont && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearCustomFont}
+                        className="h-6 px-2 text-[10px] text-destructive"
+                      >
+                        Clear
+                      </Button>
                     )}
-                  >
-                    <span className="text-primary">{size.icon}</span>
-                    <span className="text-xs text-foreground">{size.name}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          </div>
+                  </div>
+                  {!customFont ? (
+                    <div
+                      onClick={() => fontFileInputRef.current?.click()}
+                      className="border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors border-border"
+                    >
+                      <FileText className="w-6 h-6 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">{m.upload_font()}</span>
+                      <span className="text-[10px] text-muted-foreground">{m.font_formats()}</span>
+                    </div>
+                  ) : (
+                    <div className="border p-3 flex items-center justify-between border-border bg-card">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileCheck className="w-4 h-4 shrink-0 text-green-600" />
+                        <span className="text-sm truncate text-foreground">{fontFileName}</span>
+                      </div>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    ref={fontFileInputRef}
+                    onChange={handleFontUpload}
+                    accept=".ttf,.otf"
+                    className="hidden"
+                  />
+                </div>
+              </Card>
 
-          <div
-            className="flex flex-col items-center justify-center p-8 relative overflow-hidden bg-card border-border md:h-full min-h-[400px]"
-            style={{
-              maxHeight: "100%",
-              maxWidth: "100%",
-              background: `
+              <Card className="p-4 bg-card border-border">
+                <h2 className="text-lg mb-3  text-foreground">{m.poster_size()}</h2>
+                <div className="grid grid-cols-2 gap-2">
+                  {SIZES.map((size) => (
+                    <button
+                      key={size.id}
+                      onClick={() => setSelectedSize(size)}
+                      className={cn(
+                        "p-3 border-1 transition-all flex items-center gap-2",
+                        selectedSize.id === size.id
+                          ? "border-primary bg-background/60"
+                          : "border-transparent bg-transparent hover:bg-background/50"
+                      )}
+                    >
+                      <span className="text-primary">{size.icon}</span>
+                      <span className="text-xs text-foreground">{size.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            </div>
+
+            <div
+              className="flex flex-col items-center justify-center p-8 relative overflow-hidden bg-card border-border md:h-full min-h-[400px]"
+              style={{
+                maxHeight: "100%",
+                maxWidth: "100%",
+                background: `
                       radial-gradient(ellipse at 30% 20%, ${colors.bg}dd 0%, transparent 50%),
                       radial-gradient(ellipse at 70% 80%, ${colors.text}cc 0%, transparent 40%),
                       linear-gradient(135deg, ${colors.parks} 0%, ${colors.water}f0 50%, ${colors.poi_color}dd 100%)
                     `,
-              backdropFilter: "blur(8px)",
-            }}
-          >
-            <div
-              className="absolute inset-0 opacity-[0.03] pointer-events-none"
-              style={{
-                backgroundImage: "radial-gradient(#000 1px, transparent 1px)",
-                backgroundSize: "20px 20px",
+                backdropFilter: "blur(8px)",
               }}
-            />
-            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full pointer-events-none select-none">
-              <span className="text-xs tracking-wide text-white font-light whitespace-nowrap text-shadow-sm">
-                {m.preview_actual_result()} :)
-              </span>
-            </div>
-            <div
-              ref={previewRef}
-              className="flex items-center justify-center relative transition-all duration-300 ease-in-out w-full h-full p-4"
-              style={{ containerType: "size" }}
             >
               <div
-                className="relative shadow-lg"
+                className="absolute inset-0 opacity-[0.03] pointer-events-none"
                 style={{
-                  aspectRatio: `${selectedSize.width} / ${selectedSize.height}`,
-                  width: `min(${((selectedSize.width / selectedSize.height) * 100).toFixed(4)}cqh, 100cqw)`,
-                  height: `min(${((selectedSize.height / selectedSize.width) * 100).toFixed(4)}cqw, 100cqh)`,
+                  backgroundImage: "radial-gradient(#000 1px, transparent 1px)",
+                  backgroundSize: "20px 20px",
                 }}
+              />
+              <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full pointer-events-none select-none">
+                <span className="text-xs tracking-wide text-white font-light whitespace-nowrap text-shadow-sm">
+                  {m.preview_actual_result()} :)
+                </span>
+              </div>
+              <div
+                ref={previewRef}
+                className="flex items-center justify-center relative transition-all duration-300 ease-in-out w-full h-full p-4"
+                style={{ containerType: "size" }}
               >
-                <MapPosterPreview
-                  location={stableMapLocation}
-                  city={customTitle || location.city.toUpperCase() || ""}
-                  country={location.country || ""}
-                  zoom={12}
-                  radius={baseRadius}
-                  poiDensity="dense"
-                  theme={stableTheme}
-                  textColor={colors.text}
-                  gradientColor={colors.gradient_color}
-                  posterSize={selectedSize}
-                  customFont={customFont || undefined}
-                  className="w-full h-full"
-                  roadWidthMultiplier={1}
-                />
+                <div
+                  className="relative shadow-lg"
+                  style={{
+                    aspectRatio: `${selectedSize.width} / ${selectedSize.height}`,
+                    width: `min(${((selectedSize.width / selectedSize.height) * 100).toFixed(4)}cqh, 100cqw)`,
+                    height: `min(${((selectedSize.height / selectedSize.width) * 100).toFixed(4)}cqw, 100cqh)`,
+                  }}
+                >
+                  <MapPosterPreview
+                    location={stableMapLocation}
+                    city={customTitle || location.city.toUpperCase() || ""}
+                    country={location.country || ""}
+                    zoom={12}
+                    radius={baseRadius}
+                    poiDensity="dense"
+                    theme={stableTheme}
+                    textColor={colors.text}
+                    gradientColor={colors.gradient_color}
+                    posterSize={selectedSize}
+                    customFont={customFont || undefined}
+                    className="w-full h-full"
+                    roadWidthMultiplier={1}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <PosterGallery />
-      </main>
-    </div>
+          <PosterGallery />
+          <Footer />
+        </main>
+      </div>
+    </>
   );
 }
