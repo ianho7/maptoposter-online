@@ -160,6 +160,15 @@ bun run dev
 
 MIT License — see [LICENSE](LICENSE)
 
+## 💖 Support
+
+If this project has saved you time or made your life easier, consider buying me a coffee. Your support is the driving force behind the continued maintenance of this project!
+
+| Platform | Payment Method | Link |
+| :--- | :--- | :--- |
+| **Afdian** | WeChat / Alipay | [👉 Click to Sponsor](https://afdian.com/a/ianho7) |
+| **Buy Me a Coffee** | Credit Card / Apple Pay / Google Pay | [👉 Click to Sponsor](https://www.buymeacoffee.com/ianho7) |
+
 ## Acknowledgments
 
 Inspired by [@originalankur](https://github.com/originalankur)'s [maptoposter](https://github.com/originalankur/maptoposter)

@@ -160,6 +160,15 @@ bun run dev
 
 MIT 许可证 —— 详见 [LICENSE](LICENSE)
 
+## 💖 赞助支持
+
+如果您觉得这个工具为您节省了时间，欢迎请我喝杯咖啡。您的支持是项目持续更新的动力！
+
+| 支付平台 | 支付方式 | 链接 |
+| :--- | :--- | :--- |
+| **爱发电 (Afdian)** | 微信 / 支付宝 | [👉 点击前往赞助](https://afdian.com/a/ianho7) |
+| **Buy Me a Coffee** | 国际信用卡 / Apple Pay | [👉 点击前往赞助](https://www.buymeacoffee.com/ianho7) |
+
 ## 致谢
 
 灵感来源于 [@originalankur](https://github.com/originalankur) 的 [maptoposter](https://github.com/originalankur/maptoposter)
