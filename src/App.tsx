@@ -21,6 +21,8 @@ import {
   // Settings2,
   // ClipboardPaste,
   Clock,
+  Settings2,
+  // AlertCircle,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { MapPosterPreview } from "@/components/artistic-map";
@@ -1206,77 +1208,77 @@ export default function MapPosterGenerator() {
                 </div>
               </Card>
 
-              {/* <Card className="p-4 bg-card border-border">
-              <div className="flex items-center gap-2">
-                <Settings2 className="w-4 h-4 text-primary" />
-                <h2 className="text-lg  text-foreground">{m.label_lod_mode()}</h2>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {m.label_lod_mode()}
-                  </Label>
-                  <Tabs
-                    value={lodMode}
-                    onValueChange={(val) => setLodMode(val as "simplified" | "detailed")}
-                    className="w-full"
-                  >
-                    <TabsList className="w-full bg-secondary">
-                      <TabsTrigger
-                        value="simplified"
-                        className="flex-1 text-foreground data-[state=active]:text-vanilla"
-                      >
-                        {m.lod_simplified()}
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="detailed"
-                        className="flex-1 text-foreground data-[state=active]:text-vanilla"
-                      >
-                        {m.lod_detailed()}
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                  {lodMode === "detailed" && (
-                    <div className="mt-2 flex items-start gap-2.5 p-3 bg-primary/5 border border-primary/10 transition-all duration-300 animate-in fade-in slide-in-from-top-2">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary/60" />
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-medium uppercase tracking-widest opacity-70 text-primary">
-                          {m.label_note()}
-                        </p>
-                        <p className="text-[10px] leading-normal italic  text-muted-foreground">
-                          {m.lod_detailed_desc()}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+              <Card className="p-4 bg-card border-border">
+                <div className="flex items-center gap-2">
+                  <Settings2 className="w-4 h-4 text-primary" />
+                  <h2 className="text-lg  text-foreground">{m.label_lod_mode()}</h2>
                 </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-4">
+                  {/* <div className="space-y-2">
                     <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {m.label_map_radius()}
+                      {m.label_lod_mode()}
                     </Label>
-                    <span className="text-xs font-mono text-primary">{baseRadius}m</span>
+                    <Tabs
+                      value={lodMode}
+                      onValueChange={(val) => setLodMode(val as "simplified" | "detailed")}
+                      className="w-full"
+                    >
+                      <TabsList className="w-full bg-secondary">
+                        <TabsTrigger
+                          value="simplified"
+                          className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                        >
+                          {m.lod_simplified()}
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="detailed"
+                          className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                        >
+                          {m.lod_detailed()}
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    {lodMode === "detailed" && (
+                      <div className="mt-2 flex items-start gap-2.5 p-3 bg-primary/5 border border-primary/10 transition-all duration-300 animate-in fade-in slide-in-from-top-2">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary/60" />
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-medium uppercase tracking-widest opacity-70 text-primary">
+                            {m.label_note()}
+                          </p>
+                          <p className="text-[10px] leading-normal italic  text-muted-foreground">
+                            {m.lod_detailed_desc()}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div> */}
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                        {m.label_map_radius()}
+                      </Label>
+                      <span className="text-xs font-mono text-primary">{baseRadius}m</span>
+                    </div>
+                    <Select
+                      value={baseRadius.toString()}
+                      onValueChange={(val) => setBaseRadius(parseInt(val))}
+                    >
+                      <SelectTrigger className="w-full h-9 border-border bg-card">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 18 }, (_, i) => 3000 + i * 1000).map((radius) => (
+                          <SelectItem key={radius} value={radius.toString()}>
+                            {radius}m
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] italic px-1 text-muted-foreground">{m.radius_desc()}</p>
                   </div>
-                  <Select
-                    value={baseRadius.toString()}
-                    onValueChange={(val) => setBaseRadius(parseInt(val))}
-                  >
-                    <SelectTrigger className="w-full h-9 border-border bg-card">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 18 }, (_, i) => 3000 + i * 1000).map((radius) => (
-                        <SelectItem key={radius} value={radius.toString()}>
-                          {radius}m
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[10px] italic px-1 text-muted-foreground">{m.radius_desc()}</p>
                 </div>
-              </div>
-            </Card> */}
+              </Card>
 
               <Card className="p-4 bg-card border-border">
                 <div className="flex items-center gap-2">
@@ -1311,7 +1313,7 @@ export default function MapPosterGenerator() {
                             setUseCustomColors(false);
                           }}
                           className={cn(
-                            "p-2 border-1 transition-all flex flex-col items-start gap-2",
+                            "p-2 border-1 transition-all flex flex-col items-center gap-2",
                             selectedTheme.id === theme.id && !useCustomColors
                               ? "border-primary bg-background/60"
                               : "border-transparent bg-transparent hover:bg-background/50"
@@ -1328,7 +1330,7 @@ export default function MapPosterGenerator() {
                                 />
                               ))}
                           </div>
-                          <span className="text-[11px] font-medium line-clamp-1 text-foreground">
+                          <span className="text-[12px] font-medium line-clamp-1 text-foreground">
                             {themeNameMap[theme.id] || theme.name}
                           </span>
                         </button>

@@ -77,7 +77,7 @@ export default function Footer() {
                         </div> */}
 
             {/* OSS card */}
-            <div className="rounded-xl border border-[#E8E0D8] bg-white px-4 py-4 space-y-2">
+            <div className="border border-gray-200 bg-white px-4 py-4 space-y-2">
               <div className="flex items-center gap-2">
                 <GithubIcon className="w-4 h-4 text-primary" />
                 <span className="text-xs font-semibold text-primary">{m.footer_open_source()}</span>

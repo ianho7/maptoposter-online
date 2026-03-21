@@ -1,76 +1,110 @@
+# MapPoster Online
+
 <h1 align="center">
   <img src="public/icon.svg" alt="MapPoster Online" width="120" />
 </h1>
 
-# MapPoster Online
+<p align="center">
+  <strong>Turn the cities you love into stunning designs</strong>
+</p>
 
-Turn the cities you love into stunning artistic map posters. A web-based alternative to [maptoposter (Python CLI)](https://github.com/originalankur/maptoposter) — no installation required, runs directly in your browser.
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/your-repo/maptoposter-online)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  English | <a href="README-CN.md">简体中文</a>
+</p>
 
 ---
+
+## Project Description
+
+A browser-based upgrade to [maptoposter (Python CLI)](https://github.com/originalankur/maptoposter) — no installation needed, just open and go
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React">
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
+  <img src="https://img.shields.io/badge/Bun-1.0-FEF0C9?style=flat-square&logo=bun&logoColor=white" alt="Bun">
+  <img src="https://img.shields.io/badge/Rust-WASM-DEA584?style=flat-square&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square" alt="License">
+</p>
 
 ## Gallery
 
-<!-- TODO: Add poster screenshots
-     Suggested: docs/screenshots/paris_nordic.png, docs/screenshots/tokyo_cyberpunk.png, docs/screenshots/ny_vintage.png
-     Format: <img src="docs/screenshots/xxx.png" width="30%"> -->
+### Asia
 
-Sample outputs (generated with this tool):
+| China - Beijing | Japan - Tokyo | South Korea - Seoul | China - Hong Kong |
+|:---:|:---:|:---:|:---:|
+| ![Beijing](docs/assets/compressed/beijing-map-poster.webp) | ![Tokyo](docs/assets/compressed/tokyo-map-poster.webp) | ![Seoul](docs/assets/compressed/seoul-map-poster.webp) | ![Hong Kong](docs/assets/compressed/hongkong-map-poster.webp) |
 
-| Nordic Frost - Paris | Cyberpunk Neon - Tokyo | Vintage Nautical - NYC |
-|---|---|---|
-| ![Nordic Frost](https://placehold.co/600x848/F0F4F7/2C3E50?text=Nordic+Frost+-+Paris) | ![Cyberpunk](https://placehold.co/600x848/0D0221/00F2FF?text=Cyberpunk+Neon+-+Tokyo) | ![Vintage](https://placehold.co/600x848/E8DCC4/1B3B5A?text=Vintage+Nautical+-+NYC) |
+| Singapore | Malaysia - Kuala Lumpur | Thailand - Bangkok | India - New Delhi |
+|:---:|:---:|:---:|:---:|
+| ![Singapore](docs/assets/compressed/singapore-map-poster.webp) | ![Kuala Lumpur](docs/assets/compressed/kuala-lumpur-map-poster.webp) | ![Bangkok](docs/assets/compressed/bangkok-map-poster.webp) | ![New Delhi](docs/assets/compressed/new-delhi-map-poster.webp) |
 
-| Desert Rose - Rome | Matcha Latte - London | Gilded Noir - Shanghai |
-|---|---|---|
-| ![Desert Rose](https://placehold.co/600x848/F9F1ED/8E5B4A?text=Desert+Rose+-+Rome) | ![Matcha](https://placehold.co/600x848/F1F5E8/3E4C33?text=Matcha+Latte+-+London) | ![Noir](https://placehold.co/600x848/121212/E5C100?text=Gilded+Noir+-+Shanghai) |
+### Europe
 
----
+| Switzerland - Zurich | Norway - Oslo | Sweden - Stockholm | Denmark - Copenhagen |
+|:---:|:---:|:---:|:---:|
+| ![Zürich](docs/assets/compressed/z%C3%BCrich-map-poster.webp) | ![Oslo](docs/assets/compressed/oslo-map-poster.webp) | ![Stockholm](docs/assets/compressed/stockholm-map-poster.webp) | ![København](docs/assets/compressed/k%C3%B8benhavn-map-poster.webp) |
+
+| Austria - Vienna | Germany - Berlin | United Kingdom - London | France - Paris |
+|:---:|:---:|:---:|:---:|
+| ![Vienna](docs/assets/compressed/vienna-map-poster.webp) | ![Berlin](docs/assets/compressed/berlin-map-poster.webp) | ![London](docs/assets/compressed/london-map-poster.webp) | ![Paris](docs/assets/compressed/paris-map-poster.webp) |
+
+| Italy - Rome | Russia - Moscow | Turkey - Istanbul | Netherlands - Amsterdam |
+|:---:|:---:|:---:|:---:|
+| ![Rome](docs/assets/compressed/rome-map-poster.webp) | ![Moscow](docs/assets/compressed/moscow-map-poster.webp) | ![Istanbul](docs/assets/compressed/istanbul-map-poster.webp) | ![Amsterdam](docs/assets/compressed/amsterdam-map-poster.webp) |
+
+### Americas, Africa & Oceania
+
+| USA - New York | Canada - Ottawa | Brazil - São Paulo | Mexico - Mexico City |
+|:---:|:---:|:---:|:---:|
+| ![New York](docs/assets/compressed/new-york-city-map-poster.webp) | ![Ottawa](docs/assets/compressed/ottawa-map-poster.webp) | ![São Paulo](docs/assets/compressed/brasília-map-poster.webp) | ![Mexico City](docs/assets/compressed/mexico-city-map-poster.webp) |
+
+| Argentina - Buenos Aires | Australia - Melbourne | South Africa - Cape Town | Chile - Santiago |
+|:---:|:---:|:---:|:---:|
+| ![Buenos Aires](docs/assets/compressed/buenos-aires-map-poster.webp) | ![Melbourne](docs/assets/compressed/melbourne-map-poster.webp) | ![Cape Town](docs/assets/compressed/cape-town-map-poster.webp) | ![Santiago](docs/assets/compressed/santiago-map-poster.webp) |
 
 ## Features
 
-- **Zero Installation** — Runs entirely in the browser. Open the website, select a city, and download your poster
-- **Rust/WASM Rendering Engine** — High-performance map rendering compiled from Rust to WebAssembly (powered by [tiny-skia](https://github.com/RazrFalcon/tiny-skia))
-- **Real-time Preview** — Adjust parameters and see changes instantly before exporting
-- **20 Built-in Themes** — From Nordic Frost to Cyberpunk Neon, Vintage Nautical to Glitch Purple
-- **Custom Color Control** — Fine-tune every color: background, roads, water, parks, POIs, and text
-- **Multiple Export Formats** — Supports A4 (Portrait/Landscape), Square, Phone Wallpaper, and Desktop 16:9
-- **Multi-language Interface** — Available in English, Japanese, Korean, Chinese (Simplified), German, Spanish, and French
-- **IndexedDB Caching** — Previously fetched map data is cached locally for faster regeneration
-- **Dynamic Font Loading** — Use built-in serif fonts or upload your own TTF/OTF files
+- 🚀 **Zero installation** — Runs entirely in the browser. Open the site, pick a city, and download your poster
+- ⚡ **Rust/WASM rendering engine** — High-performance map rendering compiled from Rust to WebAssembly (powered by [tiny-skia](https://github.com/RazrFalcon/tiny-skia))
+- 👁️ **Live preview** — See changes instantly and confirm results before exporting
+- 🎨 **20 built-in themes** — From frozen Nordic minimalism to cyberpunk neon, vintage nautical to glitch purple
+- ✏️ **Custom color controls** — Fine-tune every color: background, roads, water, green spaces, POIs, and text
+- 📐 **Multiple export formats** — A4 (portrait/landscape), square, phone wallpaper, desktop 16:9, at 300 DPI for high-quality print
+- 🌐 **Multi-language interface** — Supports English, Japanese, Korean, Simplified Chinese, German, Spanish, and French
+- 💾 **IndexedDB caching** — Previously fetched map data is cached locally for faster regeneration
+- 🔤 **Dynamic font loading** — Use built-in serif fonts or upload your own TTF/OTF files
+- 🐍 **Snake game** — Beat boredom while waiting for your poster to generate (inspired by [Chrome Dinosaur Game](https://en.wikipedia.org/wiki/Dinosaur_Game))
 
----
+## How it differs from maptoposter (Python CLI)
 
-## vs maptoposter (Python CLI)
+This project was inspired by maptoposter (Python CLI) — they each have their own strengths for different use cases:
 
-| Feature | maptoposter-online | maptoposter (Python CLI) |
+| | maptoposter-online | maptoposter (Python CLI) |
 |---------|-------------------|--------------------------|
-| **Usage** | Open in browser | Command-line interface |
-| **Installation** | None (zero门槛) | Requires Python + pip |
-| **Preview** | Real-time, interactive | Generate then view |
-| **Rendering Engine** | Rust/WASM (tiny-skia) | Python/matplotlib |
-| **Performance** | Fast (WASM) | Moderate (Python) |
-| **Platform** | Cross-browser | Desktop only |
-| **Best for** | Beginners, quick results | Developers, CLI enthusiasts |
+| **Usage** | Open in browser, no install needed | Command-line interface, requires local setup |
+| **Best for** | Quick start, on-the-go usage | Command-line enthusiasts, advanced local customization |
+| **Rendering engine** | Rust/WASM (tiny-skia) | Python/matplotlib |
+| **Platform** | Cross-browser, any device | Desktop only (requires Python) |
 
----
-
-## Try It Online
-
-[//]: # (Replace with your deployed URL - e.g., https://maptoposter.online)
-[TODO: Add live demo URL]
-
-Visit [maptoposter.online](https://maptoposter.online) to create your first poster.
-
----
+Different tech stacks, same goal — turning your favorite city into unique art.
 
 ## Local Development
 
-### Prerequisites
+### Tech Stack
 
-- [Bun](https://bun.sh/) (recommended) or Node.js 18+
+- **Build** — Vite 7 + Bun
+- **Frontend** — React 19 + TypeScript
+- **Styling** — Tailwind CSS v4
+- **UI components** — Radix UI + lucide-react
+- **Map data** — OpenStreetMap (Overpass API) + Protomaps
+- **Rendering** — Rust (wasm-pack) + tiny-skia
+- **i18n** — @inlang/paraglide-js
+- **Caching** — IndexedDB (idb)
+
+### Requirements
+
+- [Bun](https://bun.sh/) (recommended) or Node.js 22+
 - [Rust](https://www.rust-lang.org/) (for building WASM)
 - [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
 
@@ -81,125 +115,53 @@ Visit [maptoposter.online](https://maptoposter.online) to create your first post
 bun install
 
 # 2. Build the Rust/WASM rendering engine
-# This compiles Rust code to WebAssembly using wasm-pack
+# Compile Rust to WebAssembly using wasm-pack
 cd wasm && wasm-pack build --target web --out-dir ../src/pkg
 # Or use the npm script:
 bun run build:wasm
 
-# 3. Start development server
+# 3. Start the dev server
 bun run dev
-```
 
-The app will be available at `http://localhost:5173`.
+# 4. App available at http://localhost:5173
+```
 
 ### Available Scripts
 
 | Command | Description |
 |---------|-------------|
-| `bun run dev` | Start development server |
-| `bun run build` | Build production version |
+| `bun run dev` | Start dev server |
+| `bun run build` | Build for production |
 | `bun run build:wasm` | Rebuild WASM engine |
 | `bun run preview` | Preview production build |
-| `bun run lint` | Run code linting |
-| `bun run fix` | Format + lint fix |
+| `bun run lint` | Run linter |
+| `bun run fix` | Format + lint with auto-fix |
 
----
+## Engineering Notes
 
-## Themes
+### Rendering Engine — Rust/WASM
 
-20 built-in themes with distinctive color palettes:
+- **Font anti-aliasing** — 2× supersampling + Box Filter downsampling
+- **Road hierarchy lacking depth** — Road casing rendered in two passes (stroke first, then fill) + Z-order controls draw sequence by road class
+- **Rendering too slow** — Douglas-Peucker in screen coordinate space removes subpixel redundancy; single-scan dispatch by feature type
 
-| Theme | Style |
-|-------|-------|
-| Nordic Frost | Cool blue-gray tones, Scandinavian minimalism |
-| Desert Rose | Warm sandy beige, terracotta accents |
-| Cyberpunk Neon | Dark purple background, neon pink/cyan roads |
-| Sulfur & Slate | Dark mode with golden highways |
-| Vintage Nautical | Sepia tones, maritime-inspired palette |
-| Lavender Mist | Soft purple hues, ethereal and calming |
-| Carbon Fiber | High-contrast black with red accents |
-| Mediterranean Summer | Bright whites with orange/yellow roads |
-| Royal Velvet | Deep purple, elegant and luxurious |
-| Forest Moss | Dark green/gold, nature-inspired |
-| Cotton Candy | Pastel pink/blue, playful aesthetic |
-| Brutalist Concrete | Gray monochrome with orange highlights |
-| Solarized Dark | Classic terminal-inspired dark theme |
-| Matcha Latte | Soft green/beige, Japanese cafe vibes |
-| Red Alert | Intense red/black, bold statement |
-| Gilded Noir | Dark with gold accents, art deco feel |
-| Ocean Abyss | Deep blue, underwater atmosphere |
-| Sakura Branch | White background with pink roads |
-| Terra Clay | Warm earth tones, Mediterranean feel |
-| Glitch Purple | Cyberpunk variant with green/pink |
+### Data Processing
 
----
+- **Python OSMnx workflow ported** — Professional geospatial data processing logic adapted from [osmnx](https://github.com/gboeing/osmnx)
+- **Overpass query failures** — Auto-splits oversized areas into smaller chunks (2500km² default limit) to prevent Overpass failures
+- **Single node timeout causing long waits** — Concurrent requests to 4 mirror servers, fastest response wins
 
-## Internationalization
+### Page Responsiveness
 
-The interface supports 7 languages:
-
-- English (en)
-- Japanese (ja)
-- Korean (ko)
-- Chinese Simplified (zh-CN)
-- German (de)
-- Spanish (es)
-- French (fr)
-
-Language files are located in `messages/` and compiled using [@inlang/paraglide-js](https://inlang.com/).
-
----
-
-## Tech Stack
-
-- **Build**: Vite 7 + Bun
-- **Frontend**: React 19 + TypeScript
-- **Styling**: Tailwind CSS v4
-- **UI Components**: Radix UI + lucide-react
-- **Map Data**: OpenStreetMap via Overpass API + Protomaps
-- **Rendering**: Rust (wasm-pack) + tiny-skia
-- **i18n**: @inlang/paraglide-js
-- **Cache**: IndexedDB (idb)
-
----
-
-## Architecture Overview
-
-```
-src/
-├── components/          # React UI components
-│   ├── artistic-map.tsx # Main map rendering component
-│   └── ui/              # Radix UI wrappers
-├── services/            # Data fetching (Overpass, location)
-├── hooks/               # React hooks (fonts, location data)
-├── lib/                 # Types, utilities, theme definitions
-├── pkg/                 # WASM compiled output (auto-generated)
-└── paraglide/          # i18n messages (auto-generated)
-```
-
-The rendering pipeline:
-1. User selects location → fetches coordinates via Nominatim
-2. Overpass API downloads map features (roads, water, parks, POIs)
-3. Web Worker processes and transforms GeoJSON data
-4. Rust/WASM renders final poster to canvas
-5. Export as PNG with 300 DPI metadata
-
----
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
----
+- **Generation blocking the page** — Data fetching, projection transforms, and WASM rendering all run in a Web Worker; road precision auto-reduces at large radii
+- **Repeated generation taking too long** — IndexedDB Gzip-compressed cache, ~100KB per city; direct read on regeneration
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE)
 
----
+## Acknowledgments
 
-## Acknowledgements
+Inspired by [@originalankur](https://github.com/originalankur)'s [maptoposter](https://github.com/originalankur/maptoposter)
 
-Inspired by [maptoposter](https://github.com/originalankur/maptoposter) by [@originalankur](https://github.com/originalankur).
-
-Map data provided by [OpenStreetMap](https://www.openstreetmap.org/) and [Protomaps](https://protomaps.com/).
+Map data provided by [OpenStreetMap](https://www.openstreetmap.org/) and [Protomaps](https://protomaps.com/)
