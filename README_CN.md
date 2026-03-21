@@ -33,35 +33,35 @@
 
 | 中国 - 北京 | 日本 - 东京 | 韩国 - 首尔 | 中国 - 香港 |
 |:---:|:---:|:---:|:---:|
-| ![Beijing](docs/assets/compressed/beijing-map-poster.webp) | ![Tokyo](docs/assets/compressed/tokyo-map-poster.webp) | ![Seoul](docs/assets/compressed/seoul-map-poster.webp) | ![Hong Kong](docs/assets/compressed/hongkong-map-poster.webp) |
+| <img src="docs/assets/compressed/beijing-map-poster.webp" alt="Beijing" width="190" /> | <img src="docs/assets/compressed/tokyo-map-poster.webp" alt="Tokyo" width="190" /> | <img src="docs/assets/compressed/seoul-map-poster.webp" alt="Seoul" width="190" /> | <img src="docs/assets/compressed/hongkong-map-poster.webp" alt="Hong Kong" width="190" /> |
 
 | 新加坡 | 马来西亚 - 吉隆坡 | 泰国 - 曼谷 | 印度 - 新德里 |
 |:---:|:---:|:---:|:---:|
-| ![Singapore](docs/assets/compressed/singapore-map-poster.webp) | ![Kuala Lumpur](docs/assets/compressed/kuala-lumpur-map-poster.webp) | ![Bangkok](docs/assets/compressed/bangkok-map-poster.webp) | ![New Delhi](docs/assets/compressed/new-delhi-map-poster.webp) |
+| <img src="docs/assets/compressed/singapore-map-poster.webp" alt="Singapore" width="190" /> | <img src="docs/assets/compressed/kuala-lumpur-map-poster.webp" alt="Kuala Lumpur" width="190" /> | <img src="docs/assets/compressed/bangkok-map-poster.webp" alt="Bangkok" width="190" /> | <img src="docs/assets/compressed/new-delhi-map-poster.webp" alt="New Delhi" width="190" /> |
 
 ### 欧洲
 
 | 瑞士 - 苏黎世 | 挪威 - 奥斯陆 | 瑞典 - 斯德哥尔摩 | 丹麦 - 哥本哈根 |
 |:---:|:---:|:---:|:---:|
-| ![Zürich](docs/assets/compressed/z%C3%BCrich-map-poster.webp) | ![Oslo](docs/assets/compressed/oslo-map-poster.webp) | ![Stockholm](docs/assets/compressed/stockholm-map-poster.webp) | ![København](docs/assets/compressed/k%C3%B8benhavn-map-poster.webp) |
+| <img src="docs/assets/compressed/z%C3%BCrich-map-poster.webp" alt="Zurich" width="190" /> | <img src="docs/assets/compressed/oslo-map-poster.webp" alt="Oslo" width="190" /> | <img src="docs/assets/compressed/stockholm-map-poster.webp" alt="Stockholm" width="190" /> | <img src="docs/assets/compressed/k%C3%B8benhavn-map-poster.webp" alt="Copenhagen" width="190" /> |
 
 | 奥地利 - 维也纳 | 德国 - 柏林 | 英国 - 伦敦 | 法国 - 巴黎 |
 |:---:|:---:|:---:|:---:|
-| ![Vienna](docs/assets/compressed/vienna-map-poster.webp) | ![Berlin](docs/assets/compressed/berlin-map-poster.webp) | ![London](docs/assets/compressed/london-map-poster.webp) | ![Paris](docs/assets/compressed/paris-map-poster.webp) |
+| <img src="docs/assets/compressed/vienna-map-poster.webp" alt="Vienna" width="190" /> | <img src="docs/assets/compressed/berlin-map-poster.webp" alt="Berlin" width="190" /> | <img src="docs/assets/compressed/london-map-poster.webp" alt="London" width="190" /> | <img src="docs/assets/compressed/paris-map-poster.webp" alt="Paris" width="190" /> |
 
 | 意大利 - 罗马 | 俄罗斯 - 莫斯科 | 土耳其 - 伊斯坦布尔 | 荷兰 - 阿姆斯特丹 |
 |:---:|:---:|:---:|:---:|
-| ![Rome](docs/assets/compressed/rome-map-poster.webp) | ![Moscow](docs/assets/compressed/moscow-map-poster.webp) | ![Istanbul](docs/assets/compressed/istanbul-map-poster.webp) | ![Amsterdam](docs/assets/compressed/amsterdam-map-poster.webp) |
+| <img src="docs/assets/compressed/rome-map-poster.webp" alt="Rome" width="190" /> | <img src="docs/assets/compressed/moscow-map-poster.webp" alt="Moscow" width="190" /> | <img src="docs/assets/compressed/istanbul-map-poster.webp" alt="Istanbul" width="190" /> | <img src="docs/assets/compressed/amsterdam-map-poster.webp" alt="Amsterdam" width="190" /> |
 
 ### 美洲、非洲、大洋洲
 
 | 美国 - 纽约 | 加拿大 - 渥太华 | 巴西 - 圣保罗 | 墨西哥 - 墨西哥城 |
 |:---:|:---:|:---:|:---:|
-| ![New York](docs/assets/compressed/new-york-city-map-poster.webp) | ![Ottawa](docs/assets/compressed/ottawa-map-poster.webp) | ![Ottawa](docs/assets/compressed/brasília-map-poster.webp) | ![Mexico City](docs/assets/compressed/mexico-city-map-poster.webp) |
+| <img src="docs/assets/compressed/new-york-city-map-poster.webp" alt="New York" width="190" /> | <img src="docs/assets/compressed/ottawa-map-poster.webp" alt="Ottawa" width="190" /> | <img src="docs/assets/compressed/brasília-map-poster.webp" alt="Sao Paulo" width="190" /> | <img src="docs/assets/compressed/mexico-city-map-poster.webp" alt="Mexico City" width="190" /> |
 
 | 阿根廷 - 布宜诺斯艾利斯 | 澳大利亚 - 墨尔本 | 南非 - 开普敦 | 智利 - 圣地亚哥 |
 |:---:|:---:|:---:|:---:|
-| ![Buenos Aires](docs/assets/compressed/buenos-aires-map-poster.webp) | ![Melbourne](docs/assets/compressed/melbourne-map-poster.webp) | ![Cape Town](docs/assets/compressed/cape-town-map-poster.webp) | ![Melbourne](docs/assets/compressed/santiago-map-poster.webp) |
+| <img src="docs/assets/compressed/buenos-aires-map-poster.webp" alt="Buenos Aires" width="190" /> | <img src="docs/assets/compressed/melbourne-map-poster.webp" alt="Melbourne" width="190" /> | <img src="docs/assets/compressed/cape-town-map-poster.webp" alt="Cape Town" width="190" /> | <img src="docs/assets/compressed/santiago-map-poster.webp" alt="Santiago" width="190" /> |
 
 ## 功能特点
 

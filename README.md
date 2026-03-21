@@ -33,35 +33,35 @@ A browser-based upgrade to [maptoposter (Python CLI)](https://github.com/origina
 
 | China - Beijing | Japan - Tokyo | South Korea - Seoul | China - Hong Kong |
 |:---:|:---:|:---:|:---:|
-| ![Beijing](docs/assets/compressed/beijing-map-poster.webp) | ![Tokyo](docs/assets/compressed/tokyo-map-poster.webp) | ![Seoul](docs/assets/compressed/seoul-map-poster.webp) | ![Hong Kong](docs/assets/compressed/hongkong-map-poster.webp) |
+| <img src="docs/assets/compressed/beijing-map-poster.webp" alt="Beijing" width="190" /> | <img src="docs/assets/compressed/tokyo-map-poster.webp" alt="Tokyo" width="190" /> | <img src="docs/assets/compressed/seoul-map-poster.webp" alt="Seoul" width="190" /> | <img src="docs/assets/compressed/hongkong-map-poster.webp" alt="Hong Kong" width="190" /> |
 
 | Singapore | Malaysia - Kuala Lumpur | Thailand - Bangkok | India - New Delhi |
 |:---:|:---:|:---:|:---:|
-| ![Singapore](docs/assets/compressed/singapore-map-poster.webp) | ![Kuala Lumpur](docs/assets/compressed/kuala-lumpur-map-poster.webp) | ![Bangkok](docs/assets/compressed/bangkok-map-poster.webp) | ![New Delhi](docs/assets/compressed/new-delhi-map-poster.webp) |
+| <img src="docs/assets/compressed/singapore-map-poster.webp" alt="Singapore" width="190" /> | <img src="docs/assets/compressed/kuala-lumpur-map-poster.webp" alt="Kuala Lumpur" width="190" /> | <img src="docs/assets/compressed/bangkok-map-poster.webp" alt="Bangkok" width="190" /> | <img src="docs/assets/compressed/new-delhi-map-poster.webp" alt="New Delhi" width="190" /> |
 
 ### Europe
 
 | Switzerland - Zurich | Norway - Oslo | Sweden - Stockholm | Denmark - Copenhagen |
 |:---:|:---:|:---:|:---:|
-| ![Zürich](docs/assets/compressed/z%C3%BCrich-map-poster.webp) | ![Oslo](docs/assets/compressed/oslo-map-poster.webp) | ![Stockholm](docs/assets/compressed/stockholm-map-poster.webp) | ![København](docs/assets/compressed/k%C3%B8benhavn-map-poster.webp) |
+| <img src="docs/assets/compressed/z%C3%BCrich-map-poster.webp" alt="Zurich" width="190" /> | <img src="docs/assets/compressed/oslo-map-poster.webp" alt="Oslo" width="190" /> | <img src="docs/assets/compressed/stockholm-map-poster.webp" alt="Stockholm" width="190" /> | <img src="docs/assets/compressed/k%C3%B8benhavn-map-poster.webp" alt="Copenhagen" width="190" /> |
 
 | Austria - Vienna | Germany - Berlin | United Kingdom - London | France - Paris |
 |:---:|:---:|:---:|:---:|
-| ![Vienna](docs/assets/compressed/vienna-map-poster.webp) | ![Berlin](docs/assets/compressed/berlin-map-poster.webp) | ![London](docs/assets/compressed/london-map-poster.webp) | ![Paris](docs/assets/compressed/paris-map-poster.webp) |
+| <img src="docs/assets/compressed/vienna-map-poster.webp" alt="Vienna" width="190" /> | <img src="docs/assets/compressed/berlin-map-poster.webp" alt="Berlin" width="190" /> | <img src="docs/assets/compressed/london-map-poster.webp" alt="London" width="190" /> | <img src="docs/assets/compressed/paris-map-poster.webp" alt="Paris" width="190" /> |
 
 | Italy - Rome | Russia - Moscow | Turkey - Istanbul | Netherlands - Amsterdam |
 |:---:|:---:|:---:|:---:|
-| ![Rome](docs/assets/compressed/rome-map-poster.webp) | ![Moscow](docs/assets/compressed/moscow-map-poster.webp) | ![Istanbul](docs/assets/compressed/istanbul-map-poster.webp) | ![Amsterdam](docs/assets/compressed/amsterdam-map-poster.webp) |
+| <img src="docs/assets/compressed/rome-map-poster.webp" alt="Rome" width="190" /> | <img src="docs/assets/compressed/moscow-map-poster.webp" alt="Moscow" width="190" /> | <img src="docs/assets/compressed/istanbul-map-poster.webp" alt="Istanbul" width="190" /> | <img src="docs/assets/compressed/amsterdam-map-poster.webp" alt="Amsterdam" width="190" /> |
 
 ### Americas, Africa & Oceania
 
 | USA - New York | Canada - Ottawa | Brazil - São Paulo | Mexico - Mexico City |
 |:---:|:---:|:---:|:---:|
-| ![New York](docs/assets/compressed/new-york-city-map-poster.webp) | ![Ottawa](docs/assets/compressed/ottawa-map-poster.webp) | ![São Paulo](docs/assets/compressed/brasília-map-poster.webp) | ![Mexico City](docs/assets/compressed/mexico-city-map-poster.webp) |
+| <img src="docs/assets/compressed/new-york-city-map-poster.webp" alt="New York" width="190" /> | <img src="docs/assets/compressed/ottawa-map-poster.webp" alt="Ottawa" width="190" /> | <img src="docs/assets/compressed/brasília-map-poster.webp" alt="Sao Paulo" width="190" /> | <img src="docs/assets/compressed/mexico-city-map-poster.webp" alt="Mexico City" width="190" /> |
 
 | Argentina - Buenos Aires | Australia - Melbourne | South Africa - Cape Town | Chile - Santiago |
 |:---:|:---:|:---:|:---:|
-| ![Buenos Aires](docs/assets/compressed/buenos-aires-map-poster.webp) | ![Melbourne](docs/assets/compressed/melbourne-map-poster.webp) | ![Cape Town](docs/assets/compressed/cape-town-map-poster.webp) | ![Santiago](docs/assets/compressed/santiago-map-poster.webp) |
+| <img src="docs/assets/compressed/buenos-aires-map-poster.webp" alt="Buenos Aires" width="190" /> | <img src="docs/assets/compressed/melbourne-map-poster.webp" alt="Melbourne" width="190" /> | <img src="docs/assets/compressed/cape-town-map-poster.webp" alt="Cape Town" width="190" /> | <img src="docs/assets/compressed/santiago-map-poster.webp" alt="Santiago" width="190" /> |
 
 ## Features
 
