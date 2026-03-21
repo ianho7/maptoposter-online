@@ -119,7 +119,7 @@
   "footer_changelog": "변경 로그",
   "footer_contact": "문의",
   "footer_email_copied": "복사됨!",
-  "footer_open_source": "완전 오픈소스 · MIT 라이선스",
+  "footer_open_source": "완전 오픈소스",
   "footer_open_source_desc": "코드가 완전히 공개되어 있습니다. Fork, Star, PR 언제든 환영! 이 프로젝트가 도움이 되셨다면 별을 눌러주세요!",
   "footer_star_on_github": "GitHub에서 Star",
   "footer_copyright": "© {year} Map To Poster · 데이터 제공: {osmLink} 기여자",

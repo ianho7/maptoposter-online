@@ -119,7 +119,7 @@
   "footer_changelog": "変更履歴",
   "footer_contact": "お問い合わせ",
   "footer_email_copied": "コピー完了！",
-  "footer_open_source": "完全オープンソース · MIT ライセンス",
+  "footer_open_source": "完全オープンソース",
   "footer_open_source_desc": "コードは完全に公開されています。Fork、Star、PR 大歓迎！このプロジェクトが役に立ったら、星をください！",
   "footer_star_on_github": "GitHub で Star",
   "footer_copyright": "© {year} Map To Poster · データ提供: {osmLink} 貢献者",

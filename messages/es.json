@@ -119,7 +119,7 @@
   "footer_changelog": "Registro de cambios",
   "footer_contact": "Contacto",
   "footer_email_copied": "¡Copiado!",
-  "footer_open_source": "Completamente Open Source · Licencia MIT",
+  "footer_open_source": "Completamente Open Source",
   "footer_open_source_desc": "El código es completamente abierto. ¡Siéntete libre de Fork, Star o enviar PRs! Si este proyecto te ayuda, ¡dale una estrella!",
   "footer_star_on_github": "Star en GitHub",
   "footer_copyright": "© {year} Map To Poster · Datos de los colaboradores de {osmLink}",

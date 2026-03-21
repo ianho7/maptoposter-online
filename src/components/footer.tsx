@@ -27,9 +27,9 @@ export default function Footer() {
 
   return (
     <footer>
-      <div className="max-w-6xl mx-auto px-6 pt-6 border-t border-gray-200">
+      <div className="mx-0 md:mx-20 pt-6 border-t border-gray-200">
         {/* ── Main grid: 2 columns ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Col 1: Project links */}
           <div className="space-y-4">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -40,7 +40,7 @@ export default function Footer() {
                 { label: m.footer_github_repo(), href: REPO_URL },
                 { label: m.footer_submit_issue(), href: `${REPO_URL}/issues` },
                 // { label: m.footer_feature_suggestions(), href: `${REPO_URL}/discussions` },
-                { label: m.footer_changelog(), href: `${REPO_URL}/releases` },
+                // { label: m.footer_changelog(), href: `${REPO_URL}/releases` },
               ].map((item) => (
                 <li key={item.label}>
                   <a

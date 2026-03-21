@@ -22,6 +22,7 @@ import {
   // ClipboardPaste,
   Clock,
   Settings2,
+  GithubIcon,
   // AlertCircle,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -1066,7 +1067,7 @@ export default function MapPosterGenerator() {
               <Button
                 onClick={handleDownload}
                 disabled={isGenerating || locationLoading}
-                className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
               >
                 {isGenerating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -1075,6 +1076,15 @@ export default function MapPosterGenerator() {
                 )}
                 <span className="hidden sm:inline">
                   {isGenerating ? m.generating() : m.download_button()}
+                </span>
+              </Button>
+              <Button
+                onClick={() => window.open("https://github.com/ianho7/maptoposter-online", "_blank")}
+                className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+              >
+                <GithubIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">
+                  Github
                 </span>
               </Button>
             </div>
@@ -1289,14 +1299,14 @@ export default function MapPosterGenerator() {
                   <TabsList className="w-full bg-secondary">
                     <TabsTrigger
                       value="presets"
-                      className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                      className="flex-1 text-foreground data-[state=active]:text-vanilla cursor-pointer"
                       onClick={() => setUseCustomColors(false)}
                     >
                       {m.tab_presets()}
                     </TabsTrigger>
                     <TabsTrigger
                       value="custom"
-                      className="flex-1 text-foreground data-[state=active]:text-vanilla"
+                      className="flex-1 text-foreground data-[state=active]:text-vanilla cursor-pointer"
                       onClick={() => setUseCustomColors(true)}
                     >
                       {m.tab_custom()}
@@ -1313,7 +1323,7 @@ export default function MapPosterGenerator() {
                             setUseCustomColors(false);
                           }}
                           className={cn(
-                            "p-2 border-1 transition-all flex flex-col items-center gap-2",
+                            "p-2 border-1 transition-all flex flex-col items-center gap-2 cursor-pointer",
                             selectedTheme.id === theme.id && !useCustomColors
                               ? "border-primary bg-background/60"
                               : "border-transparent bg-transparent hover:bg-background/50"
@@ -1403,9 +1413,9 @@ export default function MapPosterGenerator() {
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {/* <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                       {m.custom_font()}
-                    </Label>
+                    </Label> */}
                     {customFont && (
                       <Button
                         variant="ghost"
@@ -1445,14 +1455,14 @@ export default function MapPosterGenerator() {
               </Card>
 
               <Card className="p-4 bg-card border-border">
-                <h2 className="text-lg mb-3  text-foreground">{m.poster_size()}</h2>
+                <h2 className="text-lg text-foreground">{m.poster_size()}</h2>
                 <div className="grid grid-cols-2 gap-2">
                   {SIZES.map((size) => (
                     <button
                       key={size.id}
                       onClick={() => setSelectedSize(size)}
                       className={cn(
-                        "p-3 border-1 transition-all flex items-center gap-2",
+                        "p-3 border-1 transition-all flex items-center gap-2 cursor-pointer",
                         selectedSize.id === size.id
                           ? "border-primary bg-background/60"
                           : "border-transparent bg-transparent hover:bg-background/50"

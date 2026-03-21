@@ -119,7 +119,7 @@
   "footer_changelog": "更新日志",
   "footer_contact": "联系",
   "footer_email_copied": "已复制",
-  "footer_open_source": "完全开源 · MIT License",
+  "footer_open_source": "完全开源",
   "footer_open_source_desc": "代码完全公开，欢迎 Fork、Star、提 PR，如果这个项目对你有帮助，给颗星吧 ⭐",
   "footer_star_on_github": "在 GitHub 上 Star",
   "footer_copyright": "© {year} Map To Poster · 数据来源 {osmLink} 贡献者",
