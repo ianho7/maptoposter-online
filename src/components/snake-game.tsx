@@ -137,6 +137,18 @@ export interface SnakeGameProps {
   onOpenChange?: (open: boolean) => void;
 
   /**
+   * Callback when score changes. Used by parent to detect if user played the game.
+   * @param score - Current score value
+   */
+  onScoreChange?: (score: number) => void;
+
+  /**
+   * Callback when user interacts with game controls (keyboard or UI).
+   * Used by parent to detect if user actually played the game.
+   */
+  onUserInteracted?: () => void;
+
+  /**
    * When true, render game inline inside parent instead of fullscreen modal.
    * Game is always visible when inline=true (no open/close state needed).
    */
@@ -150,6 +162,8 @@ export default function SnakeGame({
   triggerLabel,
   className,
   onOpenChange,
+  onScoreChange,
+  onUserInteracted,
   inline = false,
 }: SnakeGameProps) {
   const t: SnakeTheme = typeof theme === "string" ? (THEMES[theme] ?? THEMES.paper) : theme;
@@ -250,6 +264,8 @@ export default function SnakeGame({
       const n = scoreRef.current + 1;
       scoreRef.current = n;
       setScore(n);
+      // 通知父组件分数变化，用于检测用户是否玩了游戏
+      onScoreChange?.(n);
       if (n > bestRef.current) {
         bestRef.current = n;
         setBest(n);
@@ -308,6 +324,8 @@ export default function SnakeGame({
       const d = map[e.key];
       if (!d) return;
       e.preventDefault();
+      // 用户按了方向键，表示有交互
+      onUserInteracted?.();
       if (dirRef.current.x === -d.x && dirRef.current.y === -d.y) return;
       nextDir.current = d;
       if (phaseRef.current !== "playing") start();
@@ -345,6 +363,8 @@ export default function SnakeGame({
 
   const dpad = (d: Point) => {
     if (dirRef.current.x === -d.x && dirRef.current.y === -d.y) return;
+    // 用户点击了 UI 方向键，表示有交互
+    onUserInteracted?.();
     nextDir.current = d;
     if (phaseRef.current !== "playing") start();
   };
@@ -395,7 +415,7 @@ export default function SnakeGame({
           >
             {phase === "dead" && (
               <span style={{ fontSize: 12, color: t.food, letterSpacing: "0.08em" }}>
-                {score} 分
+                {m.snake_game_score({ score })}
               </span>
             )}
             <button

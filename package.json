@@ -70,10 +70,9 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",
-    "vite": "^7.2.4",
+    "vite": "8.0.1",
     "vite-plugin-oxlint": "^2.0.1",
     "vite-plugin-sitemap": "^0.8.2",
-    "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0"
   }
 }

@@ -1027,7 +1027,7 @@ export default function MapPosterGenerator() {
             setIsGenerating(false);
             generationCompleteRef.current = false;
           }}
-          triggerLabel={m.snake_game_trigger?.() ?? "消消时间"}
+          triggerLabel={m.snake_game_trigger()}
         />
 
         <main className="flex-1 overflow-auto custom-scrollbar w-full mx-auto px-4 py-6">

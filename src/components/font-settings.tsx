@@ -33,7 +33,7 @@ export function FontSettings({
               onClick={onClearFont}
               className="h-6 px-2 text-[10px] text-destructive"
             >
-              Clear
+              {m.font_settings_clear()}
             </Button>
           )}
         </div>

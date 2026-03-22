@@ -10,6 +10,10 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+function isValidHexColor(color: string): boolean {
+  return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(color);
+}
+
 // ============================================
 // 类型定义
 // ============================================
@@ -246,6 +250,11 @@ function generateMapLibreStyle(
 function applyThemePaintProperties(map: maplibregl.Map, theme: ArtisticTheme) {
   const safe = (layerId: string, prop: string, value: unknown) => {
     try {
+      // Validate hex color if it's a string starting with #
+      if (typeof value === "string" && value.startsWith("#") && !isValidHexColor(value)) {
+        console.warn(`Invalid color ${value} for ${layerId}:${prop}, skipping`);
+        return;
+      }
       if (map.getLayer(layerId)) map.setPaintProperty(layerId, prop, value);
     } catch (err) {
       console.warn(`Failed to set paint property for ${layerId}:`, err);

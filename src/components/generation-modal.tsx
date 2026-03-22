@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Clock } from "lucide-react";
+import { useState, useEffect } from "react";
 import SnakeGame from "@/components/snake-game";
 import * as m from "@/paraglide/messages";
 
@@ -26,6 +27,21 @@ export function GenerationModal({
   onClose,
   triggerLabel,
 }: GenerationModalProps) {
+  // 追踪用户是否与游戏有过交互（按过方向键或点击过 UI）
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+
+  // 当海报生成完成时，检查是否需要自动关闭
+  // 如果用户没有与游戏交互过，则自动关闭弹窗
+  useEffect(() => {
+    if (generationProgress === 100 && !hasUserInteracted) {
+      // 生成完成且用户没有交互，自动关闭弹窗
+      onClose();
+      // 重置状态，为下次生成做准备
+      setHasUserInteracted(false);
+      generationCompleteRef.current = false;
+    }
+  }, [generationProgress, hasUserInteracted, onClose, generationCompleteRef]);
+
   if (!isGenerating) return null;
 
   return (
@@ -46,9 +62,7 @@ export function GenerationModal({
           <p
             className={`text-sm text-center ${generationProgress === 100 && isGameOpen ? "" : "animate-pulse"} text-muted-foreground`}
           >
-            {generationProgress === 100 && isGameOpen
-              ? (m.game_complete_hint?.() ?? "图片已生成完毕！请关闭游戏后继续")
-              : generationStep}
+            {generationProgress === 100 && isGameOpen ? m.game_complete_hint() : generationStep}
           </p>
           <SnakeGame
             inline={true}
@@ -58,6 +72,10 @@ export function GenerationModal({
                 onClose();
                 generationCompleteRef.current = false;
               }
+            }}
+            // 当用户有任何交互（键盘方向键或 UI 方向键）时，不再自动关闭
+            onUserInteracted={() => {
+              setHasUserInteracted(true);
             }}
             triggerLabel={triggerLabel}
           />
@@ -75,7 +93,7 @@ export function GenerationModal({
                 generationCompleteRef.current = false;
               }}
             >
-              关闭
+              {m.generation_modal_close()}
             </Button>
           </div>
         </div>

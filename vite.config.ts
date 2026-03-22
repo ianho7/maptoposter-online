@@ -2,11 +2,9 @@ import { paraglideVitePlugin } from '@inlang/paraglide-js'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import wasm from "vite-plugin-wasm";
-import topLevelAwait from "vite-plugin-top-level-await";
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
 import Sitemap from 'vite-plugin-sitemap'
-// import oxlint from 'vite-plugin-oxlint';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -16,7 +14,6 @@ export default defineConfig({
   Sitemap({ hostname: 'http://maptoposter.0v0.one' }),
   // oxlint({ path: 'oxlint.json' }),
   wasm(),
-  topLevelAwait(),
   tailwindcss()
   ],
   resolve: {
@@ -25,26 +22,17 @@ export default defineConfig({
     }
   },
   build: {
-    rollupOptions: {
+    // Vite 8: 使用 rolldownOptions + codeSplitting
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          'vendor-map': ['maplibre-gl'],
-          // 'vendor-radix': [
-          //   '@radix-ui/react-dialog',
-          //   '@radix-ui/react-select',
-          //   '@radix-ui/react-tabs',
-          //   '@radix-ui/react-popover',
-          //   '@radix-ui/react-progress',
-          //   '@radix-ui/react-accordion',
-          //   '@radix-ui/react-label',
-          //   '@radix-ui/react-slot',
-          // ],
-          'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge', 'class-variance-authority', 'cmdk'],
+        codeSplitting: {
+          groups: [
+            { name: 'vendor-map', test: /maplibre-gl/ },
+            { name: 'vendor-ui', test: /lucide-react|clsx|tailwind-merge|class-variance-authority|cmdk/ },
+          ]
         }
       },
-      treeshake: {
-        preset: 'recommended'
-      }
+      treeshake: true
     },
     sourcemap: false
   }
