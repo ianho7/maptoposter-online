@@ -1,7 +1,7 @@
 import type { Point } from "./types";
 import osmtogeojson from "osmtogeojson";
 import Pbf from "pbf";
-import { VectorTile } from "@mapbox/vector-tile";
+import { VectorTile, VectorTileLayer } from "@mapbox/vector-tile";
 
 // 全局并发限制，最多同时 2 个 Overpass 请求
 const MAX_CONCURRENT = 2;
@@ -161,7 +161,7 @@ function cleanGeoJSON(
             }
             return acc;
           },
-          {} as Record<string, any>
+          {} as Record<string, string | number | boolean | null | undefined>
         ),
       };
     }),
@@ -206,11 +206,11 @@ export async function fetchFromProtomaps(
 
   const fetchQueue: { x: number; y: number }[] = [];
   // 限制范围，防止在特大城市 Z15 抓取太多瓦片导致内存溢出
-  const tileLimit = 1000;
+  const TILE_LIMIT = 1000;
   let count = 0;
   for (let x = xMin; x <= xMax; x++) {
     for (let y = yMin; y <= yMax; y++) {
-      if (count++ < tileLimit) fetchQueue.push({ x, y });
+      if (count++ < TILE_LIMIT) fetchQueue.push({ x, y });
     }
   }
 
@@ -233,7 +233,7 @@ export async function fetchFromProtomaps(
         if (tile.layers.water) extractLayerFeatures(tile.layers.water, x, y, zoom, water);
 
         // 公园探测：同时检查 landuse 和 natural 图层
-        const processParks = (layer: any) => {
+        const processParks = (layer: VectorTileLayer) => {
           const parkKinds = [
             "park",
             "forest",
@@ -255,7 +255,7 @@ export async function fetchFromProtomaps(
         if (tile.layers.natural) processParks(tile.layers.natural);
 
         if (tile.layers.pois || tile.layers.places) {
-          const layer = tile.layers.pois || tile.layers.places;
+          const layer = (tile.layers.pois ?? tile.layers.places)!;
           extractLayerFeatures(layer, x, y, zoom, pois, (f) => {
             return f.geometry.type === "Point" && !!f.properties;
           });
@@ -288,7 +288,7 @@ export async function fetchFromProtomaps(
 }
 
 function extractLayerFeatures(
-  layer: any,
+  layer: VectorTileLayer,
   x: number,
   y: number,
   z: number,

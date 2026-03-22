@@ -468,7 +468,7 @@ async function _overpassRequestInternal(
       log(
         "warn",
         `'${hostname}' responded ${response.status} ${response.statusText}: ` +
-        `retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`
+          `retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`
       );
       // 调用进度回调，显示重试等待
       if (onProgress) {
@@ -607,7 +607,7 @@ async function _overpassRequestWithRace(
       log(
         "warn",
         `Race: '${hostname}' responded ${response.status} ${response.statusText}: ` +
-        `retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`
+          `retrying in ${errorPause / 1000}s (attempt ${attempt + 1}/${maxRetries})`
       );
       if (onProgress) {
         let remaining = 10;
@@ -671,7 +671,7 @@ export async function downloadOverpassNetwork(
     // 创建带进度上下文的回调
     const progressCallback = onProgress
       ? (progress: number, step: string, seconds?: number) =>
-        onProgress(progress, step, i + 1, polygonCoordStrs.length, seconds)
+          onProgress(progress, step, i + 1, polygonCoordStrs.length, seconds)
       : undefined;
     // 仅在第一个请求时传入预获取的等待时间，后续请求由于rate limit会自动等待
     const pauseForThisRequest = i === 0 ? preFetchedPauseMs : undefined;
@@ -712,12 +712,12 @@ export async function downloadOverpassFeatures(
     // 创建带进度上下文的回调
     const progressCallback = onProgress
       ? (
-        _progress: number,
-        _step: string,
-        _currentBlock?: number,
-        _totalBlocks?: number,
-        secondsRemaining?: number
-      ) => onProgress(_progress, _step, i + 1, polygonCoordStrs.length, secondsRemaining)
+          _progress: number,
+          _step: string,
+          _currentBlock?: number,
+          _totalBlocks?: number,
+          secondsRemaining?: number
+        ) => onProgress(_progress, _step, i + 1, polygonCoordStrs.length, secondsRemaining)
       : undefined;
     // 仅在第一个请求时传入预获取的等待时间，后续请求由于rate limit会自动等待
     const pauseForThisRequest = i === 0 ? preFetchedPauseMs : undefined;

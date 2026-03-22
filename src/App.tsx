@@ -1,52 +1,15 @@
-import { useState, useRef, useEffect, useDeferredValue } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LocationCombobox } from "@/components/location-combobox";
-import {
-  Download,
-  MapPin,
-  Palette,
-  Square,
-  Smartphone,
-  Monitor,
-  FileImage,
-  Loader2,
-  // AlertCircle,
-  Type,
-  FileText,
-  FileCheck,
-  // Settings2,
-  // ClipboardPaste,
-  Clock,
-  Settings2,
-  GithubIcon,
-  // AlertCircle,
-} from "lucide-react";
-import { Progress } from "@/components/ui/progress";
-import { MapPosterPreview } from "@/components/artistic-map";
-import SnakeGame from "@/components/snake-game";
-// import { ColorPasteHowToUse } from "@/components/ColorPasteHowToUse";
-import { cn } from "@/lib/utils";
+import { useState, useRef, useEffect, useDeferredValue, useMemo } from "react";
+import { type PosterSize } from "@/components/artistic-map";
+import { Square, Smartphone, Monitor, FileImage } from "lucide-react";
 import { useLocationData } from "@/hooks/useLocationData";
 import { getUserGeolocation } from "@/services/ip-geolocation";
 
 // WASM and Utils
 import init, { init_panic_hook } from "./pkg/wasm";
 import { shardRoadsBinary } from "./utils";
-import { type MapColors, MAP_THEMES as THEMES } from "@/lib/types";
+import { type MapColors, MAP_THEMES as THEMES, type Location } from "@/lib/types";
 import { mapDataService } from "./services/map-data";
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
+import { type State, type City } from "@/services/location-types";
 // Paraglide i18n
 import * as m from "@/paraglide/messages";
 import { getLocale, setLocale, locales } from "@/paraglide/runtime";
@@ -54,24 +17,31 @@ import { useDynamicFont } from "./hooks/useDynamicFont";
 import { PosterGallery } from "./components/gallery";
 import Footer from "./components/footer";
 import { SEOHead } from "./hooks/useSEO";
+import { AppHeader } from "./components/app-header";
+import { LocationSettings } from "./components/location-settings";
+import { DataSettings } from "./components/data-settings";
+import { ThemeColors } from "./components/theme-colors";
+import { FontSettings } from "./components/font-settings";
+import { PosterSizeSelector } from "./components/poster-size-selector";
+import { MapPreview } from "./components/map-preview";
+import { GenerationModal } from "./components/generation-modal";
 
 type AvailableLanguageTag = (typeof locales)[number];
 
-// Types
-interface Location {
-  country: string;
-  state: string;
-  city: string;
-  lat?: number;
-  lng?: number;
+// Extended PosterSize includes icon for size selector UI
+interface LocalPosterSize extends PosterSize {
+  icon: React.ReactNode;
 }
 
-interface PosterSize {
-  id: string;
-  name: string;
-  width: number;
-  height: number;
-  icon: React.ReactNode;
+// Worker task types
+type WorkerTaskType = "roads" | "polygons" | "pois" | "render";
+
+interface RenderOptions {
+  roads_shards: Float64Array[];
+  water_bin: Float64Array;
+  parks_bin: Float64Array;
+  config_json: string;
+  custom_font?: Uint8Array;
 }
 
 // Example locations
@@ -120,10 +90,10 @@ const EXAMPLES: { location: Location; themeId: string }[] = [
 let taskIdCounter = 0;
 function runInWorker(
   worker: Worker,
-  type: string,
-  data: any,
+  type: WorkerTaskType,
+  data: Float64Array | RenderOptions,
   transfers: Transferable[] = []
-): Promise<any> {
+): Promise<Float64Array | Uint8Array> {
   return new Promise((resolve, reject) => {
     const id = taskIdCounter++;
     const handler = (event: MessageEvent) => {
@@ -173,7 +143,7 @@ export default function MapPosterGenerator() {
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Localized Sizes
-  const SIZES: PosterSize[] = [
+  const SIZES: LocalPosterSize[] = [
     {
       id: "iphone",
       name: m.size_iphone(),
@@ -248,8 +218,8 @@ export default function MapPosterGenerator() {
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [selectedState, setSelectedState] = useState<string>("");
   const [selectedCity, setSelectedCity] = useState<string>("");
-  const [states, setStates] = useState<any[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
+  const [states, setStates] = useState<State[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
   const [isStatesLoading, setIsStatesLoading] = useState(false);
   const [isCitiesLoading, setIsCitiesLoading] = useState(false);
 
@@ -474,11 +444,15 @@ export default function MapPosterGenerator() {
                   let lat =
                     typeof city.latitude === "number"
                       ? city.latitude
-                      : parseFloat(city.latitude as string) || parseFloat(geo.latitude) || 0;
+                      : parseFloat(city.latitude as string) ||
+                        parseFloat(String(geo.latitude)) ||
+                        0;
                   let lng =
                     typeof city.longitude === "number"
                       ? city.longitude
-                      : parseFloat(city.longitude as string) || parseFloat(geo.longitude) || 0;
+                      : parseFloat(city.longitude as string) ||
+                        parseFloat(String(geo.longitude)) ||
+                        0;
 
                   setLocation({
                     country: country.name,
@@ -558,24 +532,22 @@ export default function MapPosterGenerator() {
   const deferredCustomColors = useDeferredValue(customColors);
   const colors = useCustomColors ? deferredCustomColors : selectedTheme.colors;
 
-  const stableTheme = {
-    bg: colors.bg,
-    water: colors.water,
-    parks: colors.parks,
-    road_motorway: colors.road_motorway,
-    road_primary: colors.road_primary,
-    road_secondary: colors.road_secondary,
-    road_tertiary: colors.road_tertiary,
-    road_residential: colors.road_residential,
-    road_default: colors.road_default,
-    route: colors.poi_color || colors.text || colors.bg,
-    poi: colors.poi_color || colors.road_default,
-  };
-
-  const stableMapLocation = {
-    lat: location.lat || 0,
-    lon: location.lng || 0,
-  };
+  const stableTheme = useMemo(
+    () => ({
+      bg: colors.bg,
+      water: colors.water,
+      parks: colors.parks,
+      road_motorway: colors.road_motorway,
+      road_primary: colors.road_primary,
+      road_secondary: colors.road_secondary,
+      road_tertiary: colors.road_tertiary,
+      road_residential: colors.road_residential,
+      road_default: colors.road_default,
+      route: colors.poi_color || colors.text || colors.bg,
+      poi: colors.poi_color || colors.road_default,
+    }),
+    [colors]
+  );
 
   const handleCountryChange = async (countryName: string) => {
     setSelectedCountry(countryName);
@@ -887,6 +859,7 @@ export default function MapPosterGenerator() {
         lat,
         lng,
         compensatedRadius,
+        baseRadius,
         lodMode
       );
 
@@ -991,7 +964,7 @@ export default function MapPosterGenerator() {
         generationCompleteRef.current = true;
         await yieldMainThread();
 
-        const blob = new Blob([pngData], { type: "image/png" });
+        const blob = new Blob([pngData as BlobPart], { type: "image/png" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -1022,516 +995,103 @@ export default function MapPosterGenerator() {
     }
   };
 
-  const languageNames: Record<AvailableLanguageTag, string> = {
-    en: "English",
-    zh: "简体中文",
-    ja: "日本語",
-    ko: "한국어",
-    fr: "Français",
-    de: "Deutsch",
-    es: "Español",
-    ru: "Русский",
-  };
-
   useDynamicFont(activeLang);
 
   return (
     <>
       <SEOHead />
       <div className="flex flex-col bg-background md:h-screen md:overflow-hidden">
-        <header className="shrink-0 bg-background">
-          <div className="mx-0 md:mx-20 px-4 py-4 flex items-center">
-            <img className="w-10 h-10 mr-2" src="/icon.svg" alt="icon" />
-            <div className="mr-auto select-none">
-              <h1 className="text-2xl tracking-wide  text-foreground">{m.app_title()}</h1>
-              <p className="text-xs tracking-widest uppercase text-muted-foreground">
-                {m.app_subtitle()}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Select
-                value={activeLang}
-                onValueChange={(val) => handleLanguageChange(val as AvailableLanguageTag)}
-              >
-                <SelectTrigger className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {locales.map((tag) => (
-                    <SelectItem key={tag} value={tag}>
-                      {languageNames[tag]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                onClick={handleDownload}
-                disabled={isGenerating || locationLoading}
-                className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-              >
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
-                <span className="hidden sm:inline">
-                  {isGenerating ? m.generating() : m.download_button()}
-                </span>
-              </Button>
-              <Button
-                onClick={() => window.open("https://github.com/ianho7/maptoposter-online", "_blank")}
-                className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-              >
-                <GithubIcon className="w-4 h-4" />
-                <span className="hidden sm:inline">
-                  Github
-                </span>
-              </Button>
-            </div>
-          </div>
-        </header>
+        <AppHeader
+          activeLang={activeLang}
+          onLangChange={handleLanguageChange}
+          onDownload={handleDownload}
+          isGenerating={isGenerating}
+          locationLoading={locationLoading}
+        />
 
-        {isGenerating && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-            <Card className="w-[400px] p-6 shadow-2xl bg-card border-primary">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className=" text-lg text-primary">{m.creating_art()}</h3>
-                  <span className="text-sm font-mono text-primary/60">
-                    {Math.round(generationProgress)}%
-                  </span>
-                </div>
-                <Progress value={generationProgress} className="h-2 bg-secondary" />
-                <p className="text-xs text-center text-muted-foreground/70 flex items-center justify-center gap-1.5">
-                  <Clock className="w-3 h-3" />
-                  {/* {generationProgress === 100 && isGameOpen
-                  ? m.step_complete()
-                  : m.generating_time_estimate()} */}
-                  {m.generating_time_estimate()}
-                </p>
-                <p
-                  className={`text-sm text-center ${generationProgress === 100 && isGameOpen ? "" : "animate-pulse"} text-muted-foreground`}
-                >
-                  {generationProgress === 100 && isGameOpen
-                    ? (m.game_complete_hint?.() ?? "图片已生成完毕！请关闭游戏后继续")
-                    : generationStep}
-                </p>
-                <SnakeGame
-                  inline={true}
-                  onOpenChange={(open) => {
-                    // console.log('[App] onOpenChange:', open, 'generationCompleteRef:', generationCompleteRef.current, new Date().toISOString())
-                    // console.trace('[App] onOpenChange stack')
-                    setIsGameOpen(open);
-                    isGameOpenRef.current = open; // sync ref immediately
-                    if (!open && generationCompleteRef.current) {
-                      console.log("[App] conditions met, closing loading");
-                      setIsGenerating(false);
-                      generationCompleteRef.current = false;
-                    }
-                  }}
-                  triggerLabel={m.snake_game_trigger?.() ?? "消消时间"}
-                />
-                <div
-                  className="flex justify-end pt-2"
-                  style={{
-                    visibility: generationProgress === 100 && isGameOpen ? "visible" : "hidden",
-                  }}
-                >
-                  <Button
-                    size="sm"
-                    className="text-muted-foreground bg-secondary hover:bg-primary hover:text-primary-foreground cursor-pointer"
-                    onClick={() => {
-                      console.log("[App] manual close loading");
-                      setIsGenerating(false);
-                      generationCompleteRef.current = false;
-                    }}
-                  >
-                    关闭
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </div>
-        )}
+        <GenerationModal
+          isGenerating={isGenerating}
+          generationProgress={generationProgress}
+          generationStep={generationStep}
+          isGameOpen={isGameOpen}
+          generationCompleteRef={generationCompleteRef}
+          onGameOpenChange={(open) => {
+            setIsGameOpen(open);
+            isGameOpenRef.current = open;
+            if (!open && generationCompleteRef.current) {
+              setIsGenerating(false);
+              generationCompleteRef.current = false;
+            }
+          }}
+          onClose={() => {
+            setIsGenerating(false);
+            generationCompleteRef.current = false;
+          }}
+          triggerLabel={m.snake_game_trigger?.() ?? "消消时间"}
+        />
 
         <main className="flex-1 overflow-auto custom-scrollbar w-full mx-auto px-4 py-6">
           <div className="grid md:grid-cols-[380px_1fr] px-0 md:px-20 gap-8 md:h-full">
             <div className="space-y-5 md:overflow-y-auto custom-scrollbar md:min-h-0">
-              <Card className="p-4 bg-card border-border">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-primary" />
-                  <h2 className="text-lg  text-foreground">{m.location()}</h2>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {m.label_country()}
-                    </Label>
-                    <LocationCombobox
-                      options={countries}
-                      value={selectedCountry}
-                      onValueChange={handleCountryChange}
-                      placeholder={m.placeholder_select_country()}
-                      emptyText={m.empty_country()}
-                      disabled={locationLoading}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {m.label_state()}
-                    </Label>
-                    <LocationCombobox
-                      options={states}
-                      value={selectedState}
-                      onValueChange={handleStateChange}
-                      placeholder={m.placeholder_select_state()}
-                      emptyText={m.empty_state()}
-                      disabled={states.length === 0 && !isStatesLoading}
-                      isLoading={isStatesLoading}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {m.label_city()}
-                    </Label>
-                    <LocationCombobox
-                      options={cities}
-                      value={selectedCity}
-                      onValueChange={handleCityChange}
-                      placeholder={m.placeholder_select_city()}
-                      emptyText={m.empty_city()}
-                      disabled={cities.length === 0 && !isCitiesLoading}
-                      isLoading={isCitiesLoading}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {m.label_custom_title()}
-                    </Label>
-                    <Input
-                      value={customTitle}
-                      onChange={(e) => setCustomTitle(e.target.value)}
-                      placeholder={location.city}
-                      className="border-border bg-card text-foreground"
-                    />
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-4 bg-card border-border">
-                <div className="flex items-center gap-2">
-                  <Settings2 className="w-4 h-4 text-primary" />
-                  <h2 className="text-lg  text-foreground">{m.label_lod_mode()}</h2>
-                </div>
-                <div className="space-y-4">
-                  {/* <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {m.label_lod_mode()}
-                    </Label>
-                    <Tabs
-                      value={lodMode}
-                      onValueChange={(val) => setLodMode(val as "simplified" | "detailed")}
-                      className="w-full"
-                    >
-                      <TabsList className="w-full bg-secondary">
-                        <TabsTrigger
-                          value="simplified"
-                          className="flex-1 text-foreground data-[state=active]:text-vanilla"
-                        >
-                          {m.lod_simplified()}
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="detailed"
-                          className="flex-1 text-foreground data-[state=active]:text-vanilla"
-                        >
-                          {m.lod_detailed()}
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                    {lodMode === "detailed" && (
-                      <div className="mt-2 flex items-start gap-2.5 p-3 bg-primary/5 border border-primary/10 transition-all duration-300 animate-in fade-in slide-in-from-top-2">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary/60" />
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-medium uppercase tracking-widest opacity-70 text-primary">
-                            {m.label_note()}
-                          </p>
-                          <p className="text-[10px] leading-normal italic  text-muted-foreground">
-                            {m.lod_detailed_desc()}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div> */}
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                        {m.label_map_radius()}
-                      </Label>
-                      <span className="text-xs font-mono text-primary">{baseRadius}m</span>
-                    </div>
-                    <Select
-                      value={baseRadius.toString()}
-                      onValueChange={(val) => setBaseRadius(parseInt(val))}
-                    >
-                      <SelectTrigger className="w-full h-9 border-border bg-card">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 18 }, (_, i) => 3000 + i * 1000).map((radius) => (
-                          <SelectItem key={radius} value={radius.toString()}>
-                            {radius}m
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[10px] italic px-1 text-muted-foreground">{m.radius_desc()}</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-4 bg-card border-border">
-                <div className="flex items-center gap-2">
-                  <Palette className="w-4 h-4 text-primary" />
-                  <h2 className="text-lg  text-foreground">{m.theme_colors()}</h2>
-                </div>
-                <Tabs defaultValue="presets" className="w-full">
-                  <TabsList className="w-full bg-secondary">
-                    <TabsTrigger
-                      value="presets"
-                      className="flex-1 text-foreground data-[state=active]:text-vanilla cursor-pointer"
-                      onClick={() => setUseCustomColors(false)}
-                    >
-                      {m.tab_presets()}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="custom"
-                      className="flex-1 text-foreground data-[state=active]:text-vanilla cursor-pointer"
-                      onClick={() => setUseCustomColors(true)}
-                    >
-                      {m.tab_custom()}
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="presets" className="mt-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      {THEMES.map((theme) => (
-                        <button
-                          key={theme.id}
-                          onClick={() => {
-                            setSelectedTheme(theme);
-                            setCustomColors(theme.colors);
-                            setUseCustomColors(false);
-                          }}
-                          className={cn(
-                            "p-2 border-1 transition-all flex flex-col items-center gap-2 cursor-pointer",
-                            selectedTheme.id === theme.id && !useCustomColors
-                              ? "border-primary bg-background/60"
-                              : "border-transparent bg-transparent hover:bg-background/50"
-                          )}
-                        >
-                          <div className="flex -space-x-1.5">
-                            {Object.values(theme.colors)
-                              .slice(0, 4)
-                              .map((color, i) => (
-                                <div
-                                  key={i}
-                                  className="w-5 h-5 border border-background shadow-sm"
-                                  style={{ backgroundColor: color }}
-                                />
-                              ))}
-                          </div>
-                          <span className="text-[12px] font-medium line-clamp-1 text-foreground">
-                            {themeNameMap[theme.id] || theme.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="custom" className="mt-3">
-                    {/* <div className="mb-4 flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePasteFromClipboard}
-                      className="flex-1 bg-background/60 transition-all border-1 border-primary/30 hover:bg-primary cursor-pointer"
-                    >
-                      <ClipboardPaste className="w-4 h-4 mr-2" />
-                      {m.paste_json_from_clipboard()}
-                    </Button>
-                    <ColorPasteHowToUse />
-                  </div> */}
-                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar pt-1">
-                      {[
-                        { key: "bg", label: m.color_bg() },
-                        { key: "text", label: m.color_text() },
-                        { key: "gradient_color", label: m.color_gradient() },
-                        { key: "water", label: m.color_water() },
-                        { key: "parks", label: m.color_parks() },
-                        { key: "poi_color", label: m.color_poi() },
-                        { key: "road_motorway", label: m.color_road_motorway() },
-                        { key: "road_primary", label: m.color_road_primary() },
-                        { key: "road_secondary", label: m.color_road_secondary() },
-                        { key: "road_tertiary", label: m.color_road_tertiary() },
-                        { key: "road_residential", label: m.color_road_residential() },
-                        { key: "road_default", label: m.color_road_default() },
-                      ].map(({ key, label }) => (
-                        <div key={key} className="flex items-center justify-between gap-4">
-                          <Label className="text-[11px] whitespace-nowrap text-muted-foreground">
-                            {label}
-                          </Label>
-                          <div className="flex items-center gap-2">
-                            <div className="relative group">
-                              <input
-                                type="color"
-                                value={customColors[key as keyof MapColors]}
-                                onChange={(e) =>
-                                  setCustomColors({ ...customColors, [key]: e.target.value })
-                                }
-                                className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent p-0 overflow-hidden [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none"
-                              />
-                            </div>
-                            <Input
-                              value={customColors[key as keyof MapColors]}
-                              onChange={(e) =>
-                                setCustomColors({ ...customColors, [key]: e.target.value })
-                              }
-                              className="w-20 h-8 text-[11px] font-mono px-2 border-border bg-card text-foreground"
-                              placeholder="#000000"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </Card>
-
-              <Card className="p-4 bg-card border-border">
-                <div className="flex items-center gap-2">
-                  <Type className="w-4 h-4 text-primary" />
-                  <h2 className="text-lg  text-foreground">{m.font_settings()}</h2>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    {/* <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {m.custom_font()}
-                    </Label> */}
-                    {customFont && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearCustomFont}
-                        className="h-6 px-2 text-[10px] text-destructive"
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
-                  {!customFont ? (
-                    <div
-                      onClick={() => fontFileInputRef.current?.click()}
-                      className="border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors border-border"
-                    >
-                      <FileText className="w-6 h-6 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">{m.upload_font()}</span>
-                      <span className="text-[10px] text-muted-foreground">{m.font_formats()}</span>
-                    </div>
-                  ) : (
-                    <div className="border p-3 flex items-center justify-between border-border bg-card">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileCheck className="w-4 h-4 shrink-0 text-green-600" />
-                        <span className="text-sm truncate text-foreground">{fontFileName}</span>
-                      </div>
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    ref={fontFileInputRef}
-                    onChange={handleFontUpload}
-                    accept=".ttf,.otf"
-                    className="hidden"
-                  />
-                </div>
-              </Card>
-
-              <Card className="p-4 bg-card border-border">
-                <h2 className="text-lg text-foreground">{m.poster_size()}</h2>
-                <div className="grid grid-cols-2 gap-2">
-                  {SIZES.map((size) => (
-                    <button
-                      key={size.id}
-                      onClick={() => setSelectedSize(size)}
-                      className={cn(
-                        "p-3 border-1 transition-all flex items-center gap-2 cursor-pointer",
-                        selectedSize.id === size.id
-                          ? "border-primary bg-background/60"
-                          : "border-transparent bg-transparent hover:bg-background/50"
-                      )}
-                    >
-                      <span className="text-primary">{size.icon}</span>
-                      <span className="text-xs text-foreground">{size.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </Card>
-            </div>
-
-            <div
-              className="flex flex-col items-center justify-center p-8 relative overflow-hidden bg-card border-border md:h-full min-h-[400px]"
-              style={{
-                maxHeight: "100%",
-                maxWidth: "100%",
-                background: `
-                      radial-gradient(ellipse at 30% 20%, ${colors.bg}dd 0%, transparent 50%),
-                      radial-gradient(ellipse at 70% 80%, ${colors.text}cc 0%, transparent 40%),
-                      linear-gradient(135deg, ${colors.parks} 0%, ${colors.water}f0 50%, ${colors.poi_color}dd 100%)
-                    `,
-                backdropFilter: "blur(8px)",
-              }}
-            >
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
-                style={{
-                  backgroundImage: "radial-gradient(#000 1px, transparent 1px)",
-                  backgroundSize: "20px 20px",
-                }}
+              <LocationSettings
+                location={location}
+                countries={countries}
+                states={states}
+                cities={cities}
+                selectedCountry={selectedCountry}
+                selectedState={selectedState}
+                selectedCity={selectedCity}
+                customTitle={customTitle}
+                isStatesLoading={isStatesLoading}
+                isCitiesLoading={isCitiesLoading}
+                locationLoading={locationLoading}
+                onCountryChange={handleCountryChange}
+                onStateChange={handleStateChange}
+                onCityChange={handleCityChange}
+                onCustomTitleChange={setCustomTitle}
               />
-              <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full pointer-events-none select-none">
-                <span className="text-xs tracking-wide text-white font-light whitespace-nowrap text-shadow-sm">
-                  {m.preview_actual_result()} :)
-                </span>
-              </div>
-              <div
-                ref={previewRef}
-                className="flex items-center justify-center relative transition-all duration-300 ease-in-out w-full h-full p-4"
-                style={{ containerType: "size" }}
-              >
-                <div
-                  className="relative shadow-lg"
-                  style={{
-                    aspectRatio: `${selectedSize.width} / ${selectedSize.height}`,
-                    width: `min(${((selectedSize.width / selectedSize.height) * 100).toFixed(4)}cqh, 100cqw)`,
-                    height: `min(${((selectedSize.height / selectedSize.width) * 100).toFixed(4)}cqw, 100cqh)`,
-                  }}
-                >
-                  <MapPosterPreview
-                    location={stableMapLocation}
-                    city={customTitle || location.city.toUpperCase() || ""}
-                    country={location.country || ""}
-                    zoom={12}
-                    radius={baseRadius}
-                    poiDensity="dense"
-                    theme={stableTheme}
-                    textColor={colors.text}
-                    gradientColor={colors.gradient_color}
-                    posterSize={selectedSize}
-                    customFont={customFont || undefined}
-                    className="w-full h-full"
-                    roadWidthMultiplier={1}
-                  />
-                </div>
-              </div>
+
+              <DataSettings baseRadius={baseRadius} onBaseRadiusChange={setBaseRadius} />
+
+              <ThemeColors
+                selectedTheme={selectedTheme}
+                customColors={customColors}
+                useCustomColors={useCustomColors}
+                themeNameMap={themeNameMap}
+                onThemeChange={(theme) => {
+                  setSelectedTheme(theme);
+                  setCustomColors(theme.colors);
+                  setUseCustomColors(false);
+                }}
+                onCustomColorsChange={setCustomColors}
+                onUseCustomColorsChange={setUseCustomColors}
+              />
+
+              <FontSettings
+                customFont={customFont}
+                fontFileName={fontFileName}
+                fontFileInputRef={fontFileInputRef}
+                onFontUpload={handleFontUpload}
+                onClearFont={clearCustomFont}
+              />
+
+              <PosterSizeSelector
+                sizes={SIZES}
+                selectedSize={selectedSize}
+                onSizeChange={setSelectedSize}
+              />
             </div>
+
+            <MapPreview
+              location={location}
+              selectedSize={selectedSize}
+              stableTheme={stableTheme}
+              colors={colors}
+              customFont={customFont}
+              baseRadius={baseRadius}
+              customTitle={customTitle}
+              previewRef={previewRef}
+            />
           </div>
           <PosterGallery />
           <Footer />

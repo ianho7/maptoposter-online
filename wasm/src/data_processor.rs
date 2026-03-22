@@ -201,9 +201,14 @@ pub fn parse_polygons_js(js_val: JsValue) -> Result<Vec<PolyFeature>, String> {
     Ok(polys)
 }
 
+/// 解析道路（从 GeoJSON 字符串）
+/// 注意：此函数目前直接返回空向量，实际解析由前端完成
 pub fn parse_roads(_: &str) -> Result<Vec<Road>, String> {
     Ok(vec![])
 }
+
+/// 解析多边形（从 GeoJSON 字符串）
+/// 注意：此函数目前直接返回空向量，实际解析由前端完成
 pub fn parse_polygons(_: &str) -> Result<Vec<PolyFeature>, String> {
     Ok(vec![])
 }

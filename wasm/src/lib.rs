@@ -550,18 +550,30 @@ pub fn process_roads_bin_wasm(data: &[f64]) -> Result<js_sys::Float64Array, JsVa
     let roads = data_processor::parse_roads_bin(data)
         .map_err(|e| JsValue::from_str(&format!("Error parsing roads binary: {}", e)))?;
 
-    let mut result = Vec::with_capacity(data.len() + 2);
-    result.push(roads.len() as f64);
+    // 预计算总长度，直接分配 Float64Array，避免中间 Vec 分配和复制
+    let total_len: usize = 1 + roads.iter()
+        .map(|r| 2usize + r.coords.len() * 2)
+        .sum::<usize>();
+
+    let array = js_sys::Float64Array::new_with_length(total_len as u32);
+    let mut idx = 0u32;
+    array.set_index(idx, roads.len() as f64);
+    idx += 1;
+
     for road in roads {
-        result.push(road.road_type.to_u32() as f64);
-        result.push(road.coords.len() as f64);
+        array.set_index(idx, road.road_type.to_u32() as f64);
+        idx += 1;
+        array.set_index(idx, road.coords.len() as f64);
+        idx += 1;
         for (x, y) in road.coords {
-            result.push(x);
-            result.push(y);
+            array.set_index(idx, x);
+            idx += 1;
+            array.set_index(idx, y);
+            idx += 1;
         }
     }
 
-    Ok(js_sys::Float64Array::from(result.as_slice()))
+    Ok(array)
 }
 
 #[wasm_bindgen]
@@ -569,25 +581,44 @@ pub fn process_polygons_bin_wasm(data: &[f64]) -> Result<js_sys::Float64Array, J
     let polys = data_processor::parse_polygons_bin(data)
         .map_err(|e| JsValue::from_str(&format!("Error parsing polygons binary: {}", e)))?;
 
-    let mut result = Vec::new();
-    result.push(polys.len() as f64);
+    // 预计算总长度，直接分配 Float64Array，避免中间 Vec 分配和复制
+    let total_len: usize = 1 + polys.iter()
+        .map(|p| {
+            2usize + p.exterior.len() * 2 + 1 + p.interiors.iter()
+                .map(|r| 1usize + r.len() * 2)
+                .sum::<usize>()
+        })
+        .sum::<usize>();
+
+    let array = js_sys::Float64Array::new_with_length(total_len as u32);
+    let mut idx = 0u32;
+    array.set_index(idx, polys.len() as f64);
+    idx += 1;
+
     for poly in polys {
-        result.push(poly.exterior.len() as f64);
-        result.push(poly.interiors.len() as f64);
+        array.set_index(idx, poly.exterior.len() as f64);
+        idx += 1;
+        array.set_index(idx, poly.interiors.len() as f64);
+        idx += 1;
         for (x, y) in poly.exterior {
-            result.push(x);
-            result.push(y);
+            array.set_index(idx, x);
+            idx += 1;
+            array.set_index(idx, y);
+            idx += 1;
         }
         for ring in poly.interiors {
-            result.push(ring.len() as f64);
+            array.set_index(idx, ring.len() as f64);
+            idx += 1;
             for (x, y) in ring {
-                result.push(x);
-                result.push(y);
+                array.set_index(idx, x);
+                idx += 1;
+                array.set_index(idx, y);
+                idx += 1;
             }
         }
     }
 
-    Ok(js_sys::Float64Array::from(result.as_slice()))
+    Ok(array)
 }
 
 /// 测试函数

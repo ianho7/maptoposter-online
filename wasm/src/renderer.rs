@@ -1,6 +1,7 @@
 use fontdue::layout::{CoordinateSystem, Layout, TextStyle};
 use fontdue::{Font, FontSettings};
 use std::collections::HashMap;
+use std::sync::LazyLock;
 // [Road Casing] 新增 LineCap / LineJoin，用于道路圆头描边
 use tiny_skia::{
     Color, FillRule, LineCap, LineJoin, Paint, PathBuilder, Pixmap, Stroke, Transform,
@@ -739,16 +740,6 @@ impl MapRenderer {
             return;
         }
 
-        // [优化] 预计算 sRGB u8 → 线性 f32 查找表（256 项）
-        // 替代内层循环中每像素 3 次 srgb_to_linear(powf(2.4)) 调用
-        let srgb_to_lin_lut: [f32; 256] = std::array::from_fn(|i| srgb_to_linear(i as f32 / 255.0));
-
-        // [优化] 预计算线性 f32 → sRGB u8 查找表（1024 项，精度 1/1023）
-        // 替代内层循环中每像素 3 次 linear_to_srgb(powf(1/2.4)) 调用
-        let lin_to_srgb_lut: [u8; 1024] = std::array::from_fn(|i| {
-            (linear_to_srgb(i as f32 / 1023.0) * 255.0 + 0.5).min(255.0) as u8
-        });
-
         let pixels = self.pixmap.pixels_mut();
         let base_r = base_color.red();
         let base_g = base_color.green();
@@ -797,9 +788,9 @@ impl MapRenderer {
                     let g_idx = (p.green() as f32 * inv_a).min(255.0) as usize;
                     let b_idx = (p.blue() as f32 * inv_a).min(255.0) as usize;
                     (
-                        srgb_to_lin_lut[r_idx] * dst_a_f,
-                        srgb_to_lin_lut[g_idx] * dst_a_f,
-                        srgb_to_lin_lut[b_idx] * dst_a_f,
+                        SRGB_TO_LIN_LUT[r_idx] * dst_a_f,
+                        SRGB_TO_LIN_LUT[g_idx] * dst_a_f,
+                        SRGB_TO_LIN_LUT[b_idx] * dst_a_f,
                     )
                 } else {
                     (0.0, 0.0, 0.0)
@@ -824,11 +815,11 @@ impl MapRenderer {
                     let b_idx =
                         ((out_b_lin * inv_out_a) * 1023.0 + 0.5).clamp(0.0, 1023.0) as usize;
                     let r =
-                        ((lin_to_srgb_lut[r_idx] as f32 / 255.0) * premul + 0.5).min(255.0) as u8;
+                        ((LIN_TO_SRGB_LUT[r_idx] as f32 / 255.0) * premul + 0.5).min(255.0) as u8;
                     let g =
-                        ((lin_to_srgb_lut[g_idx] as f32 / 255.0) * premul + 0.5).min(255.0) as u8;
+                        ((LIN_TO_SRGB_LUT[g_idx] as f32 / 255.0) * premul + 0.5).min(255.0) as u8;
                     let b =
-                        ((lin_to_srgb_lut[b_idx] as f32 / 255.0) * premul + 0.5).min(255.0) as u8;
+                        ((LIN_TO_SRGB_LUT[b_idx] as f32 / 255.0) * premul + 0.5).min(255.0) as u8;
                     let a = (out_a * 255.0 + 0.5).min(255.0) as u8;
                     if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a) {
                         *p = c;
@@ -1285,6 +1276,19 @@ fn linear_to_srgb(c: f32) -> f32 {
         1.055 * c.powf(1.0 / 2.4) - 0.055
     }
 }
+
+// ── [Gamma校正] 预计算查找表（LUT） ──────────────────────────────────────────
+
+/// 预计算 sRGB u8 → 线性 f32 查找表（256 项）
+/// 在 `draw_gradient` 每次调用时复用，避免重复计算
+static SRGB_TO_LIN_LUT: LazyLock<[f32; 256]> = LazyLock::new(|| {
+    std::array::from_fn(|i| srgb_to_linear(i as f32 / 255.0))
+});
+
+/// 预计算线性 f32 → sRGB u8 查找表（1024 项，精度 1/1023）
+static LIN_TO_SRGB_LUT: LazyLock<[u8; 1024]> = LazyLock::new(|| {
+    std::array::from_fn(|i| (linear_to_srgb(i as f32 / 1023.0) * 255.0 + 0.5).min(255.0) as u8)
+});
 
 // ── [Road Casing] 颜色压暗工具函数 ──────────────────────────────────────────
 

@@ -27,6 +27,9 @@ export interface Location {
   lng?: number;
 }
 
+// Point = [lon, lat] in GeoJSON/Overpass/OSM convention
+export type Point = [number, number];
+
 export interface PosterSize {
   id: string;
   name: string;

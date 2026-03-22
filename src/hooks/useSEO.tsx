@@ -67,9 +67,12 @@ const DEFAULT_META: Record<Locale, { title: string; description: string; keyword
   },
 };
 
-export function SEOHead({ title, description,
-  // ogImage, 
-  noIndex }: SEOProps = {}) {
+export function SEOHead({
+  title,
+  description,
+  // ogImage,
+  noIndex,
+}: SEOProps = {}) {
   const locale = getLocale() as Locale;
   const defaults = DEFAULT_META[locale] ?? DEFAULT_META.en;
 

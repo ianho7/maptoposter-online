@@ -27,6 +27,22 @@ import { log } from "./overpass-client";
 // 类型定义 (复用 utils.ts 的 Point 类型)
 type Point = [number, number];
 
+// OSM Overpass API 返回的 JSON 结构
+interface OverpassResult {
+  elements: OSMElement[];
+}
+interface OSMElement {
+  type: string;
+  id: number;
+  lat?: number;
+  lon?: number;
+  nodes?: number[];
+  geometry?: { lat: number; lon: number }[];
+  tags?: Record<string, string>;
+  members?: OSMElement[];
+  [key: string]: unknown;
+}
+
 /**
  * 将 Overpass JSON 数组转换为 GeoJSON.FeatureCollection
  * @param results Overpass JSON 数组
@@ -37,14 +53,18 @@ function convertToGeoJSON(results: Record<string, unknown>[]): GeoJSON.FeatureCo
   }
 
   // 合并所有分块数据中的 elements
-  const allElements = results.flatMap((res) => (res as any).elements || []);
+  const allElements: OSMElement[] = results.flatMap(
+    (res) => (res as unknown as OverpassResult).elements || []
+  );
 
   if (allElements.length === 0) {
     return null;
   }
 
   // 使用 osmtogeojson 转换为 GeoJSON
-  const geojson = osmtogeojson({ elements: allElements } as any) as GeoJSON.FeatureCollection;
+  const geojson = osmtogeojson({ elements: allElements } as unknown as Parameters<
+    typeof osmtogeojson
+  >[0]) as GeoJSON.FeatureCollection;
 
   return geojson;
 }

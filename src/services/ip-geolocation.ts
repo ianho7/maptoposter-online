@@ -10,8 +10,8 @@ export interface IpGeolocation {
   country: string; // ISO2 code, e.g., "SG", "CN"
   city: string;
   region: string; // State/Province name, e.g., "Guangdong", "Unknown"
-  longitude: string;
-  latitude: string;
+  longitude: number;
+  latitude: number;
 }
 
 /**
@@ -25,8 +25,16 @@ export async function getUserGeolocation(): Promise<IpGeolocation | null> {
       console.error("Failed to fetch geolocation:", response.statusText);
       return null;
     }
-    const data: IpGeolocation = await response.json();
-    return data;
+    const data = (await response.json()) as IpGeolocation;
+    return {
+      ...data,
+      longitude:
+        typeof data.longitude === "number"
+          ? data.longitude
+          : parseFloat(String(data.longitude)) || 0,
+      latitude:
+        typeof data.latitude === "number" ? data.latitude : parseFloat(String(data.latitude)) || 0,
+    };
   } catch (error) {
     console.error("Error fetching geolocation:", error);
     return null;

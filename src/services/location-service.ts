@@ -141,7 +141,7 @@ export class LocationService {
 
         return states;
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(`Failed to load states for ${iso2}:`, err);
     }
 
@@ -208,7 +208,7 @@ export class LocationService {
         this.citiesCache[targetCountryIso2] = cities;
         return cities.filter((c) => c.state_id === stateId);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(`Failed to load cities for ${targetCountryIso2}:`, err);
     }
 

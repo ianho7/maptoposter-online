@@ -41,9 +41,14 @@ import { getDB, compress, decompress } from "./db";
 const STORE_NAME = "geojson-cache";
 const USE_PROTOMAPS = false; // MVP 开关：设置为 true 开启 Protomaps 高速抓取
 
+// Worker self 类型，用于 postMessage 类型安全
+interface WorkerSelf {
+  postMessage(message: unknown, transfer?: Transferable[]): void;
+}
+
 // 进度消息辅助函数
 function sendProgress(progress: number, step: string) {
-  (self as any).postMessage({ type: "PROGRESS", progress, step });
+  (self as WorkerSelf).postMessage({ type: "PROGRESS", progress, step });
 }
 
 // 创建带基础进度的进度回调
@@ -83,7 +88,7 @@ self.onmessage = async (event: MessageEvent) => {
 
   try {
     if (type === "GET_MAP_DATA") {
-      const { country, city, lat, lng, radius, lodMode } = payload;
+      const { country, city, lat, lng, radius, baseRadius, lodMode } = payload;
       const db = await getDB();
 
       const results = {
@@ -100,7 +105,7 @@ self.onmessage = async (event: MessageEvent) => {
       let allCached = true;
 
       for (const t of types) {
-        const key = `map_data:${country}:${city}:${radius}:${lodMode}:${t}`;
+        const key = `map_data:${country}:${city}:${baseRadius}:${lodMode}:${t}`;
         const blob = await db.get(STORE_NAME, key);
         if (blob) {
           cachedBlobs[t] = blob;
@@ -110,7 +115,7 @@ self.onmessage = async (event: MessageEvent) => {
       }
 
       // POI 缓存检查
-      const poisCacheKey = `map_data:${country}:${city}:${radius}:pois`;
+      const poisCacheKey = `map_data:${country}:${city}:${baseRadius}:pois`;
       const poisCachedBlob = await db.get(STORE_NAME, poisCacheKey);
       let poisCached = !!poisCachedBlob;
 
@@ -263,7 +268,7 @@ self.onmessage = async (event: MessageEvent) => {
         ].map(async ({ type: t, data }) => {
           const json = JSON.stringify(data);
           const compressed = await compress(json);
-          const key = `map_data:${country}:${city}:${radius}:${lodMode}:${t}`;
+          const key = `map_data:${country}:${city}:${baseRadius}:${lodMode}:${t}`;
           return db.put(STORE_NAME, compressed, key);
         });
         await Promise.all(saveTasks);
@@ -276,7 +281,7 @@ self.onmessage = async (event: MessageEvent) => {
         results.parks.buffer,
         results.pois.buffer,
       ].filter((b) => b instanceof ArrayBuffer) as Transferable[];
-      (self as any).postMessage(
+      (self as WorkerSelf).postMessage(
         {
           id,
           success: true,

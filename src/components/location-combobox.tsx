@@ -1,6 +1,4 @@
-"use client";
-
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -39,7 +37,7 @@ export function LocationCombobox({
   const [searchQuery, setSearchQuery] = useState("");
 
   // 性能关键：只显示匹配的前 100 条结果，避免 DOM 节点过多导致卡顿
-  const filteredOptions = (() => {
+  const filteredOptions = useMemo(() => {
     if (!searchQuery) return options.slice(0, 100);
 
     const lowerQuery = searchQuery.toLowerCase();
@@ -51,7 +49,7 @@ export function LocationCombobox({
       }
     }
     return matches;
-  })();
+  }, [searchQuery, options]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

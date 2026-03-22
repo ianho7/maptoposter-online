@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
+import * as m from "@/paraglide/messages";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ export interface SnakeGameProps {
    */
   theme?: keyof typeof THEMES | SnakeTheme;
 
-  /** Trigger button label. Default: '消消时间' */
+  /** Trigger button label. Defaults to i18n 'snake_game_trigger' */
   triggerLabel?: string;
 
   /** Optional className on the trigger button */
@@ -146,7 +147,7 @@ export interface SnakeGameProps {
 
 export default function SnakeGame({
   theme = "paper",
-  triggerLabel = "消消时间",
+  triggerLabel,
   className,
   onOpenChange,
   inline = false,
@@ -414,11 +415,11 @@ export default function SnakeGame({
               onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.6")}
               onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
             >
-              {phase === "dead" ? "再来一局" : "开始"}
+              {phase === "dead" ? m.snake_game_play_again() : m.snake_game_start()}
             </button>
             {phase === "idle" && (
               <span style={{ fontSize: 10, color: t.accent, opacity: 0.4, letterSpacing: "0.1em" }}>
-                方向键 / WASD
+                {m.snake_game_controls?.()}
               </span>
             )}
           </div>
@@ -478,7 +479,7 @@ export default function SnakeGame({
         onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
       >
         <GridIcon color={t.accent} />
-        {triggerLabel}
+        {triggerLabel ?? m.snake_game_trigger?.()}
       </button>
 
       {/* modal overlay */}
