@@ -286,7 +286,10 @@ export function PosterGallery() {
   }, []);
 
   return (
-    <section aria-label="Poster gallery" className="relative min-h-[50vh] flex flex-col px-0 md:px-20 overflow-hidden user-select-none">
+    <section
+      aria-label="Poster gallery"
+      className="relative min-h-[50vh] flex flex-col px-0 md:px-20 overflow-hidden user-select-none"
+    >
       {/* Gallery Container */}
       <div className="flex-1 relative flex items-center">
         {/* Scroll Container（overflow 隐藏，不再需要滚动条） */}

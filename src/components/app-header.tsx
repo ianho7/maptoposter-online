@@ -53,7 +53,10 @@ export function AppHeader({
             onValueChange={(val) => onLangChange(val as AvailableLanguageTag)}
             data-ai-action="select-language"
           >
-            <SelectTrigger className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground" aria-label="Select language">
+            <SelectTrigger
+              className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground"
+              aria-label="Select language"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
