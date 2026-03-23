@@ -51,8 +51,9 @@ export function AppHeader({
           <Select
             value={activeLang}
             onValueChange={(val) => onLangChange(val as AvailableLanguageTag)}
+            data-ai-action="select-language"
           >
-            <SelectTrigger className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground">
+            <SelectTrigger className="w-[90px] sm:w-[120px] h-9 border-border bg-card text-card-foreground" aria-label="Select language">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -67,11 +68,13 @@ export function AppHeader({
             onClick={onDownload}
             disabled={isGenerating || locationLoading}
             className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+            data-ai-action="download-poster"
+            aria-label={isGenerating ? m.generating() : m.download_button()}
           >
             {isGenerating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
             ) : (
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4" aria-hidden="true" />
             )}
             <span className="hidden sm:inline">
               {isGenerating ? m.generating() : m.download_button()}
@@ -80,8 +83,10 @@ export function AppHeader({
           <Button
             onClick={() => window.open("https://github.com/ianho7/maptoposter-online", "_blank")}
             className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+            aria-label="Open GitHub repository in new tab"
+            data-ai-action="open-github"
           >
-            <GithubIcon className="w-4 h-4" />
+            <GithubIcon className="w-4 h-4" aria-hidden="true" />
             <span className="hidden sm:inline">Github</span>
           </Button>
         </div>

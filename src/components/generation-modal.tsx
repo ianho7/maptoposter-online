@@ -45,7 +45,13 @@ export function GenerationModal({
   if (!isGenerating) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Poster generation in progress"
+      data-ai-action="generation-modal"
+    >
       <Card className="w-[400px] p-6 shadow-2xl bg-card border-primary">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -54,7 +60,12 @@ export function GenerationModal({
               {Math.round(generationProgress)}%
             </span>
           </div>
-          <Progress value={generationProgress} className="h-2 bg-secondary" />
+          <Progress
+            value={generationProgress}
+            className="h-2 bg-secondary"
+            aria-label={`Generation progress: ${Math.round(generationProgress)}%`}
+            aria-busy={generationProgress < 100}
+          />
           <p className="text-xs text-center text-muted-foreground/70 flex items-center justify-center gap-1.5">
             <Clock className="w-3 h-3" />
             {m.generating_time_estimate()}
@@ -88,6 +99,8 @@ export function GenerationModal({
             <Button
               size="sm"
               className="text-muted-foreground bg-secondary hover:bg-primary hover:text-primary-foreground cursor-pointer"
+              aria-label="Close generation modal"
+              data-ai-action="close-generation-modal"
               onClick={() => {
                 onClose();
                 generationCompleteRef.current = false;

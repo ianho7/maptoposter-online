@@ -286,7 +286,7 @@ export function PosterGallery() {
   }, []);
 
   return (
-    <section className="relative min-h-[50vh] flex flex-col px-0 md:px-20 overflow-hidden user-select-none">
+    <section aria-label="Poster gallery" className="relative min-h-[50vh] flex flex-col px-0 md:px-20 overflow-hidden user-select-none">
       {/* Gallery Container */}
       <div className="flex-1 relative flex items-center">
         {/* Scroll Container（overflow 隐藏，不再需要滚动条） */}
@@ -305,6 +305,9 @@ export function PosterGallery() {
               <button
                 key={`${poster.id}-${index}`}
                 data-poster-card
+                data-ai-action="select-poster"
+                data-poster-id={poster.id}
+                data-poster-title={poster.title}
                 onClick={() => handlePosterClick(poster)}
                 className={cn(
                   "group relative flex-shrink-0",
@@ -354,6 +357,8 @@ export function PosterGallery() {
             {/* Close Button */}
             <button
               onClick={handleCloseLightbox}
+              aria-label="Close lightbox"
+              data-ai-action="close-lightbox"
               className={cn(
                 "absolute top-4 right-4 sm:top-6 sm:right-6 md:top-10 md:right-10 z-10",
                 "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
@@ -363,8 +368,7 @@ export function PosterGallery() {
                 "cursor-pointer"
               )}
             >
-              <X className="w-5 h-5" />
-              <span className="sr-only">Close</span>
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
 
             {/* Navigation */}
@@ -373,6 +377,8 @@ export function PosterGallery() {
                 e.stopPropagation();
                 handleLightboxNavigate("prev");
               }}
+              aria-label="Previous poster"
+              data-ai-action="navigate-prev-poster"
               className={cn(
                 "absolute left-2 sm:left-10 z-10",
                 "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
@@ -382,8 +388,7 @@ export function PosterGallery() {
                 "cursor-pointer"
               )}
             >
-              <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-              <span className="sr-only">Previous poster</span>
+              <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
             </button>
 
             <button
@@ -391,6 +396,8 @@ export function PosterGallery() {
                 e.stopPropagation();
                 handleLightboxNavigate("next");
               }}
+              aria-label="Next poster"
+              data-ai-action="navigate-next-poster"
               className={cn(
                 "absolute right-2 sm:right-10 z-10",
                 "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
@@ -400,8 +407,7 @@ export function PosterGallery() {
                 "cursor-pointer"
               )}
             >
-              <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
-              <span className="sr-only">Next poster</span>
+              <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
             </button>
 
             {/* Main Image */}

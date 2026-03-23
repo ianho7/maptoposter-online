@@ -420,6 +420,8 @@ export default function SnakeGame({
             )}
             <button
               onClick={start}
+              aria-label={phase === "dead" ? m.snake_game_play_again() : m.snake_game_start()}
+              data-ai-action="start-snake-game"
               style={{
                 padding: "7px 24px",
                 borderRadius: 3,
