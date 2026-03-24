@@ -39,11 +39,36 @@ export interface PosterSize {
 }
 
 export const POSTER_SIZES: PosterSize[] = [
-  { id: "a4-portrait", name: "A4 Portrait", width: 2480, height: 3508, aspect: "70.7/100" },
-  { id: "a4-landscape", name: "A4 Landscape", width: 3508, height: 2480, aspect: "100/70.7" },
-  { id: "square", name: "Square", width: 3000, height: 3000, aspect: "1/1" },
-  { id: "phone", name: "Phone Wallpaper", width: 1170, height: 2532, aspect: "9/19.5" },
-  { id: "16x9", name: "16:9 Desktop", width: 3840, height: 2160, aspect: "16/9" },
+  {
+    id: "a4-portrait",
+    name: "A4 Portrait (1:1.414)",
+    width: 2480,
+    height: 3508,
+    aspect: "70.7/100",
+  },
+  {
+    id: "a4-landscape",
+    name: "A4 Landscape (1.414:1)",
+    width: 3508,
+    height: 2480,
+    aspect: "100/70.7",
+  },
+  { id: "square", name: "Square Poster (1:1)", width: 3000, height: 3000, aspect: "1/1" },
+  {
+    id: "poster-9x16-portrait",
+    name: "Portrait Poster (9:16)",
+    width: 2160,
+    height: 3840,
+    aspect: "9/16",
+  },
+  {
+    id: "poster-4x3-landscape",
+    name: "Landscape Poster (4:3)",
+    width: 3200,
+    height: 2400,
+    aspect: "4/3",
+  },
+  { id: "16x9", name: "Landscape Poster (16:9)", width: 3840, height: 2160, aspect: "16/9" },
 ];
 
 export const MAP_THEMES: MapTheme[] = [

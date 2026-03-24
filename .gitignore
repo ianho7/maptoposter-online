@@ -24,3 +24,4 @@ public/location-data
 *.sln
 *.sw?
 *.lock
+.agents
