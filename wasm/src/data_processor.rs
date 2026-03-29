@@ -56,8 +56,8 @@ pub fn parse_roads_js(js_val: JsValue) -> Result<Vec<Road>, String> {
             }
         } else if f.geometry.geom_type == "MultiLineString" {
             if let Some(lines) = f.geometry.coordinates.as_array() {
-                if let Some(first) = lines.get(0) {
-                    if let Some(coords) = parse_coords_val(first) {
+                for line in lines {
+                    if let Some(coords) = parse_coords_val(line) {
                         roads.push(Road {
                             coords: project_points(&coords),
                             road_type: RoadType::from_highway(&highway),

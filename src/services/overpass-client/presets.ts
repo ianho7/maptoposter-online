@@ -273,14 +273,18 @@ export async function downloadWater(
   const coordStrs = makeOverpassPolygonCoordStrs(polygon);
   log("info", `Polygon split into ${coordStrs.length} sub-region(s)`);
 
-  // natural=water 匹配静态水体, natural=sea 匹配海洋, natural=bay 匹配海湾, waterway=true 匹配所有动态水体
+  // 保留现有宽松水体抓取范围，并额外补充适合做面填充的高价值水体标签
   const tags = {
-    // 静态水体 + 海岸线 + 海湾海峡
-    natural: ["water", "coastline", "bay", "strait", "cape"],
+    // 静态水体 + 海岸线 + 海湾海峡 + 海域
+    natural: ["water", "coastline", "bay", "strait", "cape", "sea"],
     // 所有动态水体（river/stream/canal/drain/ditch/riverbank 等）
     waterway: true,
     // 海洋/大洋（大型 relation，覆盖范围可能超出查询区域）
     place: ["sea", "ocean"],
+    // 面状水体细分类（常用于 natural=water 的补充说明）
+    water: ["lake", "reservoir", "pond", "lagoon", "basin"],
+    // 人工蓄水区域
+    landuse: ["reservoir"],
   };
   const results = await downloadOverpassFeatures(coordStrs, tags, onProgress, preFetchedPauseMs);
 

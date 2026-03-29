@@ -1,7 +1,7 @@
 /**
  * Overpass-Client 包装层
  *
- * 用于将原始的 [lat, lng], radius 参数格式转换为 GeoJSON Polygon，
+ * 用于将外部构造好的 GeoJSON Polygon 传给 overpass-client，
  * 然后调用 overpass-client 库获取数据，并转换回 GeoJSON.FeatureCollection 格式。
  *
  * 切换说明:
@@ -10,10 +10,8 @@
  *   - false = 使用 utils.ts 中的原始函数
  */
 
-import { point as turfPoint } from "@turf/helpers";
-import { buffer } from "@turf/buffer";
 import osmtogeojson from "osmtogeojson";
-import type { Feature, Polygon, MultiPolygon } from "geojson";
+import type { Feature, Polygon } from "geojson";
 import {
   downloadRoads,
   downloadParks,
@@ -24,8 +22,7 @@ import {
 } from "./overpass-client";
 import { log } from "./overpass-client";
 
-// 类型定义 (复用 utils.ts 的 Point 类型)
-type Point = [number, number];
+const DRIVE_SERVICE_RADIUS_THRESHOLD_METERS = 15_000;
 
 // OSM Overpass API 返回的 JSON 结构
 interface OverpassResult {
@@ -43,6 +40,40 @@ interface OSMElement {
   [key: string]: unknown;
 }
 
+function pickRicherArray<T>(current?: T[], incoming?: T[]): T[] | undefined {
+  if (!current || current.length === 0) return incoming;
+  if (!incoming || incoming.length === 0) return current;
+  return incoming.length > current.length ? incoming : current;
+}
+
+export function deduplicateOverpassElements(elements: OSMElement[]): OSMElement[] {
+  const deduped = new Map<string, OSMElement>();
+
+  for (const element of elements) {
+    const key = `${element.type}:${element.id}`;
+    const existing = deduped.get(key);
+
+    if (!existing) {
+      deduped.set(key, element);
+      continue;
+    }
+
+    deduped.set(key, {
+      ...existing,
+      ...element,
+      tags: {
+        ...existing.tags,
+        ...element.tags,
+      },
+      nodes: pickRicherArray(existing.nodes, element.nodes),
+      geometry: pickRicherArray(existing.geometry, element.geometry),
+      members: pickRicherArray(existing.members, element.members),
+    });
+  }
+
+  return Array.from(deduped.values());
+}
+
 /**
  * 将 Overpass JSON 数组转换为 GeoJSON.FeatureCollection
  * @param results Overpass JSON 数组
@@ -56,13 +87,14 @@ function convertToGeoJSON(results: Record<string, unknown>[]): GeoJSON.FeatureCo
   const allElements: OSMElement[] = results.flatMap(
     (res) => (res as unknown as OverpassResult).elements || []
   );
+  const dedupedElements = deduplicateOverpassElements(allElements);
 
-  if (allElements.length === 0) {
+  if (dedupedElements.length === 0) {
     return null;
   }
 
   // 使用 osmtogeojson 转换为 GeoJSON
-  const geojson = osmtogeojson({ elements: allElements } as unknown as Parameters<
+  const geojson = osmtogeojson({ elements: dedupedElements } as unknown as Parameters<
     typeof osmtogeojson
   >[0]) as GeoJSON.FeatureCollection;
 
@@ -72,75 +104,35 @@ function convertToGeoJSON(results: Record<string, unknown>[]): GeoJSON.FeatureCo
 /**
  * 下载道路网络数据 (包装层)
  *
- * @param point 中心点坐标 [lng, lat]
- * @param dist 半径 (米)
+ * @param region 下载区域 polygon
+ * @param baseRadius 基础半径 (米)，仅用于 LOD/networkType 判定
  * @param lodMode 细节等级
  * @param onProgress 进度回调函数
  * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  */
 export async function fetchGraphOverpass(
-  point: Point,
-  dist: number,
+  region: Feature<Polygon>,
+  baseRadius: number,
   lodMode: "simplified" | "detailed" = "simplified",
   onProgress?: OverpassProgressCallback,
   preFetchedPauseMs?: number
 ): Promise<GeoJSON.FeatureCollection | null> {
-  // point 格式为 [lat, lon]，与旧函数兼容
-  const [lat, lng] = point;
-
-  // 将米转换为千米 (turf buffer 单位)
-  const distKm = dist / 1000;
-
-  // 生成圆形区域多边形 (使用 buffer) - turf 使用 [lng, lat] 顺序
-  const centerPoint = turfPoint([lng, lat]);
-  const polygon = buffer(centerPoint, distKm, { units: "kilometers", steps: 64 }) as
-    | Feature<Polygon>
-    | Feature<MultiPolygon>
-    | null;
-
-  if (!polygon) {
-    log("error", "Failed to create polygon buffer for roads");
-    return null;
-  }
-
-  // 调试日志：显示多边形坐标
-  const coords =
-    polygon.geometry.type === "Polygon"
-      ? polygon.geometry.coordinates[0]
-      : polygon.geometry.type === "MultiPolygon"
-        ? polygon.geometry.coordinates[0][0]
-        : [];
+  const coords = region.geometry.coordinates[0] ?? [];
   const firstCoord = coords[0] || [];
-  // turf 使用 [lng, lat]，所以 firstCoord 是 [lng, lat]
   log(
     "info",
-    `[fetchGraphOverpass] polygon: center=[lat=${lat.toFixed(4)}, lng=${lng.toFixed(4)}], radius=${dist}m, firstPoint=[lat=${firstCoord[1]?.toFixed(4)}, lng=${firstCoord[0]?.toFixed(4)}]`
+    `[fetchGraphOverpass] polygon ready, baseRadius=${baseRadius}m, firstPoint=[lat=${firstCoord[1]?.toFixed(4)}, lng=${firstCoord[0]?.toFixed(4)}]`
   );
 
-  // 根据 lodMode 选择道路类型
-  let networkType: NetworkType = "all";
-
-  if (lodMode === "detailed") {
-    // 细节模式：保留所有道路
-    networkType = "all";
-  } else {
-    // 精简模式：根据半径选择
-    if (dist > 5000) {
-      // 大范围只保留主干道
-      networkType = "drive";
-    } else {
-      // 小范围保留更多道路
-      networkType = "drive_service";
-    }
-  }
+  const networkType = resolveRoadNetworkType(baseRadius, lodMode);
 
   log(
     "info",
-    `[fetchGraphOverpass] lodMode=${lodMode}, dist=${dist}m, networkType=${networkType}, preFetchedPauseMs=${preFetchedPauseMs}`
+    `[fetchGraphOverpass] lodMode=${lodMode}, baseRadius=${baseRadius}m, networkType=${networkType}, preFetchedPauseMs=${preFetchedPauseMs}`
   );
 
   try {
-    const results = await downloadRoads(polygon, networkType, onProgress, preFetchedPauseMs);
+    const results = await downloadRoads(region, networkType, onProgress, preFetchedPauseMs);
     return convertToGeoJSON(results);
   } catch (error) {
     log("error", `fetchGraphOverpass failed: ${error}`);
@@ -148,49 +140,42 @@ export async function fetchGraphOverpass(
   }
 }
 
+export function resolveRoadNetworkType(
+  baseRadius: number,
+  lodMode: "simplified" | "detailed"
+): NetworkType {
+  if (lodMode === "detailed") {
+    return "all";
+  }
+
+  return baseRadius <= DRIVE_SERVICE_RADIUS_THRESHOLD_METERS ? "all" : "drive";
+}
+
 /**
  * 下载地理要素数据 (水体/公园) (包装层)
  *
- * @param point 中心点坐标 [lng, lat]
- * @param dist 半径 (米)
+ * @param region 下载区域 polygon
  * @param type 'water' | 'parks'
  * @param onProgress 进度回调函数
  * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  */
 export async function fetchFeaturesOverpass(
-  point: Point,
-  dist: number,
+  region: Feature<Polygon>,
   type: "water" | "parks",
   onProgress?: OverpassProgressCallback,
   preFetchedPauseMs?: number
 ): Promise<GeoJSON.FeatureCollection | null> {
-  // point 格式为 [lat, lon]，与旧函数兼容
-  const [lat, lng] = point;
-  const distKm = dist / 1000;
-
-  // 生成圆形区域多边形
-  const centerPoint = turfPoint([lng, lat]);
-  const polygon = buffer(centerPoint, distKm, { units: "kilometers", steps: 64 }) as
-    | Feature<Polygon>
-    | Feature<MultiPolygon>
-    | null;
-
-  if (!polygon) {
-    log("error", `Failed to create polygon buffer for ${type}`);
-    return null;
-  }
-
-  log("info", `[fetchFeaturesOverpass] type=${type}, dist=${dist}m`);
+  log("info", `[fetchFeaturesOverpass] type=${type}, polygon ready`);
 
   try {
     let results;
 
     if (type === "water") {
       // 水体: natural=water, waterway=*
-      results = await downloadWater(polygon, onProgress, preFetchedPauseMs);
+      results = await downloadWater(region, onProgress, preFetchedPauseMs);
     } else {
       // 公园: leisure=park/garden/nature_reserve
-      results = await downloadParks(polygon, onProgress, preFetchedPauseMs);
+      results = await downloadParks(region, onProgress, preFetchedPauseMs);
     }
 
     return convertToGeoJSON(results);
@@ -203,38 +188,20 @@ export async function fetchFeaturesOverpass(
 /**
  * 下载兴趣点数据 (POI) (包装层)
  *
- * @param point 中心点坐标 [lng, lat]
- * @param dist 半径 (米)
+ * @param region 下载区域 polygon
  * @param onProgress 进度回调函数
  * @param preFetchedPauseMs 预先获取的等待毫秒数（可选，避免重复调用 getOverpassPause）
  */
 export async function fetchPOIsOverpass(
-  point: Point,
-  dist: number,
+  region: Feature<Polygon>,
   onProgress?: OverpassProgressCallback,
   preFetchedPauseMs?: number
 ): Promise<GeoJSON.FeatureCollection | null> {
-  // point 格式为 [lat, lon]，与旧函数兼容
-  const [lat, lng] = point;
-  const distKm = dist / 1000;
-
-  // 生成圆形区域多边形
-  const centerPoint = turfPoint([lng, lat]);
-  const polygon = buffer(centerPoint, distKm, { units: "kilometers", steps: 64 }) as
-    | Feature<Polygon>
-    | Feature<MultiPolygon>
-    | null;
-
-  if (!polygon) {
-    log("error", "Failed to create polygon buffer for POIs");
-    return null;
-  }
-
-  log("info", `[fetchPOIsOverpass] dist=${dist}m`);
+  log("info", "[fetchPOIsOverpass] polygon ready");
 
   try {
     // 下载所有 amenity 类型的 POI (amenityTypes 传 undefined 表示获取所有类型)
-    const results = await downloadPOIs(polygon, onProgress, preFetchedPauseMs);
+    const results = await downloadPOIs(region, onProgress, preFetchedPauseMs);
     return convertToGeoJSON(results);
   } catch (error) {
     log("error", `fetchPOIsOverpass failed: ${error}`);

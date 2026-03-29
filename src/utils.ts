@@ -354,37 +354,40 @@ function extractLayerFeatures(
  * 将道路 GeoJSON 扁平化为 Float64Array
  */
 export function flattenRoadsGeoJSON(geojson: GeoJSON.FeatureCollection): Float64Array {
-  const features = geojson.features;
-  let totalPoints = 0;
-  features.forEach((f: any) => {
-    if (f.geometry.type === "LineString") {
-      totalPoints += f.geometry.coordinates.length;
-    } else if (f.geometry.type === "MultiLineString") {
-      totalPoints += f.geometry.coordinates[0]?.length || 0;
-    }
-  });
+  const flattenedSegments: Array<{ type: number; coords: number[][] }> = [];
 
-  const buffer = new Float64Array(1 + features.length * 2 + totalPoints * 2);
-  let offset = 0;
-  buffer[offset++] = features.length;
-
-  for (const f of features) {
-    const props = f.properties || {};
+  for (const feature of geojson.features as any[]) {
+    const props = feature.properties || {};
     const typeStr = Array.isArray(props.highway) ? props.highway[0] : props.highway;
-    buffer[offset++] = roadTypeToEnum(typeStr || "unclassified");
+    const typeEnum = roadTypeToEnum(typeStr || "unclassified");
+    const geom = feature.geometry;
 
-    const geom = f.geometry as any;
-    let coords = [];
+    if (!geom) continue;
+
     if (geom.type === "LineString") {
-      coords = geom.coordinates;
+      if (geom.coordinates.length >= 2) {
+        flattenedSegments.push({ type: typeEnum, coords: geom.coordinates });
+      }
     } else if (geom.type === "MultiLineString") {
-      coords = geom.coordinates[0] || [];
+      for (const line of geom.coordinates) {
+        if (line.length >= 2) {
+          flattenedSegments.push({ type: typeEnum, coords: line });
+        }
+      }
     }
+  }
 
-    buffer[offset++] = coords.length;
-    for (let i = 0; i < coords.length; i++) {
-      buffer[offset++] = coords[i][0];
-      buffer[offset++] = coords[i][1];
+  const totalPoints = flattenedSegments.reduce((sum, segment) => sum + segment.coords.length, 0);
+  const buffer = new Float64Array(1 + flattenedSegments.length * 2 + totalPoints * 2);
+  let offset = 0;
+  buffer[offset++] = flattenedSegments.length;
+
+  for (const segment of flattenedSegments) {
+    buffer[offset++] = segment.type;
+    buffer[offset++] = segment.coords.length;
+    for (let i = 0; i < segment.coords.length; i++) {
+      buffer[offset++] = segment.coords[i][0];
+      buffer[offset++] = segment.coords[i][1];
     }
   }
   return buffer;

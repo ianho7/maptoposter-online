@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 function Progress({
   className,
   value,
-  style,
   ...props
 }: ComponentProps<typeof ProgressPrimitive.Root>) {
   return (

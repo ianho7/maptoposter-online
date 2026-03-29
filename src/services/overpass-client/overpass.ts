@@ -329,6 +329,7 @@ function parseStatusOnce(responseText: string): number {
     // 正在运行/无明确信息
     return Infinity;
   } catch (e) {
+    log("error", `Failed to parse status response: ${e}`);
     return Infinity;
   }
 }

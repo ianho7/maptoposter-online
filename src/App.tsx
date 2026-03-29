@@ -745,58 +745,6 @@ export default function MapPosterGenerator() {
     }
   };
 
-  // const handlePasteFromClipboard = async () => {
-  //   try {
-  //     const text = await navigator.clipboard.readText();
-  //     const json = JSON.parse(text);
-
-  //     // Validate required fields
-  //     const requiredFields = [
-  //       "background",
-  //       "text",
-  //       "mask_gradient",
-  //       "water",
-  //       "park_greenery",
-  //       "poi",
-  //       "roads",
-  //     ];
-  //     const hasAllFields = requiredFields.every((field) => field in json);
-  //     const hasRoadsFields =
-  //       json.roads &&
-  //       "highway" in json.roads &&
-  //       "primary" in json.roads &&
-  //       "secondary" in json.roads &&
-  //       "tertiary" in json.roads &&
-  //       "residential" in json.roads &&
-  //       "other" in json.roads;
-
-  //     if (!hasAllFields || !hasRoadsFields) {
-  //       alert(m.paste_json_invalid_format());
-  //       return;
-  //     }
-
-  //     // Map JSON fields to customColors
-  //     setCustomColors({
-  //       bg: json.background,
-  //       text: json.text,
-  //       gradient_color: json.mask_gradient,
-  //       water: json.water,
-  //       parks: json.park_greenery,
-  //       poi_color: json.poi,
-  //       road_motorway: json.roads.highway,
-  //       road_primary: json.roads.primary,
-  //       road_secondary: json.roads.secondary,
-  //       road_tertiary: json.roads.tertiary,
-  //       road_residential: json.roads.residential,
-  //       road_default: json.roads.other,
-  //     });
-  //     setUseCustomColors(true);
-  //   } catch (error) {
-  //     console.error("Failed to paste from clipboard:", error);
-  //     alert(m.paste_json_invalid_format());
-  //   }
-  // };
-
   useEffect(() => {
     init()
       .then(() => {
@@ -861,18 +809,13 @@ export default function MapPosterGenerator() {
       setGenerationStep(m.step_fetching_data());
       await yieldMainThread();
 
-      // 【优化】：获取地图数据 (包含 POI)
-      // 根据画幅比例计算补偿后的 radius，确保数据覆盖渲染区域
-      // Landscape: width > height, aspect > 1, need radius * aspect
-      // Portrait: height > width, aspect < 1, need radius / aspect
-      const aspect = selectedSize.width / selectedSize.height;
-      const compensatedRadius = baseRadius * Math.max(aspect, 1 / aspect);
+      // 获取地图数据 (包含 POI)
+      // 下载范围使用固定的 canonical fetch viewport，避免同半径切换画幅时重新拉取数据。
       const mapResults = await mapDataService.getMapData(
         location.country,
         location.city,
         lat,
         lng,
-        compensatedRadius,
         baseRadius,
         lodMode
       );
@@ -929,7 +872,7 @@ export default function MapPosterGenerator() {
         text_position: "bottom",
         selected_size_height: selectedSize.height * FRONTEND_SCALE,
         frontend_scale: FRONTEND_SCALE,
-        road_width_boost: isProtomaps ? 1.8 : 1.0, // 关键：如果是 Protomaps，则将全域线宽补偿 1.8 倍以对齐 Overpass 质感
+        road_width_boost: isProtomaps ? 1.8 : 1.0,
         pois: Array.from(poisBin),
       };
 

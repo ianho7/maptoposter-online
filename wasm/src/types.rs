@@ -154,7 +154,7 @@ impl RoadType {
             RoadType::Primary => 1.0,
             RoadType::Secondary => 0.8,
             RoadType::Tertiary => 0.6,
-            RoadType::Residential | RoadType::Default => 0.5,
+            RoadType::Residential | RoadType::Default => 0.4,
         };
         base_width * scale_factor
     }

@@ -247,7 +247,22 @@ export function polygonToOverpassCoordStr(polygon: Feature<Polygon>): string {
 export function makeOverpassPolygonCoordStrs(polygon: AnyPolygon): string[] {
   const subPolygons = subdividePolygon(polygon);
   log("info", `Polygon subdivided into ${subPolygons.length} sub-query(ies)`);
-  return subPolygons.map(polygonToOverpassCoordStr);
+
+  const queryPolygons =
+    subPolygons.length > 1 && overpassConfig.subQueryOverlapMeters > 0
+      ? subPolygons.map((subPolygon) =>
+          expandPolygonBboxForQuery(subPolygon, overpassConfig.subQueryOverlapMeters)
+        )
+      : subPolygons;
+
+  if (queryPolygons !== subPolygons) {
+    log(
+      "info",
+      `Applied ${overpassConfig.subQueryOverlapMeters}m overlap to ${queryPolygons.length} sub-query polygon(s)`
+    );
+  }
+
+  return queryPolygons.map(polygonToOverpassCoordStr);
 }
 
 // ─── 内部工具 ────────────────────────────────────────────
@@ -271,4 +286,24 @@ function metersToDegrees(meters: number, latitude = 0): number {
   const degPerMeter = 180 / (Math.PI * EARTH_RADIUS);
   // 经度方向需要除以 cos(lat) 进行修正
   return (meters * degPerMeter) / Math.cos((latitude * Math.PI) / 180);
+}
+
+function expandPolygonBboxForQuery(
+  polygon: Feature<Polygon>,
+  overlapMeters: number
+): Feature<Polygon> {
+  const [left, bottom, right, top] = bbox(polygon);
+  const centerLat = (bottom + top) / 2;
+  const latPad = metersToLatitudeDegrees(overlapMeters);
+  const lonPad = metersToLongitudeDegrees(overlapMeters, centerLat);
+
+  return bboxPolygon([left - lonPad, bottom - latPad, right + lonPad, top + latPad]);
+}
+
+function metersToLatitudeDegrees(meters: number): number {
+  return metersToDegrees(meters);
+}
+
+function metersToLongitudeDegrees(meters: number, latitude: number): number {
+  return metersToDegrees(meters, latitude);
 }

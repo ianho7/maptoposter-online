@@ -1,6 +1,7 @@
 /**
  * 地图数据服务：管理内存缓存并与 Data Worker 通信
  */
+import { MAP_DATA_CACHE_VERSION } from "@/lib/poster-viewport";
 
 export interface MapData {
   roads: Float64Array;
@@ -63,11 +64,10 @@ class MapDataService {
     city: string,
     lat: number,
     lng: number,
-    radius: number,
     baseRadius: number,
     lodMode: "simplified" | "detailed" = "simplified"
   ): Promise<MapData> {
-    const cacheKey = `${country}:${city}:${baseRadius}:${lodMode}`;
+    const cacheKey = `${MAP_DATA_CACHE_VERSION}:${country}:${city}:${baseRadius}:${lodMode}`;
 
     // 1. 尝试 L1 内存缓存
     if (this.memoryCache.has(cacheKey)) {
@@ -96,7 +96,7 @@ class MapDataService {
     this.worker.postMessage({
       id,
       type: "GET_MAP_DATA",
-      payload: { country, city, lat, lng, radius, baseRadius, lodMode },
+      payload: { country, city, lat, lng, baseRadius, lodMode },
     });
 
     const result = await promise;
@@ -126,7 +126,7 @@ class MapDataService {
     radius: number
   ): Promise<POIData> {
     // 直接调用 getMapData，获取其中的 pois
-    const mapData = await this.getMapData(country, city, lat, lng, radius, radius, "simplified");
+    const mapData = await this.getMapData(country, city, lat, lng, radius, "simplified");
     return {
       pois: mapData.pois,
       fromCache: mapData.fromCache,

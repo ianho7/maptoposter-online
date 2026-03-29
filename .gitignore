@@ -25,3 +25,4 @@ public/location-data
 *.sw?
 *.lock
 .agents
+docs/inner-docs

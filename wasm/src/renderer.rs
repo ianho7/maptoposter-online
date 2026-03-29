@@ -379,7 +379,7 @@ impl MapRenderer {
                 self.pixmap.fill_path(
                     &path,
                     &paint,
-                    FillRule::Winding,
+                    FillRule::EvenOdd,
                     Transform::identity(),
                     None,
                 );

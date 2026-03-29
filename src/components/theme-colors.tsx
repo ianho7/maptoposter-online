@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,7 +7,7 @@ import { Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAP_THEMES, type MapColors, type MapTheme } from "@/lib/types";
 import * as m from "@/paraglide/messages";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
 type ColorKey = keyof MapColors;
 
@@ -17,6 +18,56 @@ function isValidHexColor(color: string): boolean {
 interface ColorKeyDef {
   key: ColorKey;
   label: string;
+}
+
+interface ClipboardColorJson {
+  background: string;
+  text: string;
+  mask_gradient: string;
+  water: string;
+  park_greenery: string;
+  poi: string;
+  roads: {
+    highway: string;
+    primary: string;
+    secondary: string;
+    tertiary: string;
+    residential: string;
+    other: string;
+  };
+}
+
+function isClipboardColorJson(value: unknown): value is ClipboardColorJson {
+  if (!value || typeof value !== "object") return false;
+
+  const json = value as Record<string, unknown>;
+  const roads = json.roads;
+
+  if (!roads || typeof roads !== "object") return false;
+
+  const requiredStringFields = [
+    "background",
+    "text",
+    "mask_gradient",
+    "water",
+    "park_greenery",
+    "poi",
+  ] as const;
+  const requiredRoadFields = [
+    "highway",
+    "primary",
+    "secondary",
+    "tertiary",
+    "residential",
+    "other",
+  ] as const;
+
+  return (
+    requiredStringFields.every((field) => typeof json[field] === "string") &&
+    requiredRoadFields.every(
+      (field) => typeof (roads as Record<string, unknown>)[field] === "string"
+    )
+  );
 }
 
 // ─── 独立的颜色行组件，内部维护本地 state，避免拖动时触发父组件重渲染 ───
@@ -106,26 +157,66 @@ export function ThemeColors({
   onCustomColorsChange,
   onUseCustomColorsChange,
 }: ThemeColorsProps) {
-  const colorKeys: ColorKeyDef[] = useMemo(
-    () => [
-      { key: "bg", label: m.color_bg() },
-      { key: "text", label: m.color_text() },
-      { key: "gradient_color", label: m.color_gradient() },
-      { key: "water", label: m.color_water() },
-      { key: "parks", label: m.color_parks() },
-      { key: "poi_color", label: m.color_poi() },
-      { key: "road_motorway", label: m.color_road_motorway() },
-      { key: "road_primary", label: m.color_road_primary() },
-      { key: "road_secondary", label: m.color_road_secondary() },
-      { key: "road_tertiary", label: m.color_road_tertiary() },
-      { key: "road_residential", label: m.color_road_residential() },
-      { key: "road_default", label: m.color_road_default() },
-    ],
-    []
-  );
+  const [isImporting, setIsImporting] = useState(false);
+  const showClipboardImport = import.meta.env.DEV;
+
+  const colorKeys: ColorKeyDef[] = [
+    { key: "bg", label: m.color_bg() },
+    { key: "text", label: m.color_text() },
+    { key: "gradient_color", label: m.color_gradient() },
+    { key: "water", label: m.color_water() },
+    { key: "parks", label: m.color_parks() },
+    { key: "poi_color", label: m.color_poi() },
+    { key: "road_motorway", label: m.color_road_motorway() },
+    { key: "road_primary", label: m.color_road_primary() },
+    { key: "road_secondary", label: m.color_road_secondary() },
+    { key: "road_tertiary", label: m.color_road_tertiary() },
+    { key: "road_residential", label: m.color_road_residential() },
+    { key: "road_default", label: m.color_road_default() },
+  ];
 
   const handleColorChange = (key: ColorKey, val: string) => {
     onCustomColorsChange({ ...customColors, [key]: val });
+  };
+
+  const handlePasteFromClipboard = async () => {
+    if (!navigator.clipboard?.readText) {
+      alert("当前浏览器不支持读取剪贴板。");
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      const text = await navigator.clipboard.readText();
+      const parsed = JSON.parse(text);
+
+      if (!isClipboardColorJson(parsed)) {
+        alert("剪贴板里的配色 JSON 格式不正确。");
+        return;
+      }
+
+      onCustomColorsChange({
+        bg: parsed.background,
+        text: parsed.text,
+        gradient_color: parsed.mask_gradient,
+        water: parsed.water,
+        parks: parsed.park_greenery,
+        poi_color: parsed.poi,
+        road_motorway: parsed.roads.highway,
+        road_primary: parsed.roads.primary,
+        road_secondary: parsed.roads.secondary,
+        road_tertiary: parsed.roads.tertiary,
+        road_residential: parsed.roads.residential,
+        road_default: parsed.roads.other,
+      });
+      onUseCustomColorsChange(true);
+    } catch (error) {
+      console.error("Failed to import colors from clipboard:", error);
+      alert("读取剪贴板失败，或 JSON 解析失败。");
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   return (
@@ -189,6 +280,18 @@ export function ThemeColors({
         </TabsContent>
 
         <TabsContent value="custom" className="mt-3">
+          {showClipboardImport ? (
+            <div className="mb-3 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePasteFromClipboard}
+                disabled={isImporting}
+              >
+                {isImporting ? "导入中..." : "从剪贴板导入配色"}
+              </Button>
+            </div>
+          ) : null}
           <div className="space-y-4 pr-2 custom-scrollbar pt-1">
             {colorKeys.map(({ key, label }) => (
               <ColorInput

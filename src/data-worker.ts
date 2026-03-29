@@ -33,6 +33,13 @@ import {
   fetchFeaturesOverpass,
   fetchPOIsOverpass,
 } from "./services/overpass-wrapper";
+import { mergeSeaPolygonsIntoWaterGeoJSON } from "./services/sea-polygons";
+import {
+  MAP_DATA_CACHE_VERSION,
+  bboxToPolygon,
+  buildCanonicalFetchRadiusMeters,
+  buildCanonicalFetchViewportBbox,
+} from "./lib/poster-viewport";
 // 导入 getOverpassPause 用于进度更新
 import { type OverpassProgressCallback } from "./services/overpass-client";
 
@@ -83,13 +90,34 @@ function createProgressCallback(
   };
 }
 
+function createMapDataCacheKey(
+  country: string,
+  city: string,
+  baseRadius: number,
+  lodMode: "simplified" | "detailed",
+  type: string
+) {
+  return `map_data:${MAP_DATA_CACHE_VERSION}:${country}:${city}:${baseRadius}:${lodMode}:${type}`;
+}
+
+function createPOIsCacheKey(country: string, city: string, baseRadius: number) {
+  return `map_data:${MAP_DATA_CACHE_VERSION}:${country}:${city}:${baseRadius}:pois`;
+}
+
 self.onmessage = async (event: MessageEvent) => {
   const { id, type, payload } = event.data;
 
   try {
     if (type === "GET_MAP_DATA") {
-      const { country, city, lat, lng, radius, baseRadius, lodMode } = payload;
+      const { country, city, lat, lng, baseRadius, lodMode } = payload;
       const db = await getDB();
+      const fetchViewportBbox = buildCanonicalFetchViewportBbox({
+        centerLat: lat,
+        centerLng: lng,
+        baseRadiusMeters: baseRadius,
+      });
+      const fetchViewportPolygon = bboxToPolygon(fetchViewportBbox);
+      const fetchRadius = buildCanonicalFetchRadiusMeters(baseRadius);
 
       const results = {
         roads: new Float64Array(0),
@@ -105,7 +133,7 @@ self.onmessage = async (event: MessageEvent) => {
       let allCached = true;
 
       for (const t of types) {
-        const key = `map_data:${country}:${city}:${baseRadius}:${lodMode}:${t}`;
+        const key = createMapDataCacheKey(country, city, baseRadius, lodMode, t);
         const blob = await db.get(STORE_NAME, key);
         if (blob) {
           cachedBlobs[t] = blob;
@@ -115,7 +143,7 @@ self.onmessage = async (event: MessageEvent) => {
       }
 
       // POI 缓存检查
-      const poisCacheKey = `map_data:${country}:${city}:${baseRadius}:pois`;
+      const poisCacheKey = createPOIsCacheKey(country, city, baseRadius);
       const poisCachedBlob = await db.get(STORE_NAME, poisCacheKey);
       let poisCached = !!poisCachedBlob;
 
@@ -132,7 +160,13 @@ self.onmessage = async (event: MessageEvent) => {
         ]);
 
         results.roads = flattenRoadsGeoJSON(roadsJSON) as any;
-        results.water = flattenPolygonsGeoJSON(waterJSON) as any;
+        const mergedWaterJSON = mergeSeaPolygonsIntoWaterGeoJSON(waterJSON, {
+          centerLat: lat,
+          centerLng: lng,
+          baseRadiusMeters: baseRadius,
+          viewportBbox: fetchViewportBbox,
+        });
+        results.water = flattenPolygonsGeoJSON(mergedWaterJSON) as any;
         results.parks = flattenPolygonsGeoJSON(parksJSON) as any;
         results.pois = flattenPOIsGeometry(poisJSON) as any;
         results.fromCache = true;
@@ -142,7 +176,7 @@ self.onmessage = async (event: MessageEvent) => {
         if (USE_PROTOMAPS) {
           console.log(`[DataWorker] Cache Miss: ${city}. Fetching from Protomaps...`);
           sendProgress(5, "step_fetching_data");
-          const protomapsData = await fetchFromProtomaps([lat, lng], radius);
+          const protomapsData = await fetchFromProtomaps([lat, lng], fetchRadius);
           if (!protomapsData) throw new Error("Failed to fetch data from Protomaps");
           roadsGeo = protomapsData.roads;
           waterGeo = protomapsData.water;
@@ -156,8 +190,8 @@ self.onmessage = async (event: MessageEvent) => {
           // 步骤1: 获取道路 (overpass-client 内部会处理 API 槽位检查和倒计时)
           sendProgress(5, "step_fetching_roads");
           roadsGeo = await fetchGraphOverpass(
-            [lat, lng],
-            radius,
+            fetchViewportPolygon,
+            baseRadius,
             lodMode,
             createProgressCallback(5, "step_fetching_roads")
           );
@@ -165,8 +199,7 @@ self.onmessage = async (event: MessageEvent) => {
           // 步骤2: 获取水体
           sendProgress(15, "step_fetching_water");
           waterGeo = await fetchFeaturesOverpass(
-            [lat, lng],
-            radius,
+            fetchViewportPolygon,
             "water",
             createProgressCallback(15, "step_fetching_water")
           );
@@ -174,8 +207,7 @@ self.onmessage = async (event: MessageEvent) => {
           // 步骤3: 获取公园
           sendProgress(25, "step_fetching_parks");
           parksGeo = await fetchFeaturesOverpass(
-            [lat, lng],
-            radius,
+            fetchViewportPolygon,
             "parks",
             createProgressCallback(25, "step_fetching_parks")
           );
@@ -187,8 +219,7 @@ self.onmessage = async (event: MessageEvent) => {
           if (!poisCached) {
             // 传入进度回调，overpass-client 内部会处理 API 槽位检查和倒计时
             const poisGeo = await fetchPOIsOverpass(
-              [lat, lng],
-              radius,
+              fetchViewportPolygon,
               createProgressCallback(40, "step_fetching_pois")
             );
             if (poisGeo) {
@@ -209,10 +240,10 @@ self.onmessage = async (event: MessageEvent) => {
           );
           sendProgress(10, "step_fetching_roads");
           const fetched = await Promise.all([
-            fetchGraph([lat, lng], radius, lodMode),
+            fetchGraph([lat, lng], fetchRadius, lodMode),
             fetchFeatures(
               [lat, lng],
-              radius,
+              fetchRadius,
               {
                 natural: ["water", "wetland", "sea", "bay"],
                 waterway: ["riverbank", "river", "canal"],
@@ -222,7 +253,7 @@ self.onmessage = async (event: MessageEvent) => {
             ),
             fetchFeatures(
               [lat, lng],
-              radius,
+              fetchRadius,
               {
                 leisure: ["park", "garden", "playground"],
                 landuse: ["grass", "forest", "park"],
@@ -238,7 +269,7 @@ self.onmessage = async (event: MessageEvent) => {
           // 串行获取 POI (合并到 getMapData 中)
           sendProgress(35, "step_fetching_pois");
           if (!poisCached) {
-            const poisGeo = await fetchPOIs([lat, lng], radius);
+            const poisGeo = await fetchPOIs([lat, lng], fetchRadius);
             if (poisGeo) {
               const compressed = await compress(JSON.stringify(poisGeo));
               await db.put(STORE_NAME, compressed, poisCacheKey);
@@ -257,7 +288,13 @@ self.onmessage = async (event: MessageEvent) => {
         }
 
         results.roads = flattenRoadsGeoJSON(roadsGeo) as any;
-        results.water = flattenPolygonsGeoJSON(waterGeo) as any;
+        const mergedWaterGeo = mergeSeaPolygonsIntoWaterGeoJSON(waterGeo, {
+          centerLat: lat,
+          centerLng: lng,
+          baseRadiusMeters: baseRadius,
+          viewportBbox: fetchViewportBbox,
+        });
+        results.water = flattenPolygonsGeoJSON(mergedWaterGeo) as any;
         results.parks = flattenPolygonsGeoJSON(parksGeo) as any;
 
         // 异步存入库 (不包含 POI，因为已经同步存入)
@@ -268,7 +305,7 @@ self.onmessage = async (event: MessageEvent) => {
         ].map(async ({ type: t, data }) => {
           const json = JSON.stringify(data);
           const compressed = await compress(json);
-          const key = `map_data:${country}:${city}:${baseRadius}:${lodMode}:${t}`;
+          const key = createMapDataCacheKey(country, city, baseRadius, lodMode, t);
           return db.put(STORE_NAME, compressed, key);
         });
         await Promise.all(saveTasks);

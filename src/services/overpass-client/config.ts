@@ -27,6 +27,16 @@ export const overpassConfig = {
   maxQueryAreaSize: 2_500_000_000,
 
   /**
+   * 子查询多边形之间的重叠缓冲（米）。
+   *
+   * 当一个大区域被拆成多个 Overpass 子查询时，给每个子块额外扩一圈，
+   * 减少长 way 恰好落在 tile seam 边界附近时的掉段问题。
+   *
+   * 仅在 polygon 被切成多个子块时生效。
+   */
+  subQueryOverlapMeters: 400,
+
+  /**
    * HTTP 请求超时时间（毫秒），同时也作为 Overpass QL 的 [timeout] 值（秒）。
    * 默认 180 秒。
    */
