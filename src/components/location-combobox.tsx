@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import * as m from "@/paraglide/messages";
 
 // ===== 新增的：导入地点名称翻译函数 =====
-import { translateLocationName } from "@/constants/location-translations";
+import { translateLocationName } from "@/constants/location-translations。ts";
 // =====================================
 
 interface LocationComboboxProps {
