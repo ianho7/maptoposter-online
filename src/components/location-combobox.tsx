@@ -14,6 +14,10 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import * as m from "@/paraglide/messages";
 
+// ===== 新增的：导入地点名称翻译函数 =====
+import { translateLocationName } from "@/constants/locationTranslations";
+// =====================================
+
 interface LocationComboboxProps {
   options: { id: number | string; name: string }[];
   value: string;
@@ -60,7 +64,9 @@ export function LocationCombobox({
           className="w-full justify-between mt-1 font-normal bg-card border-border text-card-foreground hover:border-transparent transition-colors"
           disabled={disabled || isLoading}
         >
-          <span className="truncate">{isLoading ? m.loading() : value || placeholder}</span>
+          {/* ===== 我的修改：显示已选中的值时进行翻译 ===== */}
+          <span className="truncate">{isLoading ? m.loading() : (value ? translateLocationName(value) : placeholder)}</span>
+          {/* ========================================= */}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform duration-150 ease-out" />
         </Button>
       </PopoverTrigger>
@@ -92,7 +98,9 @@ export function LocationCombobox({
                       value === option.name ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  {option.name}
+                  {/* ===== 修改：显示选项时进行翻译 ===== */}
+                  {translateLocationName(option.name)}
+                  {/* ================================= */}
                 </CommandItem>
               ))}
             </CommandGroup>
