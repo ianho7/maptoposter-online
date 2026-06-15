@@ -1,5 +1,5 @@
 import { MapPosterPreview, type PosterSize } from "@/components/artistic-map";
-import { type Location } from "@/lib/types";
+import { type CustomPOI, type Location } from "@/lib/types";
 
 interface MapColors {
   bg: string;
@@ -25,6 +25,8 @@ interface MapPreviewProps {
   location: Location;
   selectedSize: PosterSize;
   colors: MapColors;
+  customPois: CustomPOI[];
+  showCustomPois: boolean;
   fontCacheRef: React.RefObject<Map<string, { data: Uint8Array; fileName: string }> | null>;
   selectedPreset: string;
   baseRadius: number;
@@ -44,6 +46,8 @@ export function MapPreview({
   location,
   selectedSize,
   colors,
+  customPois,
+  showCustomPois,
   fontCacheRef,
   selectedPreset,
   baseRadius,
@@ -111,9 +115,11 @@ export function MapPreview({
               customTitle || location.district?.toUpperCase() || location.city.toUpperCase() || ""
             }
             country={location.country || ""}
+            customPois={customPois}
+            showCustomPois={showCustomPois}
             zoom={12}
             radius={baseRadius}
-            poiDensity="dense"
+            poiDensity="none"
             theme={previewTheme}
             textColor={colors.text}
             gradientColor={colors.gradient_color}

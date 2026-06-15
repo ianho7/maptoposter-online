@@ -64,7 +64,7 @@ export function FontSettings({
         {!customFont || selectedPreset !== "custom" ? (
           <div
             onClick={() => fontFileInputRef.current?.click()}
-            className="border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors border-border"
+            className="border-1 border-dashed p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary/50 transition-colors border-border"
           >
             <FileText className="w-6 h-6 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">{m.upload_font()}</span>

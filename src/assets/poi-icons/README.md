@@ -1,0 +1,59 @@
+Place custom POI SVG icons in this directory.
+
+Requirements:
+
+- File name must match the POI type id exactly.
+- Supported names:
+  - `cafe.svg`
+  - `restaurant.svg`
+  - `snack_bar.svg`
+  - `bakery.svg`
+  - `bar.svg`
+  - `tea_shop.svg`
+  - `hotpot.svg`
+  - `bbq.svg`
+  - `park.svg`
+  - `sightseeing_spot.svg`
+  - `art_gallery.svg`
+  - `museum.svg`
+  - `landmark.svg`
+  - `theme_park.svg`
+  - `zoo_aquarium.svg`
+  - `historical_site.svg`
+  - `accommodation.svg`
+  - `resort.svg`
+  - `mall.svg`
+  - `market.svg`
+  - `duty_free.svg`
+  - `bookstore.svg`
+  - `souvenir_shop.svg`
+  - `beach.svg`
+  - `mountain.svg`
+  - `lake.svg`
+  - `forest.svg`
+  - `waterfall.svg`
+  - `garden.svg`
+  - `temple.svg`
+  - `church.svg`
+  - `cultural_street.svg`
+  - `theater.svg`
+  - `cinema.svg`
+  - `ktv.svg`
+  - `spa_wellness.svg`
+  - `fitness_center.svg`
+  - `camping_site.svg`
+  - `airport.svg`
+  - `train_station.svg`
+  - `subway_station.svg`
+  - `bus_station.svg`
+  - `port.svg`
+  - `hospital.svg`
+  - `bank.svg`
+  - `post_office.svg`
+  - `police_station.svg`
+  - `pharmacy.svg`
+- SVG must include a `viewBox`.
+- Rendering currently consumes `<path>` elements only.
+- Use filled monochrome icons. Stroke-only icons are not supported.
+- Colors inside the SVG are ignored. The renderer applies the current theme's `poi_color`.
+- If a matching SVG is missing, rendering falls back to the default round dot marker.

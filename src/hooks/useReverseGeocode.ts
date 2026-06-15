@@ -42,15 +42,20 @@ export function useReverseGeocode({
   handleCoordinateReverseGeocode: (lat: number, lng: number) => void;
 } {
   const reverseGeocodeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const latestRequestIdRef = useRef(0);
 
   const handleCoordinateReverseGeocode = (lat: number, lng: number) => {
+    const requestId = ++latestRequestIdRef.current;
+
     // 防抖：300ms 内重复调用只执行最后一次
     if (reverseGeocodeTimerRef.current) {
       clearTimeout(reverseGeocodeTimerRef.current);
     }
     reverseGeocodeTimerRef.current = setTimeout(async () => {
+      if (requestId !== latestRequestIdRef.current) return;
       console.log(`[GeoMatch] caller triggered: lat=${lat}, lng=${lng}`);
       const result = await reverseGeocode(lat, lng);
+      if (requestId !== latestRequestIdRef.current) return;
       if (!result) return;
 
       const { address } = result;
@@ -72,6 +77,7 @@ export function useReverseGeocode({
       setters.setIsStatesLoading(true);
       try {
         const countryStates = await getStatesByCountry(country.id);
+        if (requestId !== latestRequestIdRef.current) return;
         setters.setStates(countryStates);
         setters.setIsStatesLoading(false);
 
@@ -101,16 +107,24 @@ export function useReverseGeocode({
         // 3. 加载城市，匹配城市名
         setters.setIsCitiesLoading(true);
         const stateCities = await getCitiesByState(matchedState.id);
+        if (requestId !== latestRequestIdRef.current) return;
         setters.setCities(stateCities);
         setters.setIsCitiesLoading(false);
 
         const cityFuse = createFuse(stateCities);
-        const cityName = (
+        const rawCityName =
           address.city ||
           address.town ||
           address.village ||
-          address.county
-        ).replace(/\s+(District|City|County|Town|Village|Subdistrict|Area)\s*$/, "");
+          address.county ||
+          address.municipality ||
+          address.suburb ||
+          address.quarter ||
+          matchedState.name;
+        const cityName = rawCityName.replace(
+          /\s+(District|City|County|Town|Village|Subdistrict|Area)\s*$/,
+          ""
+        );
         let matchedCity = fuzzySearchOne<City>(cityFuse, cityName, 0.4);
 
         // County 兜底
@@ -152,6 +166,7 @@ export function useReverseGeocode({
             matchedState.name,
             country.name
           );
+          if (requestId !== latestRequestIdRef.current) return;
           const fullDistricts = [{ id: 0, name: matchedCity.name, lat, lng }, ...apiDistricts];
           setters.setDistricts(fullDistricts);
 
@@ -172,6 +187,7 @@ export function useReverseGeocode({
         setters.setIsDistrictsLoading(false);
 
         // 5. 更新 location
+        if (requestId !== latestRequestIdRef.current) return;
         setters.setLocation((prev) => ({
           ...prev,
           country: country.name,
@@ -180,6 +196,7 @@ export function useReverseGeocode({
           district: matchedDistrictName,
         }));
       } catch {
+        if (requestId !== latestRequestIdRef.current) return;
         setters.setIsStatesLoading(false);
         setters.setIsCitiesLoading(false);
         setters.setIsDistrictsLoading(false);

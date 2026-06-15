@@ -23,6 +23,7 @@ interface ClipboardColorJson {
   water: string;
   park_greenery: string;
   poi: string;
+  poi_icon: string;
   roads: {
     highway: string;
     primary: string;
@@ -48,6 +49,7 @@ function validateClipboardColorJson(value: unknown): { valid: boolean; invalidFi
     "water",
     "park_greenery",
     "poi",
+    "poi_icon",
   ] as const;
   const requiredRoadFields = [
     "highway",
@@ -179,6 +181,7 @@ export function ThemeColors({
     { key: "water", label: m.color_water() },
     { key: "parks", label: m.color_parks() },
     { key: "poi_color", label: m.color_poi() },
+    { key: "poi_icon_color", label: m.color_poi_icon() },
     { key: "road_motorway", label: m.color_road_motorway() },
     { key: "road_primary", label: m.color_road_primary() },
     { key: "road_secondary", label: m.color_road_secondary() },
@@ -199,6 +202,7 @@ export function ThemeColors({
       water: customColors.water,
       park_greenery: customColors.parks,
       poi: customColors.poi_color,
+      poi_icon: customColors.poi_icon_color,
       roads: {
         highway: customColors.road_motorway,
         primary: customColors.road_primary,
@@ -249,6 +253,7 @@ export function ThemeColors({
         water: parsed.water,
         parks: parsed.park_greenery,
         poi_color: parsed.poi,
+        poi_icon_color: parsed.poi_icon,
         road_motorway: parsed.roads.highway,
         road_primary: parsed.roads.primary,
         road_secondary: parsed.roads.secondary,

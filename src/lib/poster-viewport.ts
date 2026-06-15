@@ -32,7 +32,7 @@ const MAX_SUPPORTED_INVERSE_ASPECT = Math.max(
   ...SUPPORTED_POSTER_DIMENSIONS.map(({ width, height }) => height / width)
 );
 
-export const MAP_DATA_CACHE_VERSION = "v7-canonical-fetch-viewport-deduped-overpass";
+export const MAP_DATA_CACHE_VERSION = "v9-wasm-park-water-mask";
 
 export function buildRenderViewportBbox({
   centerLat,

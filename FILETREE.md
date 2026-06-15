@@ -1,0 +1,163 @@
+# Project Filetree
+
+_Auto-maintained by `/filetree:update`. Each entry carries a content hash; mismatched hashes indicate stale summaries._
+
+- .github
+  - `FUNDING.yml`: GitHub 赞助配置；定义项目资助入口与展示方式 <!--hash:12e42ee0-->
+- docs
+  - `analysis-poi-pin-rendering.md`: POI 图钉渲染分析文档；记录视觉方案、实现取舍与问题排查 <!--hash:32102b98-->
+  - `checklist-custom-poi.md`: 自定义 POI 功能检查清单；跟踪实现步骤与验收项 <!--hash:4ebccb4f-->
+  - `plan-mvp-custom-poi.md`: 自定义 POI MVP 方案文档；定义范围、优先级与落地路径 <!--hash:4ca6a707-->
+- messages
+  - `de.json`: 德语翻译消息；提供界面文案本地化文本 <!--hash:d8f55a7f-->
+  - `en.json`: 英语翻译消息；提供界面文案本地化文本 <!--hash:5a1a2669-->
+  - `es.json`: 西班牙语翻译消息；提供界面文案本地化文本 <!--hash:f0f59cb8-->
+  - `fr.json`: 法语翻译消息；提供界面文案本地化文本 <!--hash:fb024b3b-->
+  - `ja.json`: 日语翻译消息；提供界面文案本地化文本 <!--hash:7b73b277-->
+  - `ko.json`: 韩语翻译消息；提供界面文案本地化文本 <!--hash:a3e0af2c-->
+  - `ru.json`: 俄语翻译消息；提供界面文案本地化文本 <!--hash:8f746b32-->
+  - `zh.json`: 中文翻译消息；提供界面文案本地化文本 <!--hash:8805f02f-->
+- project.inlang
+  - `settings.json`: Paraglide 国际化配置；定义消息源、输出目录与语言设置 <!--hash:66d552c9-->
+- public
+  - font
+    - `NOTICE`: 字体版权声明；记录打包字体的授权与归属信息 <!--hash:79400243-->
+- scripts
+  - `check-poi-svg-icons.ts`: POI SVG 图标检查脚本；校验图标资源是否完整且可用 <!--hash:cadb67e6-->
+  - `generate-location-data.mjs`: 地点数据生成脚本；整理国家地区城市数据供前端选择器使用 <!--hash:939fec07-->
+  - `scan-images.ps1`: 图片扫描脚本；统计或检查项目中的图像资源 <!--hash:0e5d6e49-->
+- src
+  - assets
+    - poi-icons
+      - `README.md`: POI 图标资源说明；约定图标来源、命名与使用方式 <!--hash:b15e3ac4-->
+    - `images.json`: 图片资源清单；登记图库或示例图的元数据 <!--hash:9443ee0d-->
+  - components
+    - ui
+      - `accordion.tsx`: 折叠面板基础组件；封装 Radix Accordion 供表单分组使用 <!--hash:c1c64125-->
+      - `button.tsx`: 按钮基础组件；统一按钮样式、尺寸与变体 <!--hash:b90e5a60-->
+      - `card.tsx`: 卡片基础组件；统一容器边框、间距与结构样式 <!--hash:5adebb10-->
+      - `command.tsx`: 命令面板基础组件；封装搜索式列表与快捷选择界面 <!--hash:1000579c-->
+      - `dialog.tsx`: 对话框基础组件；封装弹窗容器与交互结构 <!--hash:8443f407-->
+      - `input.tsx`: 输入框基础组件；统一文本输入外观与状态样式 <!--hash:979b1c70-->
+      - `label.tsx`: 表单标签基础组件；统一字段标题与可访问性绑定 <!--hash:8a470aa8-->
+      - `popover.tsx`: 浮层基础组件；封装轻量提示与悬浮内容容器 <!--hash:b3acf24b-->
+      - `progress.tsx`: 进度条基础组件；展示任务进度与完成比例 <!--hash:4a16174e-->
+      - `select.tsx`: 选择器基础组件；封装下拉选择交互与样式 <!--hash:7b3a9a4d-->
+      - `tabs.tsx`: 标签页基础组件；封装分栏切换界面 <!--hash:2f452de0-->
+    - `app-header.tsx`: 应用页头组件；展示标题、导航入口与顶部操作 <!--hash:9af12396-->
+    - `artistic-map.tsx`: 地图海报渲染组件；定义海报尺寸并承载生成结果展示 <!--hash:139ef0c1-->
+    - `color-paste-how-to-use.tsx`: 配色粘贴说明组件；指导用户导入或应用颜色配置 <!--hash:a0af1d83-->
+    - `config-nav.tsx`: 配置导航组件；在各设置分区之间切换与定位 <!--hash:13276a3e-->
+    - `coordinate-input.tsx`: 坐标输入组件；接收经纬度并驱动位置选择 <!--hash:74a2efb2-->
+    - `custom-poi-settings.tsx`: 自定义 POI 设置组件；编辑图钉内容、样式与数据来源 <!--hash:f576f687-->
+    - `data-settings.tsx`: 数据设置组件；配置地图数据来源、细节级别与相关选项 <!--hash:e33acc51-->
+    - `error-modal.tsx`: 错误弹窗组件；集中展示生成或加载失败信息 <!--hash:c7cb83ea-->
+    - `font-settings.tsx`: 字体设置组件；管理海报文字字体与排版选项 <!--hash:b904d421-->
+    - `footer.tsx`: 页脚组件；展示补充说明、版权信息与外部链接 <!--hash:3d88f715-->
+    - `gallery.tsx`: 海报图库组件；展示示例作品或生成结果集合 <!--hash:a681b247-->
+    - `generation-modal.tsx`: 生成进度弹窗组件；反馈海报生成阶段与状态 <!--hash:6ea53f77-->
+    - `location-combobox.tsx`: 地点搜索下拉组件；支持地点检索、筛选与选择 <!--hash:744bec26-->
+    - `location-settings.tsx`: 位置设置组件；管理国家城市区域与定位参数 <!--hash:a2fd7463-->
+    - `map-preview.tsx`: 地图预览组件；展示当前配置下的海报预览内容 <!--hash:1004381f-->
+    - `poi-management-dialog.tsx`: POI 管理弹窗组件；集中增删改自定义地点标记 <!--hash:de2fc02b-->
+    - `poster-size-selector.tsx`: 海报尺寸选择组件；切换输出比例与目标设备规格 <!--hash:7079e7c5-->
+    - `render-control-settings.tsx`: 渲染控制设置组件；调整输出格式、文字与显示开关 <!--hash:57fc3e82-->
+    - `snake-game.tsx`: 贪吃蛇彩蛋组件；提供内置小游戏或等待时互动内容 <!--hash:13a82a55-->
+    - `support-dialog.tsx`: 支持弹窗组件；展示赞助、帮助或反馈入口 <!--hash:329fe52c-->
+    - `theme-colors.tsx`: 主题配色组件；管理地图海报颜色方案与预设 <!--hash:7ce68bfa-->
+  - hooks
+    - `useConfigNavigation.ts`: 配置导航 Hook；管理设置分区的当前状态与切换逻辑 <!--hash:5b12428b-->
+    - `useDynamicFont.ts`: 动态字体 Hook；按需加载并应用海报字体资源 <!--hash:020e4deb-->
+    - `useFontManagement.ts`: 字体管理 Hook；维护字体列表、选择状态与相关操作 <!--hash:1293ee52-->
+    - `useLanguage.ts`: 语言切换 Hook；管理界面语言状态与本地化联动 <!--hash:1d04ccaf-->
+    - `useLocationData.ts`: 地点数据 Hook；加载并组织国家地区城市选项数据 <!--hash:1ac4b725-->
+    - `useReverseGeocode.ts`: 逆地理编码 Hook；把坐标转换为可展示的地点名称 <!--hash:1126be66-->
+    - `useSEO.tsx`: SEO 头信息 Hook；设置页面标题、描述与分享元数据 <!--hash:54b15379-->
+  - lib
+    - `coordinate-systems.test.ts`: 坐标系统测试；验证坐标转换与格式化工具行为 <!--hash:8158ccb9-->
+    - `coordinate-systems.ts`: 坐标系统工具；处理经纬度转换、显示与相关计算 <!--hash:122ec2c9-->
+    - `poi-icon-registry.ts`: POI 图标注册表；按类型解析并提供图标定义 <!--hash:12979bbc-->
+    - `poster-viewport.test.ts`: 海报视口测试；验证范围计算与尺寸适配逻辑 <!--hash:ee43312a-->
+    - `poster-viewport.ts`: 海报视口工具；计算地图范围、缓存版本与输出视图参数 <!--hash:c1e96cb8-->
+    - `posters.ts`: 海报预设数据；定义尺寸、版式或模板配置 <!--hash:f9aadb28-->
+    - `types.ts`: 共享业务类型定义；约束地点、主题、POI 与渲染数据结构 <!--hash:a5d790a1-->
+    - `utils.ts`: 通用前端工具；提供类名合并等轻量辅助函数 <!--hash:7621c91c-->
+  - pkg
+    - `.gitignore`: WASM 生成目录忽略规则；排除可再生构建产物 <!--hash:f59ec20a-->
+    - `package.json`: WASM 包元数据；描述生成绑定模块的发布信息 <!--hash:31d0dbde-->
+    - `wasm.d.ts`: WASM 接口类型声明；为前端调用导出函数提供类型提示 <!--hash:ab011e03-->
+    - `wasm.js`: WASM 加载包装模块；初始化并导出 Rust 编译产物接口 <!--hash:09bc5125-->
+    - `wasm_bg.js`: WASM 底层绑定代码；桥接 JavaScript 与二进制导出函数 <!--hash:2759b618-->
+    - `wasm_bg.wasm`: Rust 编译的 WASM 二进制；执行地图渲染核心逻辑 <!--hash:95dc53db-->
+    - `wasm_bg.wasm.d.ts`: WASM 二进制类型声明；描述底层导出项接口 <!--hash:c5c3c2c7-->
+  - services
+    - overpass-client
+      - `README.md`: Overpass 客户端说明；介绍查询模块的职责与使用方式 <!--hash:27b9e4fa-->
+      - `config.ts`: Overpass 客户端配置；定义接口地址、超时与默认选项 <!--hash:3d40645a-->
+      - `geo.ts`: Overpass 地理工具；处理查询范围与几何辅助计算 <!--hash:c5b7d5ee-->
+      - `http.ts`: Overpass HTTP 层；发送请求并处理重试与错误 <!--hash:0c1eac03-->
+      - `index.ts`: Overpass 客户端出口；汇总并导出查询相关能力 <!--hash:73ded470-->
+      - `overpass.test.ts`: Overpass 客户端测试；验证查询构造与请求行为 <!--hash:3303592f-->
+      - `overpass.ts`: Overpass 查询实现；构造并执行 OSM 要素查询 <!--hash:b9a50860-->
+      - `presets.ts`: Overpass 查询预设；定义常用要素类别与筛选条件 <!--hash:8effc38b-->
+    - `browser-geolocation.ts`: 浏览器定位服务；通过客户端能力获取当前坐标 <!--hash:2cf164fc-->
+    - `district-service.ts`: 行政区服务；解析并提供区县级地点数据 <!--hash:b26b52a1-->
+    - `fuzzy-matcher.ts`: 模糊匹配服务；提升地点搜索与名称容错能力 <!--hash:fa2992a6-->
+    - `ip-geolocation.ts`: IP 定位服务；基于网络信息推断用户所在地 <!--hash:1a5ecc62-->
+    - `location-service.ts`: 地点服务；统一地点查询、筛选与层级组织逻辑 <!--hash:bfc42ee5-->
+    - `location-types.ts`: 地点服务类型定义；约束国家州城市区县等数据结构 <!--hash:ca85f961-->
+    - `map-data.ts`: 地图数据服务；协调缓存、Worker 通信与地图数据获取 <!--hash:2e2a0704-->
+    - `overpass-wrapper.test.ts`: Overpass 包装层测试；验证上层地图查询流程 <!--hash:a37b86b0-->
+    - `overpass-wrapper.ts`: Overpass 包装服务；向应用层提供更易用的查询接口 <!--hash:b240ec96-->
+    - `reverse-geocoding.ts`: 逆地理编码服务；把经纬度解析为国家城市等名称 <!--hash:35913180-->
+    - `sea-polygons.test.ts`: 海域多边形测试；验证海陆边界数据处理逻辑 <!--hash:5cfcfcd8-->
+    - `sea-polygons.ts`: 海域多边形服务；生成或裁剪海面区域几何数据 <!--hash:7cb6cfb6-->
+  - utils
+    - `clear-cache.ts`: 缓存清理工具；移除本地持久化的地图数据缓存 <!--hash:01c4be58-->
+  - `App.tsx`: 应用主组件；协调位置、样式、渲染参数与海报生成流程 <!--hash:cf029870-->
+  - `data-worker.ts`: 数据 Worker 入口；异步获取、缓存并预处理地图数据 <!--hash:77ac7c07-->
+  - `db.ts`: IndexedDB 访问层；持久化地图数据与缓存元信息 <!--hash:3cac9b92-->
+  - `flatten-roads.test.ts`: 道路扁平化测试；验证道路数据整理逻辑的正确性 <!--hash:5aaf688a-->
+  - `index.css`: 全局样式入口；定义主题变量、基础样式与 Tailwind 层 <!--hash:c84f8091-->
+  - `main.tsx`: 前端应用入口；挂载 React 根组件并加载全局依赖 <!--hash:10ed13e0-->
+  - `test.ts`: 测试入口辅助文件；提供通用测试初始化或共享夹具 <!--hash:3452581a-->
+  - `test_local.ts`: 本地测试辅助文件；支持开发环境下的手工验证 <!--hash:540ba80f-->
+  - `types.ts`: 应用级共享类型定义；补充跨模块使用的数据接口 <!--hash:a838a812-->
+  - `utils.test.ts`: 通用工具测试；验证数据处理与辅助函数行为 <!--hash:482cdfe4-->
+  - `utils.ts`: 通用数据工具；处理道路分片等渲染前数据整理 <!--hash:e4c5f306-->
+  - `worker.ts`: 渲染 Worker 入口；并行处理地图数据并调用渲染能力 <!--hash:32e01ddc-->
+- wasm
+  - src
+    - `data_processor.rs`: 渲染数据预处理模块；解析道路与多边形输入并整理结构 <!--hash:e33aae5a-->
+    - `lib.rs`: WASM 导出入口；接收渲染请求并协调投影、解析与输出 <!--hash:ea4d2302-->
+    - `projection.rs`: 地图投影模块；计算边界并把地理坐标转换为画布坐标 <!--hash:716ebfd4-->
+    - `renderer.rs`: 栅格渲染模块；绘制道路、水体、公园与文字海报内容 <!--hash:084240ca-->
+    - `svg_renderer.rs`: SVG 渲染模块；把地图元素导出为矢量海报内容 <!--hash:17c1f101-->
+    - `types.rs`: Rust 侧渲染类型定义；约束请求、主题与输出结构 <!--hash:eba24a4a-->
+    - `utils.rs`: Rust 工具模块；提供日志、计时与通用辅助函数 <!--hash:43e8bdd3-->
+  - `.gitignore`: WASM 目录忽略规则；排除 Rust 构建产物与临时文件 <!--hash:ea8c4bf7-->
+  - `Cargo.toml`: Rust WASM 包清单；定义渲染核心依赖与编译目标 <!--hash:f6f471db-->
+  - `build.ps1`: WASM 构建脚本；编译 Rust 渲染核心并拷贝前端绑定产物 <!--hash:f592b49b-->
+  - `build_log.txt`: WASM 构建日志；记录最近一次编译输出与诊断信息 <!--hash:b75d9721-->
+- workers
+  - amap-proxy
+    - src
+      - `index.ts`: 高德代理 Worker 入口；转发位置相关请求并处理跨域访问 <!--hash:78fe48ab-->
+    - `wrangler.toml`: Cloudflare Worker 配置；定义高德代理的部署参数 <!--hash:2a8bd659-->
+- `.CLAUDE.md`: 项目协作约定；说明技术栈、目录规范、测试注意事项与技能使用要求 <!--hash:143b2139-->
+- `.gitignore`: Git 忽略规则；排除构建产物、依赖目录与本地环境文件 <!--hash:6c84186a-->
+- `.oxfmtrc.jsonc`: Oxc 格式化配置；约束源码格式化行为 <!--hash:7b6bf037-->
+- `.oxlintignore`: Oxc lint 忽略规则；排除不参与静态检查的路径 <!--hash:dac6ddde-->
+- `LICENSE`: 项目许可证文本；声明代码使用与分发条件 <!--hash:09cf4327-->
+- `README.md`: 英文项目说明；介绍地图海报生成器的功能、用法与部署方式 <!--hash:e2ec9a79-->
+- `README_CN.md`: 中文项目说明；介绍地图海报生成器的功能、用法与部署方式 <!--hash:99d3e667-->
+- `bun.lock`: Bun 锁定文件；固定依赖版本以保证安装结果一致 <!--hash:93081b93-->
+- `bunfig.toml`: Bun 运行配置；定义包管理与脚本执行选项 <!--hash:81620d1b-->
+- `components.json`: shadcn 组件配置；定义生成组件的路径别名与样式基线 <!--hash:52741b9e-->
+- `index.html`: Vite 页面壳文件；提供应用挂载点与基础页面元信息 <!--hash:71636fb8-->
+- `oxlint.json`: Oxc lint 配置；定义源码检查规则与忽略项 <!--hash:7c238bf2-->
+- `package.json`: 项目包清单；定义前端依赖、构建脚本与开发命令 <!--hash:ddf2fb63-->
+- `tsconfig.app.json`: 应用 TypeScript 配置；约束浏览器端源码编译行为 <!--hash:7f9d36ca-->
+- `tsconfig.json`: TypeScript 根配置；组合项目级编译选项与引用关系 <!--hash:ba7e12ea-->
+- `tsconfig.node.json`: Node 侧 TypeScript 配置；约束构建脚本与工具代码编译 <!--hash:8a67f62f-->
+- `vite.config.ts`: Vite 构建配置；集成 React、WASM、i18n 与站点构建选项 <!--hash:639ff9a4-->

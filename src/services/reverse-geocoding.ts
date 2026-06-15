@@ -15,6 +15,7 @@ export interface ReverseGeocodeAddress {
   county: string;
   /** Suburb / neighbourhood */
   suburb: string;
+  municipality: string;
   town: string;
   village: string;
   /** ISO 3166-2 region code, e.g. "CN-BJ" for Beijing */
@@ -73,6 +74,7 @@ export async function reverseGeocode(
         city: addr.city || addr.town || addr.village || addr.county || "",
         county: addr.county || "",
         suburb: addr.suburb || "",
+        municipality: addr.municipality || "",
         town: addr.town || "",
         village: addr.village || "",
         iso3166_2_lvl4: addr["ISO3166-2-lvl4"] as string | undefined,

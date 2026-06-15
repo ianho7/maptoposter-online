@@ -137,7 +137,9 @@ export async function fetchGraphOverpass(
     return convertToGeoJSON(results);
   } catch (error) {
     log("error", `fetchGraphOverpass failed: ${error}`);
-    throw new Error(`fetchGraphOverpass failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `fetchGraphOverpass failed: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
@@ -208,6 +210,8 @@ export async function fetchPOIsOverpass(
     return convertToGeoJSON(results);
   } catch (error) {
     log("error", `fetchPOIsOverpass failed: ${error}`);
-    throw new Error(`fetchPOIsOverpass failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `fetchPOIsOverpass failed: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }

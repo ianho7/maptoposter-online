@@ -484,12 +484,13 @@ self.onmessage = async (event: MessageEvent) => {
           // 步骤3: 获取公园
           if (missingTypes.has("parks")) {
             sendProgress(25, "step_fetching_parks");
-            parksGeo = await fetchFeaturesOverpass(
+            const fetchedParksGeo = await fetchFeaturesOverpass(
               fetchViewportPolygon,
               "parks",
               createProgressCallback(25, "step_fetching_parks")
             );
-            if (parksGeo) {
+            if (fetchedParksGeo) {
+              parksGeo = fetchedParksGeo;
               results.parks = flattenPolygonsGeoJSON(parksGeo) as any;
               await saveFetchedType(
                 db,
@@ -587,7 +588,7 @@ self.onmessage = async (event: MessageEvent) => {
 
           if (missingTypes.has("parks")) {
             sendProgress(25, "step_fetching_parks");
-            parksGeo = await fetchFeatures(
+            const fetchedParksGeo = await fetchFeatures(
               [lat, lng],
               fetchRadius,
               {
@@ -597,7 +598,8 @@ self.onmessage = async (event: MessageEvent) => {
               },
               "parks"
             );
-            if (parksGeo) {
+            if (fetchedParksGeo) {
+              parksGeo = fetchedParksGeo;
               results.parks = flattenPolygonsGeoJSON(parksGeo) as any;
               await saveFetchedType(
                 db,

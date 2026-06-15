@@ -36,6 +36,9 @@ export function PosterGallery() {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const scaleRef = useRef(1);
   const positionRef = useRef({ x: 0, y: 0 });
+  const pendingScaleRef = useRef(1);
+  const pendingPositionRef = useRef({ x: 0, y: 0 });
+  const transformFrameRef = useRef<number | null>(null);
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -119,15 +122,36 @@ export function PosterGallery() {
   const mouseMoveHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
   const mouseUpHandlerRef = useRef<(() => void) | null>(null);
 
+  const flushTransformState = useCallback(() => {
+    transformFrameRef.current = null;
+    const nextScale = pendingScaleRef.current;
+    const nextPosition = pendingPositionRef.current;
+
+    if (scaleRef.current !== nextScale) {
+      scaleRef.current = nextScale;
+      setScale(nextScale);
+    }
+
+    if (positionRef.current.x !== nextPosition.x || positionRef.current.y !== nextPosition.y) {
+      positionRef.current = nextPosition;
+      setPosition(nextPosition);
+    }
+  }, []);
+
+  const scheduleTransformFlush = useCallback(() => {
+    if (transformFrameRef.current !== null) return;
+    transformFrameRef.current = requestAnimationFrame(flushTransformState);
+  }, [flushTransformState]);
+
   wheelHandlerRef.current = (e: WheelEvent) => {
     const container = containerRef.current;
     if (!container || !container.contains(e.target as Node)) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const currentScale = scaleRef.current;
+    const currentScale = pendingScaleRef.current;
     const newScale = Math.min(Math.max(currentScale * delta, 0.5), 5);
-    scaleRef.current = newScale;
-    setScale(newScale);
+    pendingScaleRef.current = newScale;
+    scheduleTransformFlush();
   };
 
   mouseDownHandlerRef.current = (e: MouseEvent) => {
@@ -146,21 +170,21 @@ export function PosterGallery() {
     if (isDraggingRef.current) {
       const newX = e.clientX - dragStartRef.current.x;
       const newY = e.clientY - dragStartRef.current.y;
-      positionRef.current = { x: newX, y: newY };
-      setPosition({ x: newX, y: newY });
+      pendingPositionRef.current = { x: newX, y: newY };
+      scheduleTransformFlush();
     }
   };
 
   mouseUpHandlerRef.current = () => {
     isDraggingRef.current = false;
+    flushTransformState();
   };
 
   const handleResetZoom = useCallback(() => {
-    scaleRef.current = 1;
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
-    positionRef.current = { x: 0, y: 0 };
-  }, []);
+    pendingScaleRef.current = 1;
+    pendingPositionRef.current = { x: 0, y: 0 };
+    flushTransformState();
+  }, [flushTransformState]);
 
   // 缩放/平移事件（使用原生事件监听以支持 preventDefault）
   useEffect(() => {
@@ -279,6 +303,9 @@ export function PosterGallery() {
   // 清理防抖定时器
   useEffect(() => {
     return () => {
+      if (transformFrameRef.current !== null) {
+        cancelAnimationFrame(transformFrameRef.current);
+      }
       if (navigationDebounceRef.current) {
         clearTimeout(navigationDebounceRef.current);
       }

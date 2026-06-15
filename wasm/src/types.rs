@@ -44,6 +44,7 @@ pub struct Theme {
     pub text: String,
     pub gradient_color: String,
     pub poi_color: String,
+    pub poi_icon_color: String,
     pub water: String,
     pub parks: String,
     pub road_motorway: String,
@@ -52,6 +53,93 @@ pub struct Theme {
     pub road_tertiary: String,
     pub road_residential: String,
     pub road_default: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PinThemeStyle {
+    Puff,
+    Badge,
+    Pinhead,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PinThemeConfig {
+    pub style: PinThemeStyle,
+    pub icon_scale: f32,
+    pub fallback_dot_scale: f32,
+    pub shadow_alpha: f32,
+    pub shadow_offset_y_scale: f32,
+    pub shadow_radius_scale: f32,
+    pub rim_darken: f32,
+    pub inner_body_darken: f32,
+    pub inner_body_scale: f32,
+    pub highlight_alpha: f32,
+    pub highlight_offset_x_scale: f32,
+    pub highlight_offset_y_scale: f32,
+    pub highlight_radius_scale: f32,
+    pub secondary_highlight_alpha: f32,
+    pub secondary_highlight_offset_x_scale: f32,
+    pub secondary_highlight_offset_y_scale: f32,
+    pub secondary_highlight_radius_scale: f32,
+    pub inner_shadow_alpha: f32,
+    pub inner_shadow_offset_y_scale: f32,
+    pub inner_shadow_radius_scale: f32,
+    // ── 径向渐变字段 ──
+    #[serde(default)]
+    pub gradient_enabled: bool,
+    #[serde(default = "default_body_lighten")]
+    pub body_lighten: f32,
+    #[serde(default = "default_body_darken")]
+    pub body_darken: f32,
+    #[serde(default = "default_highlight_spread")]
+    pub highlight_spread: f32,
+    #[serde(default = "default_shadow_spread")]
+    pub shadow_spread: f32,
+    #[serde(default = "default_shadow_color")]
+    pub shadow_color: String,
+    #[serde(default = "default_poi_ratio")]
+    pub poi_ratio: f32,
+}
+
+fn default_body_lighten() -> f32 { 0.12 }
+fn default_body_darken() -> f32 { 0.85 }
+fn default_highlight_spread() -> f32 { 1.0 }
+fn default_shadow_spread() -> f32 { 1.2 }
+fn default_poi_ratio() -> f32 { 0.016 }
+fn default_shadow_color() -> String { "#000000".into() }
+
+pub fn default_pin_theme_config() -> PinThemeConfig {
+    PinThemeConfig {
+        style: PinThemeStyle::Puff,
+        icon_scale: 0.78,
+        fallback_dot_scale: 0.28,
+        shadow_alpha: 0.12,
+        shadow_offset_y_scale: 0.16,
+        shadow_radius_scale: 0.98,
+        rim_darken: 0.74,
+        inner_body_darken: 0.9,
+        inner_body_scale: 0.9,
+        highlight_alpha: 0.18,
+        highlight_offset_x_scale: -0.18,
+        highlight_offset_y_scale: -0.22,
+        highlight_radius_scale: 0.58,
+        secondary_highlight_alpha: 0.0,
+        secondary_highlight_offset_x_scale: 0.0,
+        secondary_highlight_offset_y_scale: 0.0,
+        secondary_highlight_radius_scale: 0.0,
+        inner_shadow_alpha: 0.06,
+        inner_shadow_offset_y_scale: 0.18,
+        inner_shadow_radius_scale: 0.82,
+        gradient_enabled: false,
+        body_lighten: 0.12,
+        body_darken: 0.85,
+        highlight_spread: 1.0,
+        shadow_spread: 1.2,
+        shadow_color: "#000000".into(),
+        poi_ratio: 0.016,
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -207,6 +295,39 @@ pub struct PolyFeature {
 pub struct POI {
     pub x: f64,
     pub y: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomPoiIconPath {
+    pub d: String,
+    #[serde(default)]
+    pub fill_rule: Option<String>,
+    pub commands: Vec<CustomPoiPathCommand>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomPoiPathCommand {
+    pub r#type: String,
+    pub values: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomPoiIcon {
+    pub view_box_width: f32,
+    pub view_box_height: f32,
+    pub paths: Vec<CustomPoiIconPath>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomPOI {
+    pub name: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub poi_type: String,
+    #[serde(default)]
+    pub icon: Option<CustomPoiIcon>,
 }
 
 /// 渲染请求（从 JS 传入）

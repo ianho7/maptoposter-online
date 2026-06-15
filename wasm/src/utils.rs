@@ -73,11 +73,15 @@ pub fn is_latin_script(text: &str) -> bool {
 /// 格式化城市名（拉丁文加字间距，非拉丁文保持原样）
 pub fn format_city_name(city: &str) -> String {
     if is_latin_script(city) {
-        // 拉丁文：大写 + 双空格字间距
-        city.chars()
-            .map(|c| c.to_string())
-            .collect::<Vec<String>>()
-            .join(" ")
+        let char_count = city.chars().count();
+        let mut formatted = String::with_capacity(city.len() * 2 + char_count.saturating_sub(1));
+        for (idx, ch) in city.chars().enumerate() {
+            if idx > 0 {
+                formatted.push(' ');
+            }
+            formatted.push(ch);
+        }
+        formatted
     } else {
         // 非拉丁文：保持原样
         city.to_string()

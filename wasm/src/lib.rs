@@ -128,6 +128,8 @@ pub struct BinaryRenderConfig {
     // POI 数据（可选）
     #[serde(default)]
     pub pois: Option<Vec<f64>>, // [poi_count, x1, y1, x2, y2, ...]
+    #[serde(default)]
+    pub custom_pois: Option<Vec<types::CustomPOI>>,
     // 文本显示开关
     #[serde(default = "types::default_true")]
     pub show_coords: bool,
@@ -135,10 +137,14 @@ pub struct BinaryRenderConfig {
     pub show_city: bool,
     #[serde(default = "types::default_true")]
     pub show_country: bool,
+    #[serde(default = "types::default_true")]
+    pub enable_road_mask_optimization: bool,
     #[serde(default)]
     pub export_format: Option<String>,
     #[serde(default)]
     pub svg_font_mode: Option<String>,
+    #[serde(default = "types::default_pin_theme_config")]
+    pub pin_theme_config: types::PinThemeConfig,
 }
 
 /// 主渲染函数 (二进制直读版本)
@@ -207,38 +213,17 @@ fn render_map_binary_internal(
         .as_ref()
         .map(|p| if p.is_empty() { 0 } else { p[0] as usize })
         .unwrap_or(0);
+    let custom_poi_count = config.custom_pois.as_ref().map(|pois| pois.len()).unwrap_or(0);
+    let road_shards = collect_road_shards(&roads_shards);
 
     let mut total_roads = 0usize;
     let mut road_type_counts = [0usize; 6];
 
-    if js_sys::Array::is_array(&roads_shards) {
-        let shards_array = js_sys::Array::from(&roads_shards);
-        for shard_val in shards_array.iter() {
-            if let Some(shard_typed) = shard_val.dyn_ref::<js_sys::Float64Array>() {
-                let vec = shard_typed.to_vec();
-                if !vec.is_empty() {
-                    let road_count = vec[0] as usize;
-                    total_roads += road_count;
-
-                    let mut offset = 1;
-                    for _ in 0..road_count {
-                        if offset + 2 <= vec.len() {
-                            let type_val = vec[offset] as usize;
-                            let point_count = vec[offset + 1] as usize;
-                            if type_val < 6 {
-                                road_type_counts[type_val] += 1;
-                            }
-                            offset += 2 + point_count * 2;
-                        }
-                    }
-                }
-            }
-        }
-    } else if let Some(shard_typed) = roads_shards.dyn_ref::<js_sys::Float64Array>() {
-        let vec = shard_typed.to_vec();
+    for shard in &road_shards {
+        let vec = shard.as_slice();
         if !vec.is_empty() {
             let road_count = vec[0] as usize;
-            total_roads = road_count;
+            total_roads += road_count;
 
             let mut offset = 1;
             for _ in 0..road_count {
@@ -255,8 +240,8 @@ fn render_map_binary_internal(
     }
 
     log(&format!(
-        "[Render] Elements: {} roads, {} water polygons, {} parks, {} POIs",
-        total_roads, water_count, parks_count, poi_count
+        "[Render] Elements: {} roads, {} water polygons, {} parks, {} POIs, {} custom POIs",
+        total_roads, water_count, parks_count, poi_count, custom_poi_count
     ));
     log(&format!(
         "[Render] Roads by type: Motorway={}, Primary={}, Secondary={}, Tertiary={}, Residential={}, Default={}",
@@ -301,7 +286,7 @@ fn render_map_binary_internal(
     time_end("render_map_bin: draw_water");
 
     time("render_map_bin: draw_parks");
-    renderer.draw_polygons_bin(parks_bin, &parks_color);
+    renderer.draw_parks_bin_masked_by_water(parks_bin, water_bin, &parks_color);
     time_end("render_map_bin: draw_parks");
 
     time("render_map_bin: draw_roads");
@@ -312,22 +297,16 @@ fn render_map_binary_internal(
         config.road_width_boost,
     );
 
-    let mut total_timings = [0.0; 6];
-
-    if js_sys::Array::is_array(&roads_shards) {
-        let shards_array = js_sys::Array::from(&roads_shards);
-        for shard_val in shards_array.iter() {
-            if let Some(shard_typed) = shard_val.dyn_ref::<js_sys::Float64Array>() {
-                let timings =
-                    renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
-                for i in 0..6 {
-                    total_timings[i] += timings[i];
-                }
-            }
-        }
-    } else if let Some(shard_typed) = roads_shards.dyn_ref::<js_sys::Float64Array>() {
-        total_timings = renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
-    }
+    let total_timings = if config.enable_road_mask_optimization {
+        renderer.draw_road_shards_masked_by_terrain_scaled(
+            &road_shards,
+            water_bin,
+            parks_bin,
+            road_width_scale,
+        )
+    } else {
+        renderer.draw_road_shards_scaled(&road_shards, road_width_scale)
+    };
 
     time_end("render_map_bin: draw_roads");
 
@@ -340,22 +319,16 @@ fn render_map_binary_internal(
     log(&format!("  Default: {:.2}ms", total_timings[5]));
 
     // 投影并绘制 POI
-    if let Some(pois_data) = &config.pois {
+    if let Some(custom_pois) = &config.custom_pois {
+        if !custom_pois.is_empty() {
+            time("render_map_bin: draw_custom_pois");
+            renderer.draw_custom_pois(custom_pois, &config.pin_theme_config);
+            time_end("render_map_bin: draw_custom_pois");
+        }
+    } else if let Some(pois_data) = &config.pois {
         if !pois_data.is_empty() && pois_data[0] as usize > 0 {
-            let mut projected_pois = pois_data.clone();
-            let poi_count = projected_pois[0] as usize;
-            for i in 0..poi_count {
-                let offset = 1 + i * 2;
-                let (proj_lon, proj_lat) = projection::project_point(
-                    projected_pois[offset],     // lon
-                    projected_pois[offset + 1], // lat
-                );
-                projected_pois[offset] = proj_lon;
-                projected_pois[offset + 1] = proj_lat;
-            }
-
             time("render_map_bin: draw_pois");
-            renderer.draw_pois_bin(&projected_pois);
+            renderer.draw_pois_bin(pois_data, config.pin_theme_config.poi_ratio);
             time_end("render_map_bin: draw_pois");
         }
     }
@@ -391,6 +364,20 @@ fn render_map_binary_internal(
     RenderResult::success(config.width, config.height, png_data)
 }
 
+fn collect_road_shards(roads_shards: &JsValue) -> Vec<Vec<f64>> {
+    if js_sys::Array::is_array(roads_shards) {
+        let shards_array = js_sys::Array::from(roads_shards);
+        shards_array
+            .iter()
+            .filter_map(|shard_val| shard_val.dyn_ref::<js_sys::Float64Array>().map(|typed| typed.to_vec()))
+            .collect()
+    } else if let Some(shard_typed) = roads_shards.dyn_ref::<js_sys::Float64Array>() {
+        vec![shard_typed.to_vec()]
+    } else {
+        Vec::new()
+    }
+}
+
 fn render_map_binary_svg(
     roads_shards: JsValue,
     water_bin: &[f64],
@@ -414,7 +401,7 @@ fn render_map_binary_svg(
     time_end("render_map_bin: draw_water");
 
     time("render_map_bin: draw_parks");
-    renderer.draw_polygons_bin(parks_bin, &parks_color);
+    renderer.draw_parks_bin_masked_by_water(parks_bin, water_bin, &parks_color);
     time_end("render_map_bin: draw_parks");
 
     time("render_map_bin: draw_roads");
@@ -424,22 +411,17 @@ fn render_map_binary_svg(
         config.road_width_boost,
     );
 
-    let mut total_timings = [0.0; 6];
-
-    if js_sys::Array::is_array(&roads_shards) {
-        let shards_array = js_sys::Array::from(&roads_shards);
-        for shard_val in shards_array.iter() {
-            if let Some(shard_typed) = shard_val.dyn_ref::<js_sys::Float64Array>() {
-                let timings =
-                    renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
-                for i in 0..6 {
-                    total_timings[i] += timings[i];
-                }
-            }
-        }
-    } else if let Some(shard_typed) = roads_shards.dyn_ref::<js_sys::Float64Array>() {
-        total_timings = renderer.draw_roads_bin_scaled(&shard_typed.to_vec(), road_width_scale);
-    }
+    let collected_road_shards = collect_road_shards(&roads_shards);
+    let total_timings = if config.enable_road_mask_optimization {
+        renderer.draw_road_shards_masked_by_terrain_scaled(
+            &collected_road_shards,
+            water_bin,
+            parks_bin,
+            road_width_scale,
+        )
+    } else {
+        renderer.draw_road_shards_scaled(&collected_road_shards, road_width_scale)
+    };
 
     time_end("render_map_bin: draw_roads");
 
@@ -451,19 +433,16 @@ fn render_map_binary_svg(
     log(&format!("  Residential: {:.2}ms", total_timings[4]));
     log(&format!("  Default: {:.2}ms", total_timings[5]));
 
-    if let Some(pois_data) = &config.pois {
+    if let Some(custom_pois) = &config.custom_pois {
+        if !custom_pois.is_empty() {
+            time("render_map_bin: draw_custom_pois");
+            renderer.draw_custom_pois(custom_pois, &config.pin_theme_config);
+            time_end("render_map_bin: draw_custom_pois");
+        }
+    } else if let Some(pois_data) = &config.pois {
         if !pois_data.is_empty() && pois_data[0] as usize > 0 {
-            let mut projected_pois = pois_data.clone();
-            let poi_count = projected_pois[0] as usize;
-            for i in 0..poi_count {
-                let offset = 1 + i * 2;
-                let (proj_lon, proj_lat) =
-                    projection::project_point(projected_pois[offset], projected_pois[offset + 1]);
-                projected_pois[offset] = proj_lon;
-                projected_pois[offset + 1] = proj_lat;
-            }
             time("render_map_bin: draw_pois");
-            renderer.draw_pois_bin_scaled(&projected_pois, 1.0);
+            renderer.draw_pois_bin_scaled(pois_data, config.pin_theme_config.poi_ratio);
             time_end("render_map_bin: draw_pois");
         }
     }
@@ -587,7 +566,7 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
     // 绘制 POI
     if !request.pois.is_empty() {
         time("render_map: draw_pois");
-        renderer.draw_pois(&request.pois);
+        renderer.draw_pois(&request.pois, 0.016);
         time_end("render_map: draw_pois");
     }
 

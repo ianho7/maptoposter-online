@@ -4,11 +4,13 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 // [Road Casing] 新增 LineCap / LineJoin，用于道路圆头描边
 use tiny_skia::{
-    Color, FillRule, LineCap, LineJoin, Paint, PathBuilder, Pixmap, Stroke, Transform,
+    BlendMode, Color, FillRule, GradientStop, LineCap, LineJoin, Paint, PathBuilder, Pixmap,
+    PixmapPaint, Point, RadialGradient, SpreadMode, Stroke, Transform,
 };
 
-use crate::types::{BoundingBox, PolyFeature, Road, RoadType, TextPosition, Theme};
-use crate::utils::{calculate_font_size, format_city_name, format_coordinates, parse_hex_color};
+use crate::projection;
+use crate::types::{BoundingBox, PinThemeConfig, PinThemeStyle, PolyFeature, Road, RoadType, TextPosition, Theme};
+use crate::utils::{calculate_font_size, format_city_name, format_coordinates, log, parse_hex_color};
 
 /// 地图渲染引擎
 pub struct MapRenderer {
@@ -129,68 +131,113 @@ impl MapRenderer {
     //     self.draw_roads_bin_scaled(data, 1.0);
     // }
 
-    /// 绘制道路 (二进制直读版) 使用动态缩放因子
-    pub fn draw_roads_bin_scaled(&mut self, data: &[f64], scale_factor: f32) -> [f64; 6] {
-        if data.is_empty() {
+    pub fn draw_road_shards_masked_by_terrain_scaled(
+        &mut self,
+        road_shards: &[Vec<f64>],
+        water_data: &[f64],
+        parks_data: &[f64],
+        scale_factor: f32,
+    ) -> [f64; 6] {
+        if road_shards.is_empty() {
+            return [0.0; 6];
+        }
+
+        crate::utils::time("render_map_bin: road_mask_optimization");
+        let mut timings = [0.0; 6];
+        let scale_factor = scale_factor * self.render_scale as f32;
+
+        let Some(mut roads_layer) = Pixmap::new(self.render_width(), self.render_height()) else {
+            self.draw_road_shards_directly(road_shards, scale_factor, &mut timings);
+            crate::utils::time_end("render_map_bin: road_mask_optimization");
+            return timings;
+        };
+
+        {
+            let mut target = roads_layer.as_mut();
+            for shard in road_shards {
+                if shard.is_empty() {
+                    continue;
+                }
+                let paths = self.build_road_paths(shard);
+                Self::draw_road_paths_on_pixmap(
+                    &mut target,
+                    &self.theme,
+                    self.render_scale,
+                    &paths,
+                    scale_factor,
+                    &mut timings,
+                );
+            }
+        }
+
+        let mut terrain_paths = self.build_polygon_paths(water_data);
+        terrain_paths.extend(self.build_polygon_paths(parks_data));
+        let clear_color = Color::from_rgba(0.0, 0.0, 0.0, 1.0).unwrap_or(Color::BLACK);
+        for path in &terrain_paths {
+            Self::fill_polygon_path_on(&mut roads_layer, path, clear_color, BlendMode::Clear);
+        }
+
+        self.pixmap.draw_pixmap(
+            0,
+            0,
+            roads_layer.as_ref(),
+            &PixmapPaint::default(),
+            Transform::identity(),
+            None,
+        );
+
+        crate::utils::time_end("render_map_bin: road_mask_optimization");
+        timings
+    }
+
+    pub fn draw_road_shards_scaled(
+        &mut self,
+        road_shards: &[Vec<f64>],
+        scale_factor: f32,
+    ) -> [f64; 6] {
+        if road_shards.is_empty() {
             return [0.0; 6];
         }
 
         let mut timings = [0.0; 6];
-
-        // [超采样] 将外部传入的缩放因子乘以内部超采样倍数，
-        // 使道路宽度在 2× 画布上保持与逻辑分辨率一致的视觉比例
         let scale_factor = scale_factor * self.render_scale as f32;
+        self.draw_road_shards_directly(road_shards, scale_factor, &mut timings);
+        timings
+    }
 
-        let road_count = data[0] as usize;
-
-        // 准备 6 个路径构建器，对应 6 种道路类型
-        let mut pbs: Vec<PathBuilder> = (0..6).map(|_| PathBuilder::new()).collect();
-        let mut found = vec![false; 6];
-
-        let mut curr_offset = 1;
-
-        // 【优化】：单次遍历二进制数据，按类型分发到不同的路径构建器
-        for _ in 0..road_count {
-            if curr_offset + 2 > data.len() {
-                break;
-            }
-            let t = data[curr_offset] as usize;
-            let count = data[curr_offset + 1] as usize;
-            curr_offset += 2;
-
-            if t < 6 {
-                if curr_offset + count * 2 <= data.len() && count >= 2 {
-                    // 先收集屏幕坐标
-                    let screen_coords: Vec<(f32, f32)> = (0..count)
-                        .map(|i| {
-                            self.world_to_screen((
-                                data[curr_offset + i * 2],
-                                data[curr_offset + i * 2 + 1],
-                            ))
-                        })
-                        .collect();
-
-                    // 简化：epsilon = 0.5 屏幕像素，过滤掉亚像素级冗余点
-                    let simplified = simplify_screen_coords(&screen_coords, 0.5 * 0.5); // 传入 epsilon²
-
-                    let pb = &mut pbs[t];
-                    pb.move_to(simplified[0].0, simplified[0].1);
-                    for &(sx, sy) in &simplified[1..] {
-                        pb.line_to(sx, sy);
-                    }
-                    found[t] = true;
-                }
-            }
-            curr_offset += count * 2;
-        }
-
-        // [Z-order + Road Casing] 将 PathBuilder 转为可复用的 Path（tiny_skia::Path 实现了 Clone）
-        let paths: Vec<Option<tiny_skia::Path>> = pbs
-            .into_iter()
-            .enumerate()
-            .map(|(i, pb)| if found[i] { pb.finish() } else { None })
+    fn draw_road_shards_directly(
+        &mut self,
+        road_shards: &[Vec<f64>],
+        scale_factor: f32,
+        timings: &mut [f64; 6],
+    ) {
+        let prebuilt_paths: Vec<Vec<Option<tiny_skia::Path>>> = road_shards
+            .iter()
+            .filter(|shard| !shard.is_empty())
+            .map(|shard| self.build_road_paths(shard))
             .collect();
 
+        let mut target = self.pixmap.as_mut();
+        for paths in &prebuilt_paths {
+            Self::draw_road_paths_on_pixmap(
+                &mut target,
+                &self.theme,
+                self.render_scale,
+                &paths,
+                scale_factor,
+                timings,
+            );
+        }
+    }
+
+    fn draw_road_paths_on_pixmap(
+        pixmap: &mut tiny_skia::PixmapMut<'_>,
+        theme: &Theme,
+        render_scale: u32,
+        paths: &[Option<tiny_skia::Path>],
+        scale_factor: f32,
+        timings: &mut [f64; 6],
+    ) {
         // [Z-order] 道路绘制顺序：低优先级 → 高优先级，确保主干道始终在最上层
         // 枚举 index：Motorway=0, Primary=1, Secondary=2, Tertiary=3, Residential=4, Default=5
         // 从 index 5 向 0 渲染 = 从最低优先级到最高优先级
@@ -211,11 +258,10 @@ impl MapRenderer {
             let start = crate::utils::performance_now();
 
             let road_type = RoadType::from_u32(t_idx as u32);
-            let base_color = parse_hex_color(self.road_color_hex(road_type));
+            let base_color = parse_hex_color(Self::road_color_hex_for_theme(theme, road_type));
 
             // [Road Casing] Casing 宽度 = 道路宽 + 两侧各 1 逻辑像素（已含 render_scale 倍数）
-            let casing_width =
-                road_type.get_width_scaled(scale_factor) + 2.0 * self.render_scale as f32;
+            let casing_width = road_type.get_width_scaled(scale_factor) + 2.0 * render_scale as f32;
             // [Road Casing] Casing 颜色 = 道路色压暗 50%，形成描边对比
             let mut casing_color = darken_color(base_color, 0.9);
 
@@ -238,8 +284,7 @@ impl MapRenderer {
                 line_join: LineJoin::Round, // [Road Casing] 圆角拐点，消除锐角处的尖刺
                 ..Default::default()
             };
-            self.pixmap
-                .stroke_path(path, &paint, &stroke, Transform::identity(), None);
+            pixmap.stroke_path(path, &paint, &stroke, Transform::identity(), None);
 
             timings[t_idx] += crate::utils::performance_now() - start;
         }
@@ -255,7 +300,7 @@ impl MapRenderer {
             let road_type = RoadType::from_u32(t_idx as u32);
 
             let mut paint = Paint::default();
-            paint.set_color(parse_hex_color(self.road_color_hex(road_type)));
+            paint.set_color(parse_hex_color(Self::road_color_hex_for_theme(theme, road_type)));
             paint.anti_alias = true;
 
             let stroke = Stroke {
@@ -264,13 +309,10 @@ impl MapRenderer {
                 line_join: LineJoin::Round,
                 ..Default::default()
             };
-            self.pixmap
-                .stroke_path(path, &paint, &stroke, Transform::identity(), None);
+            pixmap.stroke_path(path, &paint, &stroke, Transform::identity(), None);
 
             timings[t_idx] += crate::utils::performance_now() - start;
         }
-
-        timings
     }
 
     /// 绘制多边形 (二进制直读版)
@@ -294,60 +336,12 @@ impl MapRenderer {
             &format!("🌊 开始绘制 {} 个多边形，颜色: {}", poly_count, color_hex).into(),
         );
 
-        let mut offset = 1;
         let color = parse_hex_color(color_hex);
+        let paths = self.build_polygon_paths(data);
+        let found = !paths.is_empty();
 
-        let mut found = false;
-
-        for _idx in 0..poly_count {
-            if offset + 2 > data.len() {
-                break;
-            }
-            let ext_count = data[offset] as usize;
-            let int_ring_count = data[offset + 1] as usize;
-            offset += 2;
-
-            let mut pb = PathBuilder::new();
-            let mut valid_polygon = false;
-
-            if offset + ext_count * 2 <= data.len() && ext_count >= 3 {
-                let (sx, sy) = self.world_to_screen((data[offset], data[offset + 1]));
-                pb.move_to(sx, sy);
-                for i in 1..ext_count {
-                    let (sx, sy) =
-                        self.world_to_screen((data[offset + i * 2], data[offset + i * 2 + 1]));
-                    pb.line_to(sx, sy);
-                }
-                pb.close();
-                valid_polygon = true;
-                found = true;
-            }
-            offset += ext_count * 2;
-
-            for _ in 0..int_ring_count {
-                if offset + 1 > data.len() {
-                    break;
-                }
-                let count = data[offset] as usize;
-                offset += 1;
-                if offset + count * 2 <= data.len() && count >= 3 {
-                    let (sx, sy) = self.world_to_screen((data[offset], data[offset + 1]));
-                    pb.move_to(sx, sy);
-                    for i in 1..count {
-                        let (sx, sy) =
-                            self.world_to_screen((data[offset + i * 2], data[offset + i * 2 + 1]));
-                        pb.line_to(sx, sy);
-                    }
-                    pb.close();
-                }
-                offset += count * 2;
-            }
-
-            if valid_polygon {
-                if let Some(path) = pb.finish() {
-                    self.fill_polygon_path(&path, color);
-                }
-            }
+        for path in &paths {
+            Self::fill_polygon_path_on(&mut self.pixmap, path, color, BlendMode::SourceOver);
         }
 
         if found {
@@ -359,6 +353,42 @@ impl MapRenderer {
                 &format!("⚠️  未找到有效的多边形数据，颜色: {}", color_hex).into(),
             );
         }
+    }
+
+    pub fn draw_parks_bin_masked_by_water(
+        &mut self,
+        parks_data: &[f64],
+        water_data: &[f64],
+        color_hex: &str,
+    ) {
+        if parks_data.is_empty() || parks_data[0] as usize == 0 {
+            return;
+        }
+
+        let Some(mut parks_layer) = Pixmap::new(self.render_width(), self.render_height()) else {
+            self.draw_polygons_bin(parks_data, color_hex);
+            return;
+        };
+
+        let color = parse_hex_color(color_hex);
+        let park_paths = self.build_polygon_paths(parks_data);
+        for path in &park_paths {
+            Self::fill_polygon_path_on(&mut parks_layer, path, color, BlendMode::SourceOver);
+        }
+
+        let water_paths = self.build_polygon_paths(water_data);
+        for path in &water_paths {
+            Self::fill_polygon_path_on(&mut parks_layer, path, color, BlendMode::Clear);
+        }
+
+        self.pixmap.draw_pixmap(
+            0,
+            0,
+            parks_layer.as_ref(),
+            &PixmapPaint::default(),
+            Transform::identity(),
+            None,
+        );
     }
 
     /// 绘制道路
@@ -463,25 +493,22 @@ impl MapRenderer {
     }
 
     /// 绘制 POI 圆点（使用 POI 结构体数组）
-    pub fn draw_pois(&mut self, pois: &[crate::types::POI]) {
-        // 【优化】委托给 scaled 版本，消除重复代码；scale_factor=1.0 等同于原无缩放行为
-        self.draw_pois_scaled(pois, 1.0);
+    pub fn draw_pois(&mut self, pois: &[crate::types::POI], poi_ratio: f32) {
+        // 【优化】委托给 scaled 版本，消除重复代码
+        self.draw_pois_scaled(pois, poi_ratio);
     }
 
-    /// 绘制 POI 圆点（使用 POI 结构体数组，带动态缩放因子）
-    pub fn draw_pois_scaled(&mut self, pois: &[crate::types::POI], scale_factor: f32) {
+    /// 绘制 POI 圆点（使用 POI 结构体数组，带画布比例缩放）
+    pub fn draw_pois_scaled(&mut self, pois: &[crate::types::POI], poi_ratio: f32) {
         if pois.is_empty() {
             return;
         }
 
-        // [超采样] 缩放因子乘以内部渲染倍数，保持圆点视觉大小与逻辑尺寸一致
-        let scale_factor = scale_factor * self.render_scale as f32;
-
-        // 使用主题中的 POI 专用颜色
+        let render_scale = self.render_scale as f32;
+        let short_side = self.width.min(self.height) as f32;
         let poi_color = parse_hex_color(&self.theme.poi_color);
-
-        let poi_radius = 10.0 * scale_factor; // POI 圆点半径随分辨率缩放
-        let min_spacing = 8.0 * scale_factor; // POI 之间最小间距（像素）
+        let poi_radius = short_side * poi_ratio * 0.5 * render_scale;
+        let min_spacing = poi_radius * 0.4;
         const MAX_POIS: usize = 50; // 最多渲染 50 个 POI 点
         let min_distance_sq = (poi_radius * 2.0 + min_spacing) * (poi_radius * 2.0 + min_spacing);
 
@@ -559,20 +586,20 @@ impl MapRenderer {
 
     /// 绘制 POI 圆点（二进制直读版本）
     /// 数据格式：[poi_count, x1, y1, x2, y2, ...]
-    pub fn draw_pois_bin(&mut self, data: &[f64]) {
-        // 【优化】委托给 scaled 版本，消除重复代码；scale_factor=1.0 等同于原无缩放行为
-        self.draw_pois_bin_scaled(data, 1.0);
+    pub fn draw_pois_bin(&mut self, data: &[f64], poi_ratio: f32) {
+        self.draw_pois_bin_scaled(data, poi_ratio);
     }
 
-    /// 绘制 POI 圆点（二进制直读版本，带动态缩放因子）
+    /// 绘制 POI 圆点（二进制直读版本，带画布比例缩放）
     /// 数据格式：[poi_count, x1, y1, x2, y2, ...]
-    pub fn draw_pois_bin_scaled(&mut self, data: &[f64], scale_factor: f32) {
+    pub fn draw_pois_bin_scaled(&mut self, data: &[f64], poi_ratio: f32) {
         if data.is_empty() || data[0] as usize == 0 {
             return;
         }
 
-        // [超采样] 缩放因子乘以内部渲染倍数，保持 POI 视觉大小一致
-        let scale_factor = scale_factor * self.render_scale as f32;
+        let render_scale = self.render_scale as f32;
+        let short_side = self.width.min(self.height) as f32;
+        let poi_radius = short_side * poi_ratio * 0.5 * render_scale;
 
         let poi_count = data[0] as usize;
         if data.len() < 1 + poi_count * 2 {
@@ -591,8 +618,7 @@ impl MapRenderer {
         // 使用主题中的 POI 专用颜色
         let poi_color = parse_hex_color(&self.theme.poi_color);
 
-        let poi_radius = 8.0 * scale_factor; // POI 圆点半径随分辨率缩放
-        let min_spacing = 5.0 * scale_factor; // POI 之间最小间距随分辨率缩放
+        let min_spacing = poi_radius * 0.25;
         const MAX_POIS: usize = 50;
         let min_distance_sq = (poi_radius * 2.0 + min_spacing) * (poi_radius * 2.0 + min_spacing);
 
@@ -617,9 +643,10 @@ impl MapRenderer {
             }
 
             if offset + 1 < data.len() {
-                let x = data[offset];
-                let y = data[offset + 1];
-                let (screen_x, screen_y) = self.world_to_screen((x, y));
+                let lon = data[offset];
+                let lat = data[offset + 1];
+                let projected = projection::project_point(lon, lat);
+                let (screen_x, screen_y) = self.world_to_screen(projected);
 
                 // 检查边界
                 if screen_x >= 0.0 && screen_x <= rw && screen_y >= 0.0 && screen_y <= rh {
@@ -678,6 +705,413 @@ impl MapRenderer {
             )
             .into(),
         );
+    }
+
+    pub fn draw_custom_pois(&mut self, pois: &[crate::types::CustomPOI], pin_theme_config: &PinThemeConfig) {
+        if pois.is_empty() {
+            return;
+        }
+
+        let render_scale = self.render_scale as f32;
+        let short_side = self.width.min(self.height) as f32;
+        let marker_diameter = short_side * pin_theme_config.poi_ratio;
+        let marker_radius = marker_diameter * 0.5 * render_scale;
+        let min_spacing = 8.0 * render_scale;
+        let poi_color = parse_hex_color(&self.theme.poi_color);
+        let min_distance_sq = (marker_radius * 2.0 + min_spacing) * (marker_radius * 2.0 + min_spacing);
+        let cell_size = ((marker_radius * 2.0 + min_spacing).ceil() as i32).max(1);
+        let mut grid: HashMap<(i32, i32), Vec<(f32, f32)>> = HashMap::new();
+        let mut rendered_count = 0usize;
+        let rw = self.render_width() as f32;
+        let rh = self.render_height() as f32;
+        let mut badge_paint = Paint::default();
+        badge_paint.set_color(poi_color);
+        badge_paint.anti_alias = true;
+        let mut icon_paint = Paint::default();
+        icon_paint.set_color(parse_hex_color(&self.theme.poi_icon_color));
+        icon_paint.anti_alias = true;
+        let mut shadow_paint = Paint::default();
+        shadow_paint.anti_alias = true;
+        let mut rim_paint = Paint::default();
+        rim_paint.anti_alias = true;
+        let mut highlight_paint = Paint::default();
+        highlight_paint.anti_alias = true;
+
+        for poi in pois {
+            let projected = projection::project_point(poi.lon, poi.lat);
+            let (screen_x, screen_y) = self.world_to_screen(projected);
+            if screen_x < 0.0 || screen_x > rw || screen_y < 0.0 || screen_y > rh {
+                continue;
+            }
+
+            let cx = (screen_x / cell_size as f32).floor() as i32;
+            let cy = (screen_y / cell_size as f32).floor() as i32;
+            let mut too_close = false;
+            'outer: for dy in -1..=1i32 {
+                for dx in -1..=1i32 {
+                    if let Some(pts) = grid.get(&(cx + dx, cy + dy)) {
+                        for &(rx, ry) in pts {
+                            let ddx = screen_x - rx;
+                            let ddy = screen_y - ry;
+                            if ddx * ddx + ddy * ddy < min_distance_sq {
+                                too_close = true;
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if too_close {
+                continue;
+            }
+
+            grid.entry((cx, cy)).or_default().push((screen_x, screen_y));
+            self.draw_pin_badge(
+                screen_x,
+                screen_y,
+                marker_radius,
+                pin_theme_config,
+                &mut shadow_paint,
+                &badge_paint,
+                &mut rim_paint,
+                &mut highlight_paint,
+            );
+            if !self.draw_custom_poi_icon(
+                &icon_paint,
+                poi,
+                screen_x,
+                screen_y,
+                marker_radius * 2.0 * pin_theme_config.icon_scale,
+            )
+            {
+                let mut fallback_pb = PathBuilder::new();
+                fallback_pb.push_circle(screen_x, screen_y, marker_radius * pin_theme_config.fallback_dot_scale);
+                if let Some(fallback_path) = fallback_pb.finish() {
+                    self.pixmap.fill_path(
+                        &fallback_path,
+                        &icon_paint,
+                        FillRule::Winding,
+                        Transform::identity(),
+                        None,
+                    );
+                }
+            }
+            rendered_count += 1;
+        }
+
+        log(&format!(
+            "Rendered {} custom POIs using theme color {}",
+            rendered_count, &self.theme.poi_color
+        ));
+    }
+
+    fn draw_custom_poi_icon(
+        &mut self,
+        paint: &Paint,
+        poi: &crate::types::CustomPOI,
+        screen_x: f32,
+        screen_y: f32,
+        icon_size: f32,
+    ) -> bool {
+        let Some(icon) = &poi.icon else {
+            return false;
+        };
+        if icon.view_box_width <= 0.0 || icon.view_box_height <= 0.0 || icon.paths.is_empty() {
+            return false;
+        }
+
+        let icon_scale = icon_size / icon.view_box_width.max(icon.view_box_height);
+        let translate_x = screen_x - icon.view_box_width * icon_scale * 0.5;
+        let translate_y = screen_y - icon.view_box_height * icon_scale * 0.5;
+        let transform = Transform::from_scale(icon_scale, icon_scale)
+            .post_translate(translate_x, translate_y);
+
+        let mut drew_any = false;
+        for icon_path in &icon.paths {
+            let Some(path) = build_custom_poi_icon_path(&icon_path.commands) else {
+                continue;
+            };
+            let Some(transformed_path) = path.transform(transform) else {
+                continue;
+            };
+            let fill_rule = match icon_path.fill_rule.as_deref() {
+                Some("evenodd") => FillRule::EvenOdd,
+                _ => FillRule::Winding,
+            };
+            self.pixmap
+                .fill_path(&transformed_path, paint, fill_rule, Transform::identity(), None);
+            drew_any = true;
+        }
+
+        drew_any
+    }
+
+    fn draw_pin_badge(
+        &mut self,
+        screen_x: f32,
+        screen_y: f32,
+        marker_radius: f32,
+        pin_theme_config: &PinThemeConfig,
+        shadow_paint: &mut Paint,
+        badge_paint: &Paint,
+        rim_paint: &mut Paint,
+        highlight_paint: &mut Paint,
+    ) {
+        if pin_theme_config.gradient_enabled {
+            self.draw_gradient_pin_badge(
+                screen_x,
+                screen_y,
+                marker_radius,
+                pin_theme_config,
+            );
+        } else {
+            self.draw_solid_pin_badge(
+                screen_x,
+                screen_y,
+                marker_radius,
+                pin_theme_config,
+                shadow_paint,
+                badge_paint,
+                rim_paint,
+                highlight_paint,
+            );
+        }
+    }
+
+    fn draw_solid_pin_badge(
+        &mut self,
+        screen_x: f32,
+        screen_y: f32,
+        marker_radius: f32,
+        pin_theme_config: &PinThemeConfig,
+        shadow_paint: &mut Paint,
+        badge_paint: &Paint,
+        rim_paint: &mut Paint,
+        highlight_paint: &mut Paint,
+    ) {
+        match pin_theme_config.style {
+            PinThemeStyle::Puff => {
+                shadow_paint.set_color(Color::from_rgba(0.0, 0.0, 0.0, pin_theme_config.shadow_alpha).unwrap());
+                self.fill_circle(
+                    screen_x,
+                    screen_y + marker_radius * pin_theme_config.shadow_offset_y_scale,
+                    marker_radius * pin_theme_config.shadow_radius_scale,
+                    shadow_paint,
+                );
+                self.fill_circle(screen_x, screen_y, marker_radius, badge_paint);
+                highlight_paint.set_color(Color::from_rgba(1.0, 1.0, 1.0, pin_theme_config.highlight_alpha).unwrap());
+                self.fill_circle(
+                    screen_x + marker_radius * pin_theme_config.highlight_offset_x_scale,
+                    screen_y + marker_radius * pin_theme_config.highlight_offset_y_scale,
+                    marker_radius * pin_theme_config.highlight_radius_scale,
+                    highlight_paint,
+                );
+                rim_paint.set_color(Color::from_rgba(0.0, 0.0, 0.0, pin_theme_config.inner_shadow_alpha).unwrap());
+                self.fill_circle(
+                    screen_x,
+                    screen_y + marker_radius * pin_theme_config.inner_shadow_offset_y_scale,
+                    marker_radius * pin_theme_config.inner_shadow_radius_scale,
+                    rim_paint,
+                );
+                self.fill_circle(screen_x, screen_y, marker_radius * pin_theme_config.inner_body_scale, badge_paint);
+            }
+            PinThemeStyle::Badge => {
+                let badge_rim_color =
+                    darken_color(parse_hex_color(&self.theme.poi_color), pin_theme_config.rim_darken);
+                shadow_paint.set_color(Color::from_rgba(0.0, 0.0, 0.0, pin_theme_config.shadow_alpha).unwrap());
+                self.fill_circle(
+                    screen_x,
+                    screen_y + marker_radius * pin_theme_config.shadow_offset_y_scale,
+                    marker_radius * pin_theme_config.shadow_radius_scale,
+                    shadow_paint,
+                );
+                rim_paint.set_color(badge_rim_color);
+                self.fill_circle(screen_x, screen_y, marker_radius, rim_paint);
+                self.fill_circle(screen_x, screen_y, marker_radius * pin_theme_config.inner_body_scale, badge_paint);
+                highlight_paint.set_color(Color::from_rgba(1.0, 1.0, 1.0, pin_theme_config.highlight_alpha).unwrap());
+                self.fill_circle(
+                    screen_x + marker_radius * pin_theme_config.highlight_offset_x_scale,
+                    screen_y + marker_radius * pin_theme_config.highlight_offset_y_scale,
+                    marker_radius * pin_theme_config.highlight_radius_scale,
+                    highlight_paint,
+                );
+            }
+            PinThemeStyle::Pinhead => {
+                let outer_rim_color =
+                    darken_color(parse_hex_color(&self.theme.poi_color), pin_theme_config.rim_darken);
+                let inner_body_color =
+                    darken_color(parse_hex_color(&self.theme.poi_color), pin_theme_config.inner_body_darken);
+                shadow_paint.set_color(Color::from_rgba(0.0, 0.0, 0.0, pin_theme_config.shadow_alpha).unwrap());
+                self.fill_circle(
+                    screen_x,
+                    screen_y + marker_radius * pin_theme_config.shadow_offset_y_scale,
+                    marker_radius * pin_theme_config.shadow_radius_scale,
+                    shadow_paint,
+                );
+                rim_paint.set_color(outer_rim_color);
+                self.fill_circle(screen_x, screen_y, marker_radius, rim_paint);
+
+                let mut inner_body_paint = Paint::default();
+                inner_body_paint.set_color(inner_body_color);
+                inner_body_paint.anti_alias = true;
+                self.fill_circle(screen_x, screen_y, marker_radius * pin_theme_config.inner_body_scale, &inner_body_paint);
+
+                highlight_paint.set_color(Color::from_rgba(1.0, 1.0, 1.0, pin_theme_config.highlight_alpha).unwrap());
+                self.fill_circle(
+                    screen_x + marker_radius * pin_theme_config.highlight_offset_x_scale,
+                    screen_y + marker_radius * pin_theme_config.highlight_offset_y_scale,
+                    marker_radius * pin_theme_config.highlight_radius_scale,
+                    highlight_paint,
+                );
+
+                let mut specular_paint = Paint::default();
+                specular_paint.set_color(
+                    Color::from_rgba(1.0, 1.0, 1.0, pin_theme_config.secondary_highlight_alpha).unwrap(),
+                );
+                specular_paint.anti_alias = true;
+                self.fill_circle(
+                    screen_x + marker_radius * pin_theme_config.secondary_highlight_offset_x_scale,
+                    screen_y + marker_radius * pin_theme_config.secondary_highlight_offset_y_scale,
+                    marker_radius * pin_theme_config.secondary_highlight_radius_scale,
+                    &specular_paint,
+                );
+            }
+        }
+    }
+
+    fn draw_gradient_pin_badge(
+        &mut self,
+        screen_x: f32,
+        screen_y: f32,
+        marker_radius: f32,
+        pin_theme_config: &PinThemeConfig,
+    ) {
+        let poi_color = parse_hex_color(&self.theme.poi_color);
+        let shadow_base = parse_hex_color(&pin_theme_config.shadow_color);
+
+        match pin_theme_config.style {
+            PinThemeStyle::Puff => {
+                // Layer 1: soft shadow with radial gradient (center → edge fade to transparent)
+                let shadow_y = screen_y + marker_radius * pin_theme_config.shadow_offset_y_scale;
+                let shadow_r = marker_radius * pin_theme_config.shadow_radius_scale * pin_theme_config.shadow_spread;
+                let shadow_center_color = Color::from_rgba(
+                    shadow_base.red(), shadow_base.green(), shadow_base.blue(),
+                    pin_theme_config.shadow_alpha,
+                ).unwrap();
+                let shadow_edge_color = Color::from_rgba(
+                    shadow_base.red(), shadow_base.green(), shadow_base.blue(), 0.0,
+                ).unwrap();
+                self.fill_gradient_circle(
+                    screen_x, shadow_y, shadow_r,
+                    Point::from_xy(screen_x, shadow_y),
+                    shadow_r,
+                    &[
+                        GradientStop::new(0.0, shadow_center_color),
+                        GradientStop::new(1.0, shadow_edge_color),
+                    ],
+                );
+
+                // Layer 2: body sphere with radial gradient (upper-left lighter, lower-right darker)
+                let body_light = lighten_color(poi_color, pin_theme_config.body_lighten);
+                let body_dark = darken_color(poi_color, pin_theme_config.body_darken);
+                let body_grad_center = Point::from_xy(
+                    screen_x + marker_radius * 0.15,
+                    screen_y + marker_radius * -0.15,
+                );
+                let body_grad_r = marker_radius * 1.3;
+                self.fill_gradient_circle(
+                    screen_x, screen_y, marker_radius,
+                    body_grad_center,
+                    body_grad_r,
+                    &[
+                        GradientStop::new(0.0, body_light),
+                        GradientStop::new(0.55, poi_color),
+                        GradientStop::new(1.0, body_dark),
+                    ],
+                );
+
+                // Layer 3: soft highlight with radial gradient (white center → transparent edge)
+                let hl_x = screen_x + marker_radius * pin_theme_config.highlight_offset_x_scale;
+                let hl_y = screen_y + marker_radius * pin_theme_config.highlight_offset_y_scale;
+                let hl_r = marker_radius * pin_theme_config.highlight_radius_scale * pin_theme_config.highlight_spread;
+                self.fill_gradient_circle(
+                    hl_x, hl_y, hl_r,
+                    Point::from_xy(hl_x, hl_y),
+                    hl_r,
+                    &[
+                        GradientStop::new(0.0, Color::from_rgba(1.0, 1.0, 1.0, pin_theme_config.highlight_alpha).unwrap()),
+                        GradientStop::new(1.0, Color::from_rgba(1.0, 1.0, 1.0, 0.0).unwrap()),
+                    ],
+                );
+            }
+            // Other styles fall back to solid rendering for now
+            _ => {
+                let mut shadow_paint = Paint::default();
+                shadow_paint.anti_alias = true;
+                let mut rim_paint = Paint::default();
+                rim_paint.anti_alias = true;
+                let mut highlight_paint = Paint::default();
+                highlight_paint.anti_alias = true;
+                let badge_paint = {
+                    let mut p = Paint::default();
+                    p.set_color(poi_color);
+                    p.anti_alias = true;
+                    p
+                };
+                self.draw_solid_pin_badge(
+                    screen_x,
+                    screen_y,
+                    marker_radius,
+                    pin_theme_config,
+                    &mut shadow_paint,
+                    &badge_paint,
+                    &mut rim_paint,
+                    &mut highlight_paint,
+                );
+            }
+        }
+    }
+
+    fn fill_gradient_circle(
+        &mut self,
+        cx: f32, cy: f32, radius: f32,
+        gradient_center: Point,
+        gradient_radius: f32,
+        stops: &[GradientStop],
+    ) {
+        // Two-point conical gradient: 0 at gradient_center, `gradient_radius` at same point → standard radial
+        let shader = match RadialGradient::new(
+            gradient_center,
+            gradient_center,
+            gradient_radius,
+            stops.to_vec(),
+            SpreadMode::Pad,
+            Transform::identity(),
+        ) {
+            Some(s) => s,
+            None => return,
+        };
+
+        let mut paint = Paint::default();
+        paint.shader = shader;
+        paint.anti_alias = true;
+
+        let mut pb = PathBuilder::new();
+        pb.push_circle(cx, cy, radius);
+        if let Some(path) = pb.finish() {
+            self.pixmap
+                .fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+        }
+    }
+
+    fn fill_circle(&mut self, x: f32, y: f32, radius: f32, paint: &Paint) {
+        let mut pb = PathBuilder::new();
+        pb.push_circle(x, y, radius);
+        if let Some(path) = pb.finish() {
+            self.pixmap
+                .fill_path(&path, paint, FillRule::Winding, Transform::identity(), None);
+        }
     }
 
     /// 绘制渐变（顶部和底部）
@@ -811,11 +1245,20 @@ impl MapRenderer {
     }
 
     fn fill_polygon_path(&mut self, path: &tiny_skia::Path, color: Color) {
+        Self::fill_polygon_path_on(&mut self.pixmap, path, color, BlendMode::SourceOver);
+    }
+
+    fn fill_polygon_path_on(
+        pixmap: &mut Pixmap,
+        path: &tiny_skia::Path,
+        color: Color,
+        blend_mode: BlendMode,
+    ) {
         let mut paint = Paint::default();
         paint.set_color(color);
         paint.anti_alias = true;
-        self.pixmap
-            .fill_path(path, &paint, FillRule::EvenOdd, Transform::identity(), None);
+        paint.blend_mode = blend_mode;
+        pixmap.fill_path(path, &paint, FillRule::EvenOdd, Transform::identity(), None);
     }
 
     fn add_poly_to_path(&self, pb: &mut PathBuilder, poly: &PolyFeature) -> bool {
@@ -847,6 +1290,122 @@ impl MapRenderer {
         }
 
         true
+    }
+
+    fn build_polygon_paths(&self, data: &[f64]) -> Vec<tiny_skia::Path> {
+        if data.is_empty() {
+            return Vec::new();
+        }
+
+        let poly_count = data[0] as usize;
+        let mut offset = 1;
+        let mut paths = Vec::with_capacity(poly_count);
+
+        for _ in 0..poly_count {
+            if offset + 2 > data.len() {
+                break;
+            }
+            let ext_count = data[offset] as usize;
+            let int_ring_count = data[offset + 1] as usize;
+            offset += 2;
+
+            let mut pb = PathBuilder::new();
+            let mut valid_polygon = false;
+
+            if offset + ext_count * 2 <= data.len() && ext_count >= 3 {
+                let (sx, sy) = self.world_to_screen((data[offset], data[offset + 1]));
+                pb.move_to(sx, sy);
+                for i in 1..ext_count {
+                    let (sx, sy) =
+                        self.world_to_screen((data[offset + i * 2], data[offset + i * 2 + 1]));
+                    pb.line_to(sx, sy);
+                }
+                pb.close();
+                valid_polygon = true;
+            }
+            offset += ext_count * 2;
+
+            for _ in 0..int_ring_count {
+                if offset + 1 > data.len() {
+                    break;
+                }
+                let count = data[offset] as usize;
+                offset += 1;
+                if offset + count * 2 <= data.len() && count >= 3 {
+                    let (sx, sy) = self.world_to_screen((data[offset], data[offset + 1]));
+                    pb.move_to(sx, sy);
+                    for i in 1..count {
+                        let (sx, sy) =
+                            self.world_to_screen((data[offset + i * 2], data[offset + i * 2 + 1]));
+                        pb.line_to(sx, sy);
+                    }
+                    pb.close();
+                }
+                offset += count * 2;
+            }
+
+            if valid_polygon {
+                if let Some(path) = pb.finish() {
+                    paths.push(path);
+                }
+            }
+        }
+
+        paths
+    }
+
+    fn build_road_paths(&self, data: &[f64]) -> Vec<Option<tiny_skia::Path>> {
+        let road_count = data[0] as usize;
+        let mut pbs: Vec<PathBuilder> = (0..6).map(|_| PathBuilder::new()).collect();
+        let mut found = vec![false; 6];
+        let mut curr_offset = 1;
+
+        for _ in 0..road_count {
+            if curr_offset + 2 > data.len() {
+                break;
+            }
+            let t = data[curr_offset] as usize;
+            let count = data[curr_offset + 1] as usize;
+            curr_offset += 2;
+
+            if t < 6 && curr_offset + count * 2 <= data.len() && count >= 2 {
+                let screen_coords: Vec<(f32, f32)> = (0..count)
+                    .map(|i| {
+                        self.world_to_screen((
+                            data[curr_offset + i * 2],
+                            data[curr_offset + i * 2 + 1],
+                        ))
+                    })
+                    .collect();
+                let simplified = simplify_screen_coords(&screen_coords, 0.5 * 0.5);
+
+                let pb = &mut pbs[t];
+                pb.move_to(simplified[0].0, simplified[0].1);
+                for &(sx, sy) in &simplified[1..] {
+                    pb.line_to(sx, sy);
+                }
+                found[t] = true;
+            }
+
+            curr_offset += count * 2;
+        }
+
+        pbs.into_iter()
+            .enumerate()
+            .map(|(i, pb)| if found[i] { pb.finish() } else { None })
+            .collect()
+    }
+
+    #[inline]
+    fn road_color_hex_for_theme(theme: &Theme, road_type: RoadType) -> &str {
+        match road_type {
+            RoadType::Motorway => &theme.road_motorway,
+            RoadType::Primary => &theme.road_primary,
+            RoadType::Secondary => &theme.road_secondary,
+            RoadType::Tertiary => &theme.road_tertiary,
+            RoadType::Residential => &theme.road_residential,
+            RoadType::Default => &theme.road_default,
+        }
     }
 
     /// 绘制文字（使用 fontdue）
@@ -905,30 +1464,40 @@ impl MapRenderer {
         // 偏移池按从最显眼（顶部）到最不显眼（底部）排列
         // 可见元素按 city → country → coords 优先级依次取偏移
         let offset_pool: [f32; 3] = [50.0 * scale_factor, 0.0, -40.0 * scale_factor];
-        let mut visible_items: Vec<(&str, String, f32)> = Vec::new();
+        let mut visible_index = 0usize;
 
         if show_city {
             let formatted_city = format_city_name(city);
             let city_size = calculate_font_size(&formatted_city, 80.0 * scale_factor, 30);
-            visible_items.push(("city", formatted_city, city_size));
-        }
-        if show_country {
-            let country_upper = country.to_uppercase();
-            let country_size = 28.0 * scale_factor;
-            visible_items.push(("country", country_upper, country_size));
-        }
-        if show_coords {
-            let coords_str = format_coordinates(lat, lon);
-            let coords_size = 18.0 * scale_factor;
-            visible_items.push(("coords", coords_str, coords_size));
-        }
-
-        for (i, (_kind, text, font_size)) in visible_items.iter().enumerate() {
             self.draw_text_centered(
                 &font,
-                text,
-                base_y_px + offset_pool[i],
-                *font_size,
+                &formatted_city,
+                base_y_px + offset_pool[visible_index],
+                city_size,
+                text_color,
+            );
+            visible_index += 1;
+        }
+
+        if show_country {
+            let country_upper = country.to_uppercase();
+            self.draw_text_centered(
+                &font,
+                &country_upper,
+                base_y_px + offset_pool[visible_index],
+                28.0 * scale_factor,
+                text_color,
+            );
+            visible_index += 1;
+        }
+
+        if show_coords {
+            let coords_str = format_coordinates(lat, lon);
+            self.draw_text_centered(
+                &font,
+                &coords_str,
+                base_y_px + offset_pool[visible_index],
+                18.0 * scale_factor,
                 text_color,
             );
         }
@@ -1239,6 +1808,47 @@ impl MapRenderer {
     }
 }
 
+fn build_custom_poi_icon_path(
+    commands: &[crate::types::CustomPoiPathCommand],
+) -> Option<tiny_skia::Path> {
+    let mut builder = PathBuilder::new();
+
+    for command in commands {
+        match command.r#type.as_str() {
+            "M" if command.values.len() == 2 => {
+                builder.move_to(command.values[0], command.values[1]);
+            }
+            "L" if command.values.len() == 2 => {
+                builder.line_to(command.values[0], command.values[1]);
+            }
+            "Q" if command.values.len() == 4 => {
+                builder.quad_to(
+                    command.values[0],
+                    command.values[1],
+                    command.values[2],
+                    command.values[3],
+                );
+            }
+            "C" if command.values.len() == 6 => {
+                builder.cubic_to(
+                    command.values[0],
+                    command.values[1],
+                    command.values[2],
+                    command.values[3],
+                    command.values[4],
+                    command.values[5],
+                );
+            }
+            "Z" if command.values.is_empty() => {
+                builder.close();
+            }
+            _ => return None,
+        }
+    }
+
+    builder.finish()
+}
+
 // ── [Gamma校正] sRGB ↔ 线性光转换工具函数 ────────────────────────────────────
 
 /// [Gamma校正] sRGB -> 线性光（IEC 61966-2-1 标准）
@@ -1284,6 +1894,18 @@ fn darken_color(color: Color, factor: f32) -> Color {
         (color.red() * factor).clamp(0.0, 1.0),
         (color.green() * factor).clamp(0.0, 1.0),
         (color.blue() * factor).clamp(0.0, 1.0),
+        color.alpha(),
+    )
+    .unwrap_or(color)
+}
+
+/// 按比例提亮颜色：factor=0.12 表示向白色混合 12%，保持 alpha 不变
+fn lighten_color(color: Color, factor: f32) -> Color {
+    let inv = 1.0 - factor;
+    Color::from_rgba(
+        (color.red() * inv + factor).clamp(0.0, 1.0),
+        (color.green() * inv + factor).clamp(0.0, 1.0),
+        (color.blue() * inv + factor).clamp(0.0, 1.0),
         color.alpha(),
     )
     .unwrap_or(color)
@@ -1419,6 +2041,7 @@ mod tests {
             text: "#FFFFFF".to_string(),
             gradient_color: "#000000".to_string(),
             poi_color: "#FFFFFF".to_string(),
+            poi_icon_color: "#ffffff".to_string(),
             water: "#00FF00".to_string(),
             parks: "#00AA00".to_string(),
             road_motorway: "#FFFFFF".to_string(),

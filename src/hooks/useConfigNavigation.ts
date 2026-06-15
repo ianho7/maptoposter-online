@@ -17,6 +17,7 @@ export function useConfigNavigation(navSections: NavSection[]): ConfigNavigation
   const [activeSection, setActiveSection] = useState(defaultSectionId);
   const sectionRefs = useRef<Map<string, HTMLElement>>(new Map());
   const isNavScrollingRef = useRef(false);
+  const navScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const ioRatiosRef = useRef<Map<Element, number>>(new Map());
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -37,6 +38,9 @@ export function useConfigNavigation(navSections: NavSection[]): ConfigNavigation
 
   const handleNavNavigate = (sectionId: string) => {
     isNavScrollingRef.current = true;
+    if (navScrollResetTimerRef.current) {
+      clearTimeout(navScrollResetTimerRef.current);
+    }
     setActiveSection(sectionId);
     const el = sectionRefs.current.get(sectionId);
     const container = configScrollRef.current;
@@ -47,6 +51,11 @@ export function useConfigNavigation(navSections: NavSection[]): ConfigNavigation
         const scrollTop = container.scrollTop + elRect.top - containerRect.top;
         container.scrollTo({ top: scrollTop, behavior: "smooth" });
       });
+      navScrollResetTimerRef.current = setTimeout(() => {
+        isNavScrollingRef.current = false;
+      }, 450);
+    } else {
+      isNavScrollingRef.current = false;
     }
   };
 
@@ -56,8 +65,13 @@ export function useConfigNavigation(navSections: NavSection[]): ConfigNavigation
 
     const onUserScroll = () => {
       isNavScrollingRef.current = false;
+      if (navScrollResetTimerRef.current) {
+        clearTimeout(navScrollResetTimerRef.current);
+        navScrollResetTimerRef.current = undefined;
+      }
     };
     scrollContainer.addEventListener("wheel", onUserScroll, { passive: true });
+    scrollContainer.addEventListener("scroll", onUserScroll, { passive: true });
     scrollContainer.addEventListener("touchstart", onUserScroll, { passive: true });
 
     const observer = new IntersectionObserver(
@@ -92,7 +106,11 @@ export function useConfigNavigation(navSections: NavSection[]): ConfigNavigation
     }
 
     return () => {
+      if (navScrollResetTimerRef.current) {
+        clearTimeout(navScrollResetTimerRef.current);
+      }
       scrollContainer.removeEventListener("wheel", onUserScroll);
+      scrollContainer.removeEventListener("scroll", onUserScroll);
       scrollContainer.removeEventListener("touchstart", onUserScroll);
       observer.disconnect();
       observerRef.current = null;

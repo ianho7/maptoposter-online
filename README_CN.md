@@ -70,6 +70,7 @@
 - 👁️ **实时预览** — 调整参数后可立即查看效果，导出前即可确认
 - 🎨 **20 种内置主题** — 从酷寒北欧到赛博朋克霓虹，从复古航海到故障紫
 - ✏️ **自定义颜色控制** — 可精细调整所有颜色：背景、道路、水体、绿地、兴趣点及文字
+- 📍 **自定义 POI 图钉** — 通过高德代理搜索地点，保存自己的 POI，并在导出海报时渲染出来
 - 📐 **多种导出格式** — 支持 A4（竖版/横版）、方形、手机壁纸、桌面 16:9，300 DPI 高质量印刷输出
 - 🌐 **多语言界面** — 支持英语、日语、韩语、简体中文、德语、西班牙语和法语
 - 💾 **IndexedDB 缓存** — 之前获取的地图数据会缓存在本地，加快重新生成速度
@@ -136,6 +137,38 @@ bun run dev
 | `bun run preview` | 预览生产构建 |
 | `bun run lint` | 运行代码检查 |
 | `bun run fix` | 格式化 + 检查修复 |
+
+### 自定义 POI 配置
+
+自定义 POI 弹窗通过 `/api/amap-proxy/` 这个代理端点调用高德地理编码接口。
+
+1. 在高德开放平台申请你自己的 Web 服务 API Key。
+2. 配置一个代理端点，把请求转发到 `https://restapi.amap.com/v3/geocode/geo`。
+3. 打开应用里的 `图钉` 分区，填入 Key，先测试，再开始搜索地点。
+
+Cloudflare Worker 示例：
+
+```ts
+export default {
+  async fetch(request: Request) {
+    const url = new URL(request.url);
+    const upstream = new URL("https://restapi.amap.com/v3/geocode/geo");
+    upstream.search = url.search;
+
+    return fetch(upstream, {
+      headers: {
+        accept: "application/json",
+      },
+    });
+  },
+};
+```
+
+说明：
+
+- 当前前端默认代理地址是 `/api/amap-proxy/`。
+- 前端会向代理传 `key`、`address` 和 `city` 这三个查询参数。
+- 高德 Key 需要用户自行提供，免费额度和限流规则以高德平台为准。
 
 ## 工程备忘
 
