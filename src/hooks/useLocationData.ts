@@ -12,6 +12,7 @@ export interface UseLocationDataResult {
   countries: Country[];
   getStatesByCountry: (countryId: number) => Promise<State[]>;
   getCitiesByState: (stateId: number) => Promise<City[]>;
+  getCitiesByCountry: (countryId: number) => Promise<City[]>;
   getDistrictsByCity: (
     cityName: string,
     stateName: string,
@@ -72,6 +73,7 @@ export function useLocationData(): UseLocationDataResult {
     countries,
     getStatesByCountry: locationService.getStatesByCountry.bind(locationService),
     getCitiesByState: locationService.getCitiesByState.bind(locationService),
+    getCitiesByCountry: locationService.getCitiesByCountry.bind(locationService),
     getDistrictsByCity: districtService.getDistrictsByCity.bind(districtService),
     getCountryByName: locationService.getCountryByName.bind(locationService),
     getStateByName: locationService.getStateByName.bind(locationService),

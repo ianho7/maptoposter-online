@@ -149,6 +149,49 @@ export class LocationService {
   }
 
   /**
+   * Get all cities by country ID without filtering by state.
+   */
+  async getCitiesByCountry(countryId: number): Promise<City[]> {
+    const data = await this.loadData();
+
+    if (this.countriesMap.size === 0) {
+      data.countries.forEach((c) => this.countriesMap.set(c.id, c));
+    }
+
+    const country = this.countriesMap.get(countryId);
+    if (!country) return [];
+
+    if (this.citiesCache[country.iso2]) {
+      return this.citiesCache[country.iso2];
+    }
+
+    try {
+      const response = await fetch(DATA_URLS.cities(country.iso2));
+      if (response.ok) {
+        const rawCities: RawCity[] = await response.json();
+        const cities: City[] = rawCities.map((c) => ({
+          id: c.i,
+          name: c.n,
+          latitude: parseFloat(c.la) || 0,
+          longitude: parseFloat(c.lo) || 0,
+          state_id: c.si,
+          country_id: countryId,
+          countryCode: c.c,
+          stateCode: c.s,
+        }));
+
+        cities.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+        this.citiesCache[country.iso2] = cities;
+        return cities;
+      }
+    } catch (err: unknown) {
+      console.error(`Failed to load cities for ${country.iso2}:`, err);
+    }
+
+    return [];
+  }
+
+  /**
    * Get cities by state ID
    */
   async getCitiesByState(stateId: number): Promise<City[]> {
@@ -184,36 +227,13 @@ export class LocationService {
       return [];
     }
 
-    // Return from cities cache if available
-    if (this.citiesCache[targetCountryIso2]) {
-      return this.citiesCache[targetCountryIso2].filter((c) => c.state_id === stateId);
-    }
+    const targetCountry = Array.from(this.countriesMap.values()).find(
+      (c) => c.iso2 === targetCountryIso2
+    );
+    if (!targetCountry) return [];
 
-    // Fetch cities for this country
-    try {
-      const response = await fetch(DATA_URLS.cities(targetCountryIso2));
-      if (response.ok) {
-        const rawCities: RawCity[] = await response.json();
-        const cities: City[] = rawCities.map((c) => ({
-          id: c.i,
-          name: c.n,
-          latitude: parseFloat(c.la) || 0,
-          longitude: parseFloat(c.lo) || 0,
-          state_id: c.si,
-          country_id: 0,
-          countryCode: c.c,
-          stateCode: c.s,
-        }));
-
-        cities.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
-        this.citiesCache[targetCountryIso2] = cities;
-        return cities.filter((c) => c.state_id === stateId);
-      }
-    } catch (err: unknown) {
-      console.error(`Failed to load cities for ${targetCountryIso2}:`, err);
-    }
-
-    return [];
+    const cities = await this.getCitiesByCountry(targetCountry.id);
+    return cities.filter((c) => c.state_id === stateId);
   }
 
   /**

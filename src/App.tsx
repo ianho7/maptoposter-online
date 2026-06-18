@@ -53,6 +53,13 @@ import { useReverseGeocode } from "@/hooks/useReverseGeocode";
 import { getPoiIconDefinition } from "@/lib/poi-icon-registry";
 import { CustomPOISettings } from "./components/custom-poi-settings";
 import { POIManagementDialog } from "./components/poi-management-dialog";
+import {
+  buildResolvedLocation,
+  coalesceCoordinates,
+  namesReferToSameLocation,
+  parseCityCoordinates,
+  resolveCitySelection,
+} from "@/services/location-resolution";
 
 // Extended PosterSize includes icon for size selector UI
 interface LocalPosterSize extends PosterSize {
@@ -614,48 +621,12 @@ function runInWorker(
 
 const yieldMainThread = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-function parseCoordinate(value: number | string | undefined): number | null {
-  const parsed = typeof value === "number" ? value : parseFloat(String(value));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseCityCoordinates(city: City | undefined): { lat: number; lng: number } | null {
-  if (!city) return null;
-
-  const lat = parseCoordinate(city.latitude);
-  const lng = parseCoordinate(city.longitude);
-  if (lat === null || lng === null) return null;
-
-  return { lat, lng };
-}
-
-function normalizeLocationName(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function getStateName(state: Pick<State, "name"> | string | undefined): string {
   return typeof state === "string" ? state : state?.name || "";
 }
 
 function getStateIso2(state: Pick<State, "iso2"> | string | undefined): string {
   return typeof state === "string" ? "" : state?.iso2?.toUpperCase() || "";
-}
-
-function namesReferToSameLocation(first: string, second: string): boolean {
-  const normalizedFirst = normalizeLocationName(first);
-  const normalizedSecond = normalizeLocationName(second);
-  if (!normalizedFirst || !normalizedSecond) return false;
-
-  return (
-    normalizedFirst === normalizedSecond ||
-    normalizedFirst.includes(normalizedSecond) ||
-    normalizedSecond.includes(normalizedFirst)
-  );
 }
 
 export default function MapPosterGenerator() {
@@ -670,6 +641,7 @@ export default function MapPosterGenerator() {
     countries,
     getStatesByCountry,
     getCitiesByState,
+    getCitiesByCountry,
     getDistrictsByCity,
     isLoading: locationLoading,
   } = useLocationData();
@@ -706,6 +678,7 @@ export default function MapPosterGenerator() {
   const [customTitle, setCustomTitle] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
   const [locationMode, setLocationMode] = useState<"search" | "coordinates">("search");
+  const locationFlowRequestIdRef = useRef(0);
 
   // Localized Sizes
   const SIZES: LocalPosterSize[] = useMemo(
@@ -864,6 +837,10 @@ export default function MapPosterGenerator() {
   const [amapApiKey, setAmapApiKey] = useState("");
   const [isPoiDialogOpen, setIsPoiDialogOpen] = useState(false);
   const internalPinThemeConfig = INTERNAL_PIN_THEME_CONFIGS[INTERNAL_PIN_THEME_STYLE][poiShape];
+
+  const beginLocationFlow = () => ++locationFlowRequestIdRef.current;
+  const isLatestLocationFlow = (requestId: number) =>
+    requestId === locationFlowRequestIdRef.current;
 
   // Persistence Handling
   const isRestored = useRef(false);
@@ -1029,9 +1006,8 @@ export default function MapPosterGenerator() {
           setAmapApiKey(config.amapApiKey);
         }
 
-        // Restore Location Text/Coords
+        // Restore Location Text
         if (config.customTitle) setCustomTitle(config.customTitle);
-        if (config.location) setLocation(config.location);
 
         // Crucial: Restore Country/State/City selections and trigger their data loading
         if (config.selectedCountry) {
@@ -1039,8 +1015,10 @@ export default function MapPosterGenerator() {
           if (country) {
             setSelectedCountry(config.selectedCountry);
             (async () => {
+              const requestId = beginLocationFlow();
               setIsStatesLoading(true);
               const countryStates = await getStatesByCountry(country.id);
+              if (!isLatestLocationFlow(requestId)) return;
               setStates(countryStates);
               setIsStatesLoading(false);
 
@@ -1050,6 +1028,7 @@ export default function MapPosterGenerator() {
                   setSelectedState(config.selectedState);
                   setIsCitiesLoading(true);
                   const stateCities = await getCitiesByState(state.id);
+                  if (!isLatestLocationFlow(requestId)) return;
                   setCities(stateCities);
                   setIsCitiesLoading(false);
 
@@ -1058,12 +1037,23 @@ export default function MapPosterGenerator() {
                     const city = stateCities.find(
                       (c: any) => c.name.toLowerCase() === cityName.toLowerCase()
                     );
-                    const coordinates = parseCityCoordinates(city);
-                    const fallback = coordinates
-                      ? null
-                      : await resolveStandaloneRegionFallback(config.selectedCountry, state);
-                    const resolvedCityName = fallback?.city || cityName;
-                    const resolvedCoordinates = coordinates || fallback || { lat: 0, lng: 0 };
+                    const countryCities = city ? stateCities : await getCitiesByCountry(country.id);
+                    if (!isLatestLocationFlow(requestId)) return;
+                    const fallback =
+                      countryCities.length > 0
+                        ? null
+                        : await resolveStandaloneRegionFallback(config.selectedCountry, state);
+                    if (!isLatestLocationFlow(requestId)) return;
+                    const resolution = resolveCitySelection(
+                      {
+                        requestedCityName: cityName,
+                        state,
+                        stateCities: countryCities,
+                      },
+                      fallback
+                    );
+                    const resolvedCityName = resolution.resolvedCityName;
+                    const resolvedCoordinates = resolution.coordinates;
 
                     setSelectedCity(resolvedCityName);
 
@@ -1072,8 +1062,8 @@ export default function MapPosterGenerator() {
                     const cityAsDistrict: District = {
                       id: 0,
                       name: resolvedCityName,
-                      lat: resolvedCoordinates.lat,
-                      lng: resolvedCoordinates.lng,
+                      lat: resolvedCoordinates?.lat ?? config.location?.lat ?? 0,
+                      lng: resolvedCoordinates?.lng ?? config.location?.lng ?? 0,
                     };
                     setIsDistrictsLoading(true);
                     try {
@@ -1082,20 +1072,23 @@ export default function MapPosterGenerator() {
                         config.selectedState,
                         config.selectedCountry
                       );
+                      if (!isLatestLocationFlow(requestId)) return;
                       setDistricts([cityAsDistrict, ...apiDistricts]);
                     } catch {
+                      if (!isLatestLocationFlow(requestId)) return;
                       setDistricts([cityAsDistrict]);
                     }
                     setIsDistrictsLoading(false);
 
-                    setLocation({
-                      country: config.selectedCountry,
-                      state: config.selectedState,
-                      city: resolvedCityName,
-                      district: config.selectedDistrict || resolvedCityName,
-                      lat: resolvedCoordinates.lat,
-                      lng: resolvedCoordinates.lng,
-                    });
+                    setLocation(
+                      buildResolvedLocation({
+                        country: config.selectedCountry,
+                        state: config.selectedState,
+                        city: resolvedCityName,
+                        district: config.selectedDistrict || resolvedCityName,
+                        coordinates: coalesceCoordinates(resolvedCoordinates, config.location),
+                      })
+                    );
                   }
                 }
               }
@@ -1294,6 +1287,7 @@ export default function MapPosterGenerator() {
   const colors = useCustomColors ? deferredCustomColors : selectedTheme.colors;
 
   const handleCountryChange = async (countryName: string) => {
+    const requestId = beginLocationFlow();
     setSelectedCountry(countryName);
     setStates([]);
     setCities([]);
@@ -1304,12 +1298,14 @@ export default function MapPosterGenerator() {
     try {
       const country = countries.find((c) => c.name.toLowerCase() === countryName.toLowerCase());
       const countryStates = await getStatesByCountry(country?.id || 0);
+      if (!isLatestLocationFlow(requestId)) return;
       setStates(countryStates);
       setIsStatesLoading(false);
       if (countryStates.length > 0) {
         const firstState = countryStates[0];
         setSelectedState(firstState.name);
         const stateCities = await getCitiesByState(firstState.id);
+        if (!isLatestLocationFlow(requestId)) return;
         setCities(stateCities);
         setIsCitiesLoading(false);
         if (stateCities.length > 0) {
@@ -1340,8 +1336,10 @@ export default function MapPosterGenerator() {
               firstState.name,
               country?.name || countryName
             );
+            if (!isLatestLocationFlow(requestId)) return;
             setDistricts([cityAsDistrict, ...apiDistricts]);
           } catch {
+            if (!isLatestLocationFlow(requestId)) return;
             setDistricts([cityAsDistrict]);
           }
           setIsDistrictsLoading(false);
@@ -1377,6 +1375,7 @@ export default function MapPosterGenerator() {
   };
 
   const handleStateChange = async (stateName: string) => {
+    const requestId = beginLocationFlow();
     setSelectedState(stateName);
     setCities([]);
     setDistricts([]);
@@ -1386,6 +1385,7 @@ export default function MapPosterGenerator() {
       const state = states.find((s) => s.name.toLowerCase() === stateName.toLowerCase());
       if (state) {
         const stateCities = await getCitiesByState(state.id);
+        if (!isLatestLocationFlow(requestId)) return;
         setCities(stateCities);
         setIsCitiesLoading(false);
         if (stateCities.length > 0) {
@@ -1411,37 +1411,59 @@ export default function MapPosterGenerator() {
           const cityAsDistrict: District = { id: 0, name: cityName, lat, lng };
           try {
             const apiDistricts = await getDistrictsByCity(cityName, state.name, selectedCountry);
+            if (!isLatestLocationFlow(requestId)) return;
             setDistricts([cityAsDistrict, ...apiDistricts]);
           } catch {
+            if (!isLatestLocationFlow(requestId)) return;
             setDistricts([cityAsDistrict]);
           }
           setIsDistrictsLoading(false);
 
-          setLocation({
-            country: selectedCountry,
-            state: state.name,
-            city: cityName,
-            district: cityName,
-            lat,
-            lng,
-          });
+          setLocation(
+            buildResolvedLocation({
+              country: selectedCountry,
+              state: state.name,
+              city: cityName,
+              district: cityName,
+              coordinates: { lat, lng },
+            })
+          );
         } else {
-          // 无城市数据时（如香港、澳门等独立地区），城市名回退到州名
-          const fallback = await resolveStandaloneRegionFallback(selectedCountry, state);
-          const cityName = fallback?.city || stateName;
+          const country = countries.find(
+            (c) => c.name.toLowerCase() === selectedCountry.toLowerCase()
+          );
+          const countryCities = country ? await getCitiesByCountry(country.id) : [];
+          if (!isLatestLocationFlow(requestId)) return;
+          const resolution = resolveCitySelection(
+            {
+              requestedCityName: stateName,
+              state,
+              stateCities: countryCities,
+            },
+            await resolveStandaloneRegionFallback(selectedCountry, state)
+          );
+          if (!isLatestLocationFlow(requestId)) return;
+          const cityName = resolution.resolvedCityName;
           setSelectedCity(cityName);
           setSelectedDistrict(cityName);
           setDistricts([
-            { id: 0, name: cityName, lat: fallback?.lat || 0, lng: fallback?.lng || 0 },
+            {
+              id: 0,
+              name: cityName,
+              lat: resolution.coordinates?.lat || 0,
+              lng: resolution.coordinates?.lng || 0,
+            },
           ]);
           setIsDistrictsLoading(false);
-          setLocation({
-            country: selectedCountry,
-            state: state.name,
-            city: cityName,
-            district: cityName,
-            ...(fallback ? { lat: fallback.lat, lng: fallback.lng } : {}),
-          });
+          setLocation(
+            buildResolvedLocation({
+              country: selectedCountry,
+              state: state.name,
+              city: cityName,
+              district: cityName,
+              coordinates: resolution.coordinates || undefined,
+            })
+          );
         }
       }
     } catch (error) {
@@ -1452,29 +1474,41 @@ export default function MapPosterGenerator() {
   };
 
   const handleCityChange = async (cityName: string) => {
+    const requestId = beginLocationFlow();
     setSelectedCity(cityName);
     setDistricts([]);
     setIsDistrictsLoading(true);
 
-    let coordinates: { lat: number; lng: number } | null = null;
-
-    // 首先尝试从已加载的城市数据中获取坐标（CDN 数据包含坐标）
     const state = states.find((s) => s.name.toLowerCase() === selectedState.toLowerCase());
+    let stateCities: City[] = [];
     if (state) {
       try {
-        const stateCities = await getCitiesByState(state.id);
-        const city = stateCities.find((c: any) => c.name.toLowerCase() === cityName.toLowerCase());
-        coordinates = parseCityCoordinates(city);
+        stateCities = await getCitiesByState(state.id);
+        if (!isLatestLocationFlow(requestId)) return;
       } catch (error) {
         console.error("Failed to get coordinates from city data:", error);
       }
     }
 
-    const fallback = coordinates
-      ? null
-      : await resolveStandaloneRegionFallback(selectedCountry, state || selectedState);
-    const resolvedCityName = fallback?.city || cityName;
-    const resolvedCoordinates = coordinates || fallback || { lat: 0, lng: 0 };
+    const country = countries.find((c) => c.name.toLowerCase() === selectedCountry.toLowerCase());
+    const candidateCities =
+      stateCities.length > 0 ? stateCities : country ? await getCitiesByCountry(country.id) : [];
+    if (!isLatestLocationFlow(requestId)) return;
+    const fallback =
+      candidateCities.length > 0
+        ? null
+        : await resolveStandaloneRegionFallback(selectedCountry, state || selectedState);
+    if (!isLatestLocationFlow(requestId)) return;
+    const resolution = resolveCitySelection(
+      {
+        requestedCityName: cityName,
+        state: state || null,
+        stateCities: candidateCities,
+      },
+      fallback
+    );
+    const resolvedCityName = resolution.resolvedCityName;
+    const resolvedCoordinates = resolution.coordinates;
 
     if (resolvedCityName !== cityName) {
       setSelectedCity(resolvedCityName);
@@ -1485,8 +1519,8 @@ export default function MapPosterGenerator() {
     const cityAsDistrict: District = {
       id: 0,
       name: resolvedCityName,
-      lat: resolvedCoordinates.lat,
-      lng: resolvedCoordinates.lng,
+      lat: resolvedCoordinates?.lat ?? location.lat ?? 0,
+      lng: resolvedCoordinates?.lng ?? location.lng ?? 0,
     };
     try {
       const apiDistricts = await getDistrictsByCity(
@@ -1494,20 +1528,23 @@ export default function MapPosterGenerator() {
         selectedState,
         selectedCountry
       );
+      if (!isLatestLocationFlow(requestId)) return;
       setDistricts([cityAsDistrict, ...apiDistricts]);
     } catch {
+      if (!isLatestLocationFlow(requestId)) return;
       setDistricts([cityAsDistrict]);
     }
     setIsDistrictsLoading(false);
 
-    setLocation({
-      country: selectedCountry,
-      state: selectedState,
-      city: resolvedCityName,
-      district: resolvedCityName,
-      lat: resolvedCoordinates.lat,
-      lng: resolvedCoordinates.lng,
-    });
+    setLocation(
+      buildResolvedLocation({
+        country: selectedCountry,
+        state: selectedState,
+        city: resolvedCityName,
+        district: resolvedCityName,
+        coordinates: coalesceCoordinates(resolvedCoordinates, location),
+      })
+    );
   };
 
   /**
