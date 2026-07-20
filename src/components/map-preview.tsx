@@ -24,6 +24,21 @@ interface MapLocation {
 interface MapPreviewProps {
   location: Location;
   selectedSize: PosterSize;
+  selectedThemeName: string;
+  poiSourceLabel: string;
+  summaryLabels: {
+    title: string;
+    location: string;
+    coordinates: string;
+    size: string;
+    theme: string;
+    poi: string;
+    text: string;
+    none: string;
+    city: string;
+    country: string;
+    coordinatesToggle: string;
+  };
   colors: MapColors;
   customPois: CustomPOI[];
   showCustomPois: boolean;
@@ -45,6 +60,9 @@ interface MapPreviewProps {
 export function MapPreview({
   location,
   selectedSize,
+  selectedThemeName,
+  poiSourceLabel,
+  summaryLabels,
   colors,
   customPois,
   showCustomPois,
@@ -61,6 +79,19 @@ export function MapPreview({
   onMove,
   onMoveEnd,
 }: MapPreviewProps) {
+  const locationSummary = [
+    customTitle || location.district || location.city,
+    location.city && location.city !== location.district ? location.city : "",
+    location.state,
+    location.country,
+  ].filter(Boolean);
+
+  const textSummary = [
+    showCity ? summaryLabels.city : "",
+    showCountry ? summaryLabels.country : "",
+    showCoords ? summaryLabels.coordinatesToggle : "",
+  ].filter(Boolean);
+
   const previewTheme = {
     bg: colors.bg,
     water: colors.water,
@@ -142,6 +173,48 @@ export function MapPreview({
           {previewHint}
         </p>
       ) : null}
+      <section
+        aria-label={summaryLabels.title}
+        data-testid="preview.summary"
+        className="sr-only"
+      >
+        <h3>{summaryLabels.title}</h3>
+        <dl>
+          <div>
+            <dt>{summaryLabels.location}</dt>
+            <dd>{locationSummary.join(" / ")}</dd>
+          </div>
+          <div>
+            <dt>{summaryLabels.coordinates}</dt>
+            <dd>
+              {typeof location.lat === "number" && typeof location.lng === "number"
+                ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`
+                : summaryLabels.none}
+            </dd>
+          </div>
+          <div>
+            <dt>{summaryLabels.size}</dt>
+            <dd>{selectedSize.name}</dd>
+          </div>
+          <div>
+            <dt>{summaryLabels.theme}</dt>
+            <dd>{selectedThemeName}</dd>
+          </div>
+          <div>
+            <dt>{summaryLabels.poi}</dt>
+            <dd>
+              {poiSourceLabel}
+              {showCustomPois ? ` (${customPois.length})` : ""}
+            </dd>
+          </div>
+          <div>
+            <dt>{summaryLabels.text}</dt>
+            <dd>
+              {textSummary.length > 0 ? textSummary.join(", ") : summaryLabels.none}
+            </dd>
+          </div>
+        </dl>
+      </section>
     </div>
   );
 }

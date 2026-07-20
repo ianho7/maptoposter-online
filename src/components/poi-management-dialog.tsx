@@ -476,6 +476,7 @@ export function POIManagementDialog({
                     value={amapApiKey}
                     onChange={(event) => setAmapApiKey(event.target.value)}
                     placeholder={m.custom_poi_api_key_placeholder()}
+                    aria-label={m.custom_poi_api_key_label()}
                     className="border-border bg-card"
                   />
                   <Button
@@ -509,6 +510,7 @@ export function POIManagementDialog({
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
                     placeholder={m.custom_poi_search_placeholder()}
+                    aria-label={m.custom_poi_search_label()}
                     className="border-border bg-card pl-9"
                   />
                 </div>
@@ -545,11 +547,15 @@ export function POIManagementDialog({
                       </p>
                     </div>
 
-                    <Select
-                      value={poi.poiType}
-                      onValueChange={(value) => updatePoiType(poi.id, value)}
-                    >
-                      <SelectTrigger size="sm" className="w-full border-border bg-background">
+                      <Select
+                        value={poi.poiType}
+                        onValueChange={(value) => updatePoiType(poi.id, value)}
+                      >
+                      <SelectTrigger
+                        size="sm"
+                        className="w-full border-border bg-background"
+                        aria-label={m.a11y_poi_type_select({ name: poi.name })}
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -579,6 +585,7 @@ export function POIManagementDialog({
                         variant="outline"
                         disabled={index === 0}
                         onClick={() => movePoi(index, -1)}
+                        aria-label={m.a11y_move_poi_up({ name: poi.name })}
                       >
                         <ArrowUp className="h-4 w-4" />
                       </Button>
@@ -587,6 +594,7 @@ export function POIManagementDialog({
                         size="icon-sm"
                         variant="ghost"
                         onClick={() => removePoi(poi.id)}
+                        aria-label={m.a11y_remove_poi({ name: poi.name })}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

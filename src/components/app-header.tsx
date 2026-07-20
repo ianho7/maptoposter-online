@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Download, GithubIcon, Heart, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useEffect, useId, useState } from "react";
 import { SupportDialog } from "@/components/support-dialog";
 import { locales } from "@/paraglide/runtime";
 type AvailableLanguageTag = (typeof locales)[number];
@@ -43,6 +43,7 @@ export function AppHeader({
   const [menuOpen, setMenuOpen] = useState(false); // 移动端点击展开画质菜单
   const [starTarget, setStarTarget] = useState<number | null>(null);
   const localeOptions = { locale: activeLang };
+  const downloadMenuId = useId();
 
   useEffect(() => {
     fetch("https://api.github.com/repos/ianho7/maptoposter-online")
@@ -88,39 +89,44 @@ export function AppHeader({
           </Select>
           {/* 下载按钮 + 画质选择下拉菜单 */}
           <div className="relative group">
-            <Button
-              disabled={isGenerating || locationLoading}
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-              data-ai-action="download-poster"
-              aria-label={
-                isGenerating
-                  ? m.generating({}, localeOptions)
-                  : m.download_button({}, localeOptions)
-              }
-            >
-              {isGenerating ? (
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Download className="w-4 h-4" aria-hidden="true" />
-              )}
-              <span className="hidden sm:inline">
-                {isGenerating
-                  ? m.generating({}, localeOptions)
+              <Button
+                disabled={isGenerating || locationLoading}
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+                data-ai-action="download-poster"
+                aria-label={
+                  isGenerating
+                    ? m.generating({}, localeOptions)
+                    : m.download_button({}, localeOptions)
+                }
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-controls={downloadMenuId}
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="w-4 h-4" aria-hidden="true" />
+                )}
+                <span className="hidden sm:inline">
+                  {isGenerating
+                    ? m.generating({}, localeOptions)
                   : m.download_button({}, localeOptions)}
-              </span>
-            </Button>
-            {/* hover/click 时弹出的画质选择菜单 */}
+                </span>
+              </Button>
             <div
+              id={downloadMenuId}
+              role="menu"
               className={[
-                "absolute right-0 top-full mt-1 z-50 min-w-[300px] bg-background border border-border shadow-lg transition-all duration-200",
+                "absolute right-0 top-full mt-1 z-50 min-w-[300px] overflow-hidden bg-background border border-border shadow-lg transition-all duration-200",
                 menuOpen
                   ? "opacity-100 visible"
                   : "opacity-0 invisible group-hover:opacity-100 group-hover:visible",
               ].join(" ")}
             >
-              {/* 1X 选项 */}
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   setMenuOpen(false);
                   onDownload(1);
@@ -134,10 +140,9 @@ export function AppHeader({
                   {m.download_quality_1x_desc({}, localeOptions)}
                 </span>
               </button>
-              {/* 分隔线 */}
-              {/* <div className="mx-3 h-px bg-border" /> */}
-              {/* 2X 选项 */}
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   setMenuOpen(false);
                   onDownload(2);
@@ -150,6 +155,8 @@ export function AppHeader({
                 </span>
               </button>
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   setMenuOpen(false);
                   onDownload(1, "svg");

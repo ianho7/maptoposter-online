@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight, Loader2, ZoomOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { posters, type Poster } from "@/lib/posters";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import * as m from "@/paraglide/messages";
 
 // 将海报列表复制一份，用于实现无缝循环滚动
@@ -378,16 +379,26 @@ export function PosterGallery() {
       </div>
 
       {/* Lightbox */}
-      {selectedPoster && (
-        <div
-          className="fixed inset-0 z-50 bg-foreground/95 backdrop-blur-sm"
-          onClick={handleCloseLightbox}
-        >
-          <div className="absolute inset-0 flex items-center justify-center p-4 md:p-8">
+      <Dialog open={selectedPoster !== null} onOpenChange={(open) => !open && handleCloseLightbox()}>
+        {selectedPoster ? (
+          <DialogContent
+            className="max-w-none w-screen h-screen p-0 border-0 bg-foreground/95 backdrop-blur-sm shadow-none"
+            aria-describedby="poster-lightbox-description"
+            data-hide-default-close={true}
+          >
+            <DialogTitle className="sr-only">{selectedPoster.title}</DialogTitle>
+            <DialogDescription id="poster-lightbox-description" className="sr-only">
+              {m.gallery_zoom_hint()}
+            </DialogDescription>
+            <div
+              className="absolute inset-0 flex items-center justify-center p-4 md:p-8"
+              onClick={handleCloseLightbox}
+            >
             {/* Close Button */}
             <button
+              type="button"
               onClick={handleCloseLightbox}
-              aria-label="Close lightbox"
+              aria-label={m.a11y_close_lightbox()}
               data-ai-action="close-lightbox"
               className={cn(
                 "absolute top-4 right-4 sm:top-6 sm:right-6 md:top-10 md:right-10 z-10",
@@ -403,11 +414,12 @@ export function PosterGallery() {
 
             {/* Navigation */}
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 handleLightboxNavigate("prev");
               }}
-              aria-label="Previous poster"
+              aria-label={m.a11y_previous_poster()}
               data-ai-action="navigate-prev-poster"
               className={cn(
                 "absolute left-2 sm:left-10 z-10",
@@ -422,11 +434,12 @@ export function PosterGallery() {
             </button>
 
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 handleLightboxNavigate("next");
               }}
-              aria-label="Next poster"
+              aria-label={m.a11y_next_poster()}
               data-ai-action="navigate-next-poster"
               className={cn(
                 "absolute right-2 sm:right-10 z-10",
@@ -459,6 +472,7 @@ export function PosterGallery() {
                 {/* Reset Zoom Button */}
                 {scale !== 1 && (
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleResetZoom();
@@ -500,9 +514,10 @@ export function PosterGallery() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+            </div>
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </section>
   );
 }

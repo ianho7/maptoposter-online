@@ -20,6 +20,8 @@ interface LocationComboboxProps {
   onValueChange: (value: string) => void;
   placeholder: string;
   emptyText: string;
+  labelId?: string;
+  triggerId?: string;
   disabled?: boolean;
   isLoading?: boolean;
 }
@@ -30,6 +32,8 @@ export function LocationCombobox({
   onValueChange,
   placeholder,
   emptyText,
+  labelId,
+  triggerId,
   disabled = false,
   isLoading = false,
 }: LocationComboboxProps) {
@@ -54,9 +58,11 @@ export function LocationCombobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={triggerId}
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-labelledby={labelId}
           className="w-full justify-between mt-1 font-normal bg-card border-border text-card-foreground hover:border-transparent transition-colors"
           disabled={disabled || isLoading}
         >

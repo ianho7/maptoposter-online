@@ -2162,6 +2162,27 @@ export default function MapPosterGenerator() {
             <MapPreview
               location={location}
               selectedSize={selectedSize}
+              selectedThemeName={themeNameMap[selectedTheme.id] || selectedTheme.name}
+              poiSourceLabel={
+                poiSource === "off"
+                  ? m.poi_source_off()
+                  : poiSource === "overpass"
+                    ? m.poi_source_overpass()
+                    : m.poi_source_custom()
+              }
+              summaryLabels={{
+                title: m.preview_summary_title(),
+                location: m.preview_summary_location(),
+                coordinates: m.preview_summary_coordinates(),
+                size: m.preview_summary_size(),
+                theme: m.preview_summary_theme(),
+                poi: m.preview_summary_poi(),
+                text: m.preview_summary_text(),
+                none: m.preview_summary_none(),
+                city: m.toggle_show_city(),
+                country: m.toggle_show_country(),
+                coordinatesToggle: m.toggle_show_coords(),
+              }}
               colors={colors}
               customPois={customPois}
               showCustomPois={poiSource === "custom"}
