@@ -31,6 +31,18 @@ export interface Location {
 
 export type PoiSource = "off" | "overpass" | "custom";
 export type PoiShape = "circle" | "star" | "heart";
+export type PoiSearchProvider = "amap" | "nominatim";
+
+export interface PoiSearchResult {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  city?: string;
+  district?: string;
+  coordinateSystem: "gcj02" | "wgs84";
+}
 
 export interface CustomPOITypeCategory {
   id: string;
@@ -45,6 +57,7 @@ export interface CustomPOI {
   poiType: string;
   address?: string;
   sourceId?: string;
+  sourceProvider?: PoiSearchProvider;
 }
 
 export const POI_TYPE_CATEGORIES: CustomPOITypeCategory[] = [

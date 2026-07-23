@@ -11,7 +11,7 @@
 ## 前置检查
 
 - [x] 确认 `docs/plan-mvp-custom-poi.md` 已通读且无异议
-- [x] 确认 CF Worker 代理端点（默认 `/api/amap-proxy/`）
+- [x] 确认前端可直接调用高德 API，不需要代理端点
 - [x] 确认高德 API Key 申请流程文档（用户自行申请，免费版 5000 次/天）
 - [x] 确认 `showPois` 迁移策略：旧 localStorage 数据兼容
 - [x] 构建命令确认: `cd wasm && wasm-pack build --target web --out-dir ../src/pkg`

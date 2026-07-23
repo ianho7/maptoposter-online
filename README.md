@@ -70,7 +70,7 @@ A browser-based upgrade to [maptoposter (Python CLI)](https://github.com/origina
 - 👁️ **Live preview** — See changes instantly and confirm results before exporting
 - 🎨 **20 built-in themes** — From frozen Nordic minimalism to cyberpunk neon, vintage nautical to glitch purple
 - ✏️ **Custom color controls** — Fine-tune every color: background, roads, water, green spaces, POIs, and text
-- 📍 **Custom POI pushpins** — Search places through an Amap proxy, save your own POIs, and render them on the exported poster
+- 📍 **Custom POI pushpins** — Search places with Amap, save your own POIs, and render them on the exported poster
 - 📐 **Multiple export formats** — A4 (portrait/landscape), square, phone wallpaper, desktop 16:9, at 300 DPI for high-quality print
 - 🌐 **Multi-language interface** — Supports English, Japanese, Korean, Simplified Chinese, German, Spanish, and French
 - 💾 **IndexedDB caching** — Previously fetched map data is cached locally for faster regeneration
@@ -140,34 +140,13 @@ bun run dev
 
 ### Custom POI Setup
 
-The custom POI dialog uses the Amap geocoding API through a proxy endpoint at `/api/amap-proxy/`.
+The custom POI dialog calls the Amap place-search API directly from the browser.
 
 1. Apply for your own Amap Web Service API key at the Amap Open Platform.
-2. Configure a proxy endpoint that forwards requests to `https://restapi.amap.com/v3/geocode/geo`.
-3. Open the `Pushpin` section in the app, paste the key, test it, then start searching.
-
-Example Cloudflare Worker flow:
-
-```ts
-export default {
-  async fetch(request: Request) {
-    const url = new URL(request.url);
-    const upstream = new URL("https://restapi.amap.com/v3/geocode/geo");
-    upstream.search = url.search;
-
-    return fetch(upstream, {
-      headers: {
-        accept: "application/json",
-      },
-    });
-  },
-};
-```
+2. Open the `Pushpin` section in the app, paste the key, test it, then start searching.
 
 Notes:
 
-- The current frontend assumes the proxy endpoint is `/api/amap-proxy/`.
-- The frontend sends `key`, `address`, and `city` query parameters to the proxy.
 - Users must provide their own Amap key. Free-tier limits are managed by Amap.
 
 ## Engineering Notes

@@ -7,6 +7,8 @@ _Auto-maintained by `/filetree:update`. Each entry carries a content hash; misma
 - docs
   - `analysis-poi-pin-rendering.md`: POI 图钉渲染分析文档；记录视觉方案、实现取舍与问题排查 <!--hash:32102b98-->
   - `checklist-custom-poi.md`: 自定义 POI 功能检查清单；跟踪实现步骤与验收项 <!--hash:4ebccb4f-->
+  - `checklist-nominatim-poi.md`: Nominatim POI 扩展实施清单；定义服务选择、Worker、UI 与验证任务 <!--hash:pending-->
+  - `loop-nominatim-poi.md`: Nominatim POI 实施闭环；记录状态、验证、重试和退出规则 <!--hash:pending-->
   - `plan-mvp-custom-poi.md`: 自定义 POI MVP 方案文档；定义范围、优先级与落地路径 <!--hash:4ca6a707-->
 - messages
   - `de.json`: 德语翻译消息；提供界面文案本地化文本 <!--hash:d8f55a7f-->
@@ -139,11 +141,6 @@ _Auto-maintained by `/filetree:update`. Each entry carries a content hash; misma
   - `Cargo.toml`: Rust WASM 包清单；定义渲染核心依赖与编译目标 <!--hash:f6f471db-->
   - `build.ps1`: WASM 构建脚本；编译 Rust 渲染核心并拷贝前端绑定产物 <!--hash:f592b49b-->
   - `build_log.txt`: WASM 构建日志；记录最近一次编译输出与诊断信息 <!--hash:b75d9721-->
-- workers
-  - amap-proxy
-    - src
-      - `index.ts`: 高德代理 Worker 入口；转发位置相关请求并处理跨域访问 <!--hash:78fe48ab-->
-    - `wrangler.toml`: Cloudflare Worker 配置；定义高德代理的部署参数 <!--hash:2a8bd659-->
 - `.CLAUDE.md`: 项目协作约定；说明技术栈、目录规范、测试注意事项与技能使用要求 <!--hash:143b2139-->
 - `.gitignore`: Git 忽略规则；排除构建产物、依赖目录与本地环境文件 <!--hash:6c84186a-->
 - `.oxfmtrc.jsonc`: Oxc 格式化配置；约束源码格式化行为 <!--hash:7b6bf037-->

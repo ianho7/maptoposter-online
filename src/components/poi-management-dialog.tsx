@@ -18,11 +18,18 @@ import {
 } from "@/components/ui/select";
 import { gcj02ToWgs84 } from "@/lib/coordinate-systems";
 import { cn } from "@/lib/utils";
-import { type CustomPOI, POI_TYPE_CATEGORIES } from "@/lib/types";
+import {
+  type CustomPOI,
+  type PoiSearchProvider,
+  type PoiSearchResult,
+  POI_TYPE_CATEGORIES,
+} from "@/lib/types";
+import { createNamespacedPoiSourceId, getDefaultPoiSearchProvider } from "@/lib/poi-search";
 import { ArrowUp, CheckCircle2, Loader2, Plus, Search, Trash2, XCircle } from "lucide-react";
 import * as m from "@/paraglide/messages";
 
-const AMAP_PROXY_ENDPOINT = "https://restapi.amap.com";
+const AMAP_API_ENDPOINT = "https://restapi.amap.com";
+const NOMINATIM_PROXY_ENDPOINT = import.meta.env.VITE_NOMINATIM_PROXY_ENDPOINT?.trim();
 const AMAP_API_KEY_TUTORIAL_URL = "https://lbs.amap.com/api/webservice/create-project-and-key";
 const DEFAULT_POI_TYPE = "landmark";
 const MIN_SEARCH_TERM_LENGTH = 2;
@@ -42,17 +49,6 @@ for (const [path, url] of Object.entries(poiIconUrlModules)) {
   if (filename) poiIconUrlMap[filename] = url;
 }
 
-interface AmapSearchResult {
-  id: string;
-  name: string;
-  address: string;
-  location: string;
-  citycode?: string;
-  adcode?: string;
-  district?: string;
-  city?: string;
-}
-
 interface PoiManagementDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -64,6 +60,9 @@ interface PoiManagementDialogProps {
   currentLng: number | null;
   areaCacheKey: string;
   searchCity: string;
+  searchCountry: string;
+  countryIso2: string;
+  language: string;
 }
 
 type ApiKeyStatus = "idle" | "testing" | "success" | "error";
@@ -132,9 +131,15 @@ function getSearchTermLength(value: string) {
   return Array.from(value.trim()).length;
 }
 
-function isSameResult(existing: CustomPOI, candidate: AmapSearchResult) {
+function isSameResult(existing: CustomPOI, candidate: PoiSearchResult) {
+  const candidateSourceId = createNamespacedPoiSourceId(
+    candidate.coordinateSystem === "gcj02" ? "amap" : "nominatim",
+    candidate.id
+  );
+  if (existing.sourceId && existing.sourceId === candidateSourceId) return true;
   if (existing.sourceId && existing.sourceId === candidate.id) return true;
-  const [lng, lat] = candidate.location.split(",").map(Number);
+  const [lng, lat] =
+    candidate.coordinateSystem === "gcj02" ? gcj02ToWgs84(candidate.lng, candidate.lat) : [candidate.lng, candidate.lat];
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
 
   // Fall back to exact address + coordinate proximity when upstream ids are coarse.
@@ -156,6 +161,9 @@ export function POIManagementDialog({
   currentLng,
   areaCacheKey,
   searchCity,
+  searchCountry,
+  countryIso2,
+  language,
 }: PoiManagementDialogProps) {
   const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus>("idle");
   const [apiKeyMessage, setApiKeyMessage] = useState("");
@@ -163,8 +171,10 @@ export function POIManagementDialog({
   const deferredSearchTerm = searchTerm.trim();
   const [searchStatus, setSearchStatus] = useState<SearchStatus>("idle");
   const [searchMessage, setSearchMessage] = useState("");
-  const [results, setResults] = useState<AmapSearchResult[]>([]);
+  const [results, setResults] = useState<PoiSearchResult[]>([]);
   const [resolvedCityCode, setResolvedCityCode] = useState("");
+  const defaultProvider = getDefaultPoiSearchProvider(countryIso2);
+  const [provider, setProvider] = useState<PoiSearchProvider>(defaultProvider);
 
   const normalizedSearchCity = searchCity.trim();
   const normalizedAreaCacheKey = areaCacheKey.trim();
@@ -183,11 +193,16 @@ export function POIManagementDialog({
       setResults([]);
       setApiKeyStatus("idle");
       setApiKeyMessage("");
+      setProvider(defaultProvider);
     }
-  }, [open]);
+  }, [defaultProvider, open]);
 
   useEffect(() => {
-    if (!open || !amapApiKey.trim()) return;
+    if (open) setProvider(defaultProvider);
+  }, [defaultProvider, open]);
+
+  useEffect(() => {
+    if (!open || provider !== "amap" || !amapApiKey.trim()) return;
     if (currentLat === null || currentLng === null) return;
     if (!normalizedAreaCacheKey) return;
 
@@ -208,7 +223,7 @@ export function POIManagementDialog({
     const resolveCityCode = async () => {
       try {
         const response = await fetch(
-          `${AMAP_PROXY_ENDPOINT}/v3/geocode/regeo?key=${encodeURIComponent(amapApiKey)}&location=${encodeURIComponent(`${currentLng},${currentLat}`)}`,
+          `${AMAP_API_ENDPOINT}/v3/geocode/regeo?key=${encodeURIComponent(amapApiKey)}&location=${encodeURIComponent(`${currentLng},${currentLat}`)}`,
           { signal: controller.signal }
         );
         const payload = await response.json();
@@ -232,10 +247,10 @@ export function POIManagementDialog({
     return () => {
       controller.abort();
     };
-  }, [amapApiKey, currentLat, currentLng, normalizedAreaCacheKey, open]);
+  }, [amapApiKey, currentLat, currentLng, normalizedAreaCacheKey, open, provider]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || provider !== "amap") return;
     if (!amapApiKey.trim()) {
       setSearchStatus("idle");
       setResults([]);
@@ -261,7 +276,7 @@ export function POIManagementDialog({
       try {
         const region = resolvedCityCode || normalizedSearchCity;
         const response = await fetch(
-          `${AMAP_PROXY_ENDPOINT}/v5/place/text?keywords=${encodeURIComponent(deferredSearchTerm)}&region=${encodeURIComponent(region)}&key=${encodeURIComponent(amapApiKey)}`,
+          `${AMAP_API_ENDPOINT}/v5/place/text?keywords=${encodeURIComponent(deferredSearchTerm)}&region=${encodeURIComponent(region)}&key=${encodeURIComponent(amapApiKey)}`,
           { signal: controller.signal }
         );
         const payload = await response.json();
@@ -269,7 +284,7 @@ export function POIManagementDialog({
           throw new Error(payload.info || payload.message || m.custom_poi_search_error_generic());
         }
 
-        const pois: AmapSearchResult[] = Array.isArray(payload.pois)
+        const pois: PoiSearchResult[] = Array.isArray(payload.pois)
           ? payload.pois
               .filter(
                 (item: any) => typeof item.location === "string" && item.location.includes(",")
@@ -278,11 +293,11 @@ export function POIManagementDialog({
                 id: String(item.id || item.location),
                 name: String(item.name || deferredSearchTerm),
                 address: String(item.address || ""),
-                location: String(item.location),
-                citycode: String(item.citycode || ""),
-                adcode: String(item.adcode || ""),
+                lng: Number(String(item.location).split(",")[0]),
+                lat: Number(String(item.location).split(",")[1]),
                 district: String(item.adname || ""),
                 city: String(item.cityname || ""),
+                coordinateSystem: "gcj02",
               }))
           : [];
 
@@ -308,7 +323,7 @@ export function POIManagementDialog({
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [amapApiKey, deferredSearchTerm, normalizedSearchCity, open, resolvedCityCode]);
+  }, [amapApiKey, deferredSearchTerm, normalizedSearchCity, open, provider, resolvedCityCode]);
 
   const handleTestApiKey = async () => {
     if (!amapApiKey.trim()) {
@@ -323,7 +338,7 @@ export function POIManagementDialog({
       const testKeyword = "渔人码头";
       const testRegion = resolvedCityCode || normalizedSearchCity || "0757";
       const response = await fetch(
-        `${AMAP_PROXY_ENDPOINT}/v5/place/text?keywords=${encodeURIComponent(testKeyword)}&region=${encodeURIComponent(testRegion)}&key=${encodeURIComponent(amapApiKey)}`
+        `${AMAP_API_ENDPOINT}/v5/place/text?keywords=${encodeURIComponent(testKeyword)}&region=${encodeURIComponent(testRegion)}&key=${encodeURIComponent(amapApiKey)}`
       );
       const payload = await response.json();
       if (!response.ok || payload.status === "0" || !Array.isArray(payload.pois)) {
@@ -338,11 +353,75 @@ export function POIManagementDialog({
     }
   };
 
-  const handleAddPoi = (result: AmapSearchResult) => {
+  const handleNominatimSearch = async () => {
+    if (provider !== "nominatim" || getSearchTermLength(deferredSearchTerm) < MIN_SEARCH_TERM_LENGTH) {
+      return;
+    }
+    if (!NOMINATIM_PROXY_ENDPOINT) {
+      setSearchStatus("error");
+      setSearchMessage(m.custom_poi_nominatim_unavailable());
+      return;
+    }
+
+    setSearchStatus("loading");
+    setSearchMessage("");
+    const controller = new AbortController();
+    try {
+      const url = new URL(NOMINATIM_PROXY_ENDPOINT, window.location.origin);
+      url.searchParams.set("q", deferredSearchTerm);
+      url.searchParams.set("city", normalizedSearchCity);
+      url.searchParams.set("country", searchCountry.trim());
+      url.searchParams.set("countryCode", countryIso2.trim());
+      url.searchParams.set("language", language);
+      const response = await fetch(url, { signal: controller.signal });
+      const payload: unknown = await response.json();
+      const responseBody = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const rawResults = responseBody.results;
+      if (!response.ok || !Array.isArray(rawResults)) {
+        throw new Error(
+          typeof responseBody.message === "string"
+            ? responseBody.message
+            : m.custom_poi_search_error_generic()
+        );
+      }
+      const nextResults: PoiSearchResult[] = rawResults
+        .filter(
+          (item: unknown): item is Record<string, unknown> =>
+            Boolean(item) && typeof item === "object"
+        )
+        .map((item) => ({
+          id: String(item.id || ""),
+          name: String(item.name || deferredSearchTerm),
+          address: String(item.address || ""),
+          lng: Number(item.lng),
+          lat: Number(item.lat),
+          city: String(item.city || ""),
+          district: String(item.district || ""),
+          coordinateSystem: "wgs84" as const,
+        }))
+        .filter((item) => item.id && Number.isFinite(item.lat) && Number.isFinite(item.lng));
+      setResults(nextResults);
+      if (nextResults.length === 0) {
+        setSearchStatus("empty");
+        setSearchMessage(m.custom_poi_search_empty());
+        return;
+      }
+      setSearchStatus("success");
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setResults([]);
+      setSearchStatus("error");
+      setSearchMessage(error instanceof Error ? error.message : m.custom_poi_search_error_generic());
+    }
+  };
+
+  const handleAddPoi = (result: PoiSearchResult) => {
     if (customPois.some((item) => isSameResult(item, result))) return;
-    const [gcjLng, gcjLat] = result.location.split(",").map(Number);
-    if (!Number.isFinite(gcjLat) || !Number.isFinite(gcjLng)) return;
-    const [lng, lat] = gcj02ToWgs84(gcjLng, gcjLat);
+    if (!Number.isFinite(result.lat) || !Number.isFinite(result.lng)) return;
+    const [lng, lat] =
+      result.coordinateSystem === "gcj02"
+        ? gcj02ToWgs84(result.lng, result.lat)
+        : [result.lng, result.lat];
 
     const nextPoi: CustomPOI = {
       id: crypto.randomUUID(),
@@ -351,7 +430,8 @@ export function POIManagementDialog({
       lng,
       poiType: DEFAULT_POI_TYPE,
       address: result.address,
-      sourceId: result.id,
+      sourceId: createNamespacedPoiSourceId(provider, result.id),
+      sourceProvider: provider,
     };
 
     setCustomPois([...customPois, nextPoi]);
@@ -407,7 +487,13 @@ export function POIManagementDialog({
     }
 
     if (searchStatus === "idle") {
-      return <p className="text-xs text-muted-foreground">{m.custom_poi_search_idle_hint()}</p>;
+      return (
+        <p className="text-xs text-muted-foreground">
+          {provider === "amap"
+            ? m.custom_poi_search_idle_hint()
+            : m.custom_poi_nominatim_idle_hint()}
+        </p>
+      );
     }
 
     return (
@@ -453,6 +539,28 @@ export function POIManagementDialog({
         <div className="grid gap-0 md:grid-cols-[1fr_1fr]">
           <section className="border-b border-border px-6 py-2 md:border-b-0 md:border-r">
             <div className="space-y-5">
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-foreground">{m.custom_poi_provider_label()}</h3>
+                <Select
+                  value={provider}
+                  onValueChange={(value) => {
+                    setProvider(value as PoiSearchProvider);
+                    setSearchStatus("idle");
+                    setSearchMessage("");
+                    setResults([]);
+                  }}
+                >
+                  <SelectTrigger className="w-full border-border bg-card" aria-label={m.custom_poi_provider_label()}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="amap">{m.custom_poi_provider_amap()}</SelectItem>
+                    <SelectItem value="nominatim">{m.custom_poi_provider_nominatim()}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {provider === "amap" ? (
               <div className="space-y-3">
                 <div className="space-y-1">
                   <h3 className="text-sm font-medium text-foreground">
@@ -493,15 +601,15 @@ export function POIManagementDialog({
                 </div>
                 {renderApiMessage()}
               </div>
+              ) : null}
 
               <div className="space-y-3">
                 <div className="space-y-1">
                   <h3 className="text-sm font-medium text-foreground">
-                    2. {m.custom_poi_search_label()}
+                    {provider === "amap" ? "2. " : "1. "}{m.custom_poi_search_label()}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {m.custom_poi_search_help()}
-                    {/* {resolvedCityCode ? ` Citycode: ${resolvedCityCode}` : ""} */}
+                    {provider === "amap" ? m.custom_poi_search_help() : m.custom_poi_nominatim_search_help()}
                   </p>
                 </div>
                 <div className="relative">
@@ -509,12 +617,35 @@ export function POIManagementDialog({
                   <Input
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder={m.custom_poi_search_placeholder()}
+                    onKeyDown={(event) => {
+                      if (provider === "nominatim" && event.key === "Enter") {
+                        event.preventDefault();
+                        void handleNominatimSearch();
+                      }
+                    }}
+                    placeholder={provider === "amap" ? m.custom_poi_search_placeholder() : m.custom_poi_nominatim_placeholder()}
                     aria-label={m.custom_poi_search_label()}
                     className="border-border bg-card pl-9"
                   />
                 </div>
+                {provider === "nominatim" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleNominatimSearch()}
+                    disabled={searchStatus === "loading" || getSearchTermLength(deferredSearchTerm) < MIN_SEARCH_TERM_LENGTH}
+                  >
+                    {m.custom_poi_nominatim_search_button()}
+                  </Button>
+                ) : null}
                 {renderSearchBody()}
+                {provider === "nominatim" ? (
+                  <p className="text-xs text-muted-foreground">
+                    <a className="underline underline-offset-2" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
+                      © OpenStreetMap contributors
+                    </a>
+                  </p>
+                ) : null}
               </div>
             </div>
           </section>

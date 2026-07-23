@@ -778,6 +778,8 @@ export default function MapPosterGenerator() {
   const [selectedState, setSelectedState] = useState<string>("");
   const [selectedCity, setSelectedCity] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>(""); // 区/县/郡，通过 Overpass API 动态获取
+  const selectedCountryIso2 =
+    countries.find((country) => country.name.toLowerCase() === selectedCountry.toLowerCase())?.iso2 || "";
   const [states, setStates] = useState<State[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [districts, setDistricts] = useState<District[]>([]); // 始终包含城市自身作为首选项（id=0）
@@ -2046,6 +2048,9 @@ export default function MapPosterGenerator() {
             .filter(Boolean)
             .join("|")}
           searchCity={selectedCity || location.city || location.district || ""}
+          searchCountry={selectedCountry || location.country || ""}
+          countryIso2={selectedCountryIso2}
+          language={activeLang}
         />
 
         <main className="flex-1 overflow-auto custom-scrollbar w-full mx-auto px-4 py-6">

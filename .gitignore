@@ -30,3 +30,5 @@ docs/inner-docs
 docs/handoff
 docs/reflections
 fixtures/
+
+.env

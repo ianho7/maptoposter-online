@@ -126,7 +126,7 @@ Single-page React 19 + Vite application generating stylized map posters. Map dat
 
 ### Assumptions
 
-1. A Cloudflare Worker proxies Amap API calls (`restapi.amap.com`), avoiding browser CORS.
+1. The browser calls Amap API (`restapi.amap.com`) directly; no Cloudflare Worker proxy is required.
 2. Users obtain their own Amap API key (free tier: 5000 calls/day).
 3. Custom POI count is reasonable (< 200) — tourist use case. No hard cap, but very large lists (> 500) may have performance implications.
 4. The POI source choice is: off / Overpass auto / Custom. Represented as a single enum value, persisted and toggled via radio-style UI.
@@ -217,11 +217,11 @@ Replace `showPois: boolean` with `poiSource: "off" | "overpass" | "custom"`. Whe
 - **Simpler Alternative Considered**: Raise cap to 200. Rejected — arbitrary limit contradicts user's intent.
 - **Why Not More Complex**: No progressive rendering, no LOD. Just remove the `if rendered_count >= MAX_POIS { break }` early exit for custom POIs.
 
-### Decision: Amap API proxy
+### Decision: Direct Amap API access
 
-- **Choice**: Cloudflare Worker forwards requests to `restapi.amap.com/v3/place/text`.
-- **MVP Justification**: Eliminates CORS. Simple passthrough.
-- **Why Not More Complex**: No caching, rate-limiting, or transformation.
+- **Choice**: The browser sends requests directly to `restapi.amap.com/v5/place/text`.
+- **MVP Justification**: Amap supports the required browser access, so a proxy adds no value.
+- **Why Not More Complex**: No proxy, caching, rate-limiting, or transformation is needed for the creator-provided Amap key.
 
 ### Decision: Reordering mechanism
 
@@ -523,9 +523,7 @@ bun run tsc --noEmit
 
 ## Open Questions
 
-1. **Question**: What is the CF Worker endpoint URL? Dedicated subdomain or path on existing domain?
-   - **Why It Matters**: Dialog needs a hardcoded proxy URL constant.
-   - **Default MVP Assumption**: A dedicated path (e.g., `/api/amap-proxy/`) on the same domain, forwarding to `restapi.amap.com`. The URL is a constant in the dialog component. If no CF Worker exists yet, created as part of Phase 3.
+1. **Resolved**: No Cloudflare Worker endpoint is required; the dialog uses Amap's public REST API endpoint directly.
 
 2. **Question**: Should `poiSource` be persisted as a string enum (`"off" | "overpass" | "custom"`) or as separate boolean flags with migration?
    - **Why It Matters**: Simplicity and backward compatibility with existing `showPois` in users' localStorage.
