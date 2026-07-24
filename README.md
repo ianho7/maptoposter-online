@@ -188,3 +188,31 @@ Inspired by [@originalankur](https://github.com/originalankur)'s [maptoposter](h
 Map data provided by [OpenStreetMap](https://www.openstreetmap.org/) and [Protomaps](https://protomaps.com/)
 
 Font LXGW Neo ZhiSong (霞鹜新致宋) by [lxgw](https://github.com/lxgw/LxgwNeoZhiSong), licensed under IPA Font License 1.0
+
+## Cold-Start Performance Regression Test
+
+`scripts/record-cold-start.ps1` launches a fresh headless Chrome profile for each run and records cold-start navigation, long-task, and main-thread timing through the Chrome DevTools Protocol.
+
+Requirements: Windows PowerShell 5.1+ and Google Chrome installed at `C:\Program Files\Google\Chrome\Application\chrome.exe` (or pass `-ChromePath`). Build and start the production preview before running the script:
+
+```powershell
+bun run build
+bun run preview -- --host localhost --port 4173
+```
+
+In a second terminal, collect a three-run summary:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\record-cold-start.ps1 -Runs 3 -Summary
+```
+
+Use thresholds to turn it into a regression test. The command exits with code `1` when **any** run exceeds a supplied limit:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\record-cold-start.ps1 `
+  -Runs 3 -Summary -MaxLoadMs 800 -MaxLongTaskMs 300 -MaxTaskDurationMs 3000
+```
+
+`-MaxLoadMs` checks the page `load` event, `-MaxLongTaskMs` checks the largest browser long task, and `-MaxTaskDurationMs` checks Chrome's cumulative main-thread task duration. Set a threshold to `0` (the default) to disable that check. Omit `-Summary` to retain the detailed per-resource JSON record.
+
+This is a browser-level regression test, not a hermetic unit test: map tiles, IP geolocation, and other external requests can vary by network. Use it locally or in scheduled monitoring first; a blocking CI gate should use mocked external endpoints and a calibrated baseline.

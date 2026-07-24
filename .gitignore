@@ -32,3 +32,4 @@ docs/reflections
 fixtures/
 
 .env
+.tmp-chrome-perf

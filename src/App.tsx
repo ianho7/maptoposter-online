@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useDeferredValue, useMemo } from "react";
+import { Suspense, lazy, useState, useRef, useEffect, useDeferredValue, useMemo } from "react";
 import { type PosterSize } from "@/components/artistic-map";
 import {
   Square,
@@ -17,7 +17,6 @@ import { useLocationData } from "@/hooks/useLocationData";
 import { getUserGeolocation } from "@/services/ip-geolocation";
 
 // WASM and Utils
-import init, { init_panic_hook } from "./pkg/wasm";
 import { shardRoadsBinary } from "./utils";
 import {
   type CustomPOI,
@@ -46,7 +45,6 @@ import { ThemeColors } from "./components/theme-colors";
 import { FontSettings } from "./components/font-settings";
 import { RenderControlSettings } from "./components/render-control-settings";
 import { PosterSizeSelector } from "./components/poster-size-selector";
-import { MapPreview } from "./components/map-preview";
 import { GenerationModal } from "./components/generation-modal";
 import { ErrorModal } from "./components/error-modal";
 import { useReverseGeocode } from "@/hooks/useReverseGeocode";
@@ -60,6 +58,22 @@ import {
   parseCityCoordinates,
   resolveCitySelection,
 } from "@/services/location-resolution";
+
+const LazyMapPreview = lazy(() =>
+  import("./components/map-preview").then(({ MapPreview }) => ({ default: MapPreview }))
+);
+
+let wasmInitialization: Promise<void> | null = null;
+
+function ensureWasmInitialized() {
+  if (!wasmInitialization) {
+    wasmInitialization = import("./pkg/wasm").then(async ({ default: init, init_panic_hook }) => {
+      await init();
+      init_panic_hook();
+    });
+  }
+  return wasmInitialization;
+}
 
 // Extended PosterSize includes icon for size selector UI
 interface LocalPosterSize extends PosterSize {
@@ -677,6 +691,7 @@ export default function MapPosterGenerator() {
   } | null>(null);
   const [customTitle, setCustomTitle] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
+  const [isMapPreviewReady, setIsMapPreviewReady] = useState(false);
   const [locationMode, setLocationMode] = useState<"search" | "coordinates">("search");
   const locationFlowRequestIdRef = useRef(0);
 
@@ -1568,13 +1583,8 @@ export default function MapPosterGenerator() {
   };
 
   useEffect(() => {
-    init()
-      .then(() => {
-        init_panic_hook();
-      })
-      .catch((err) => {
-        console.error("Failed to initialize WASM:", err);
-      });
+    const timer = window.setTimeout(() => setIsMapPreviewReady(true), 300);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const handleDownload = async (scale: number, exportFormat: ExportFormat = "png") => {
@@ -1625,6 +1635,7 @@ export default function MapPosterGenerator() {
     mapDataService.setProgressCallback(progressHandler);
 
     try {
+      await ensureWasmInitialized();
       setGenerationProgress(5);
       currentStepRef.current = "step_coordinates";
       setGenerationStep(m.step_coordinates());
@@ -2177,7 +2188,11 @@ export default function MapPosterGenerator() {
               </div>
             </div>
 
-            <MapPreview
+            {isMapPreviewReady ? (
+              <Suspense
+                fallback={<div className="min-h-[400px] md:h-full animate-pulse bg-card border border-border" />}
+              >
+                <LazyMapPreview
               location={location}
               selectedSize={selectedSize}
               selectedThemeName={themeNameMap[selectedTheme.id] || selectedTheme.name}
@@ -2221,7 +2236,11 @@ export default function MapPosterGenerator() {
                 setLocation((prev) => ({ ...prev, lat: loc.lat, lng: loc.lon }));
                 handleCoordinateReverseGeocode(loc.lat, loc.lon);
               }}
-            />
+                />
+              </Suspense>
+            ) : (
+              <div className="min-h-[400px] md:h-full animate-pulse bg-card border border-border" />
+            )}
           </div>
           <PosterGallery />
           <Footer activeLang={activeLang} />

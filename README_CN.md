@@ -188,3 +188,31 @@ MIT 许可证 —— 详见 [LICENSE](LICENSE)
 地图数据由 [OpenStreetMap](https://www.openstreetmap.org/) 和 [Protomaps](https://protomaps.com/) 提供
 
 字体 霞鹜新致宋 (LXGW Neo ZhiSong) 由 [lxgw](https://github.com/lxgw/LxgwNeoZhiSong) 创作，基于 IPA Font License 1.0 授权
+
+## 冷启动性能回归测试
+
+`scripts/record-cold-start.ps1` 会为每次运行创建全新的无界面 Chrome 配置，并通过 Chrome DevTools Protocol 记录冷启动导航、长任务与主线程耗时。
+
+环境要求：Windows PowerShell 5.1+，以及安装在 `C:\Program Files\Google\Chrome\Application\chrome.exe` 的 Google Chrome（也可通过 `-ChromePath` 指定其他路径）。运行脚本前，先构建并启动生产预览：
+
+```powershell
+bun run build
+bun run preview -- --host localhost --port 4173
+```
+
+另开一个终端，执行三次采样并输出汇总：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\record-cold-start.ps1 -Runs 3 -Summary
+```
+
+传入阈值即可作为回归测试使用。**任意一次**采样超过阈值，命令都会以退出码 `1` 失败：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\record-cold-start.ps1 `
+  -Runs 3 -Summary -MaxLoadMs 800 -MaxLongTaskMs 300 -MaxTaskDurationMs 3000
+```
+
+`-MaxLoadMs` 校验页面 `load` 事件，`-MaxLongTaskMs` 校验最大的浏览器长任务，`-MaxTaskDurationMs` 校验 Chrome 统计的主线程累计任务耗时。阈值设为 `0`（默认值）表示不校验该项；省略 `-Summary` 则输出完整的逐资源 JSON 记录。
+
+这是浏览器级回归测试，不是完全隔离的单元测试：地图瓦片、IP 定位等外部请求会受网络影响。建议先在本地或定期巡检中使用；若要作为阻断式 CI 门禁，应先 mock 外部端点并校准基线。

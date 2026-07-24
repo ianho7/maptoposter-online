@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -122,25 +121,6 @@ export function useFontManagement(): FontManagement {
       setFontLoadingPreset(null);
     }
   };
-
-  const prefetchFonts = async () => {
-    for (const [preset, url] of Object.entries(fontMap)) {
-      if (fontCacheRef.current.has(preset)) continue;
-      try {
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const fontData = new Uint8Array(await res.arrayBuffer());
-        const fileName = url.split("/").pop() || "";
-        fontCacheRef.current.set(preset, { data: fontData, fileName });
-      } catch {
-        /* 静默失败，prefetch 不影响主流程 */
-      }
-    }
-  };
-
-  useEffect(() => {
-    prefetchFonts();
-  }, []);
 
   return {
     customFont,
