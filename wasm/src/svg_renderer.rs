@@ -68,53 +68,6 @@ impl SvgRenderer {
         }
     }
 
-    pub fn draw_parks_bin_masked_by_water(
-        &mut self,
-        parks_data: &[f64],
-        water_data: &[f64],
-        color_hex: &str,
-    ) {
-        if parks_data.is_empty() || parks_data[0] as usize == 0 {
-            return;
-        }
-
-        let park_paths = self.build_polygon_path_data_list(parks_data);
-        if park_paths.is_empty() {
-            return;
-        }
-
-        let water_paths = self.build_polygon_path_data_list(water_data);
-        if water_paths.is_empty() {
-            for parks_d in park_paths {
-                self.svg.push_str(&format!(
-                    r#"<path d="{parks_d}" fill="{}" fill-rule="evenodd"/>"#,
-                    escape_attr(color_hex)
-                ));
-            }
-            return;
-        }
-
-        let mask_id = format!("m{}", self.next_mask_id);
-        self.next_mask_id += 1;
-        let water_mask_content = water_paths
-            .iter()
-            .map(|d| format!(r#"<path d="{d}" fill="black" fill-rule="evenodd"/>"#))
-            .collect::<String>();
-        self.svg.push_str(&format!(
-            r#"<defs><mask id="{mask_id}" maskUnits="userSpaceOnUse" x="0" y="0" width="{}" height="{}"><rect x="0" y="0" width="{}" height="{}" fill="white"/>{water_mask_content}</mask></defs>"#,
-            self.width,
-            self.height,
-            self.width,
-            self.height
-        ));
-        for parks_d in park_paths {
-            self.svg.push_str(&format!(
-                r#"<path d="{parks_d}" fill="{}" fill-rule="evenodd" mask="url(#{mask_id})"/>"#,
-                escape_attr(color_hex)
-            ));
-        }
-    }
-
     pub fn draw_road_shards_masked_by_terrain_scaled(
         &mut self,
         road_shards: &[Vec<f64>],

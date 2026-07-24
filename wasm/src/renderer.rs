@@ -460,56 +460,6 @@ impl MapRenderer {
         }
     }
 
-    pub fn draw_parks_bin_masked_by_water(
-        &mut self,
-        parks_data: &[f64],
-        water_data: &[f64],
-        color_hex: &str,
-    ) {
-        if parks_data.is_empty() || parks_data[0] as usize == 0 {
-            return;
-        }
-
-        let Some(mut parks_layer) = Pixmap::new(self.render_width(), self.render_height()) else {
-            self.draw_polygons_bin(parks_data, color_hex);
-            return;
-        };
-        crate::utils::log(&format!(
-            "[Memory][wasm][draw_parks] parks_layer_bytes={}",
-            self.main_pixmap_bytes()
-        ));
-
-        let color = parse_hex_color(color_hex);
-        crate::utils::time("render_map_bin: park_mask_optimization: build_polygon_paths_parks");
-        let park_paths = self.build_polygon_paths(parks_data);
-        crate::utils::time_end("render_map_bin: park_mask_optimization: build_polygon_paths_parks");
-        crate::utils::time("render_map_bin: park_mask_optimization: parks_layer_fill");
-        for path in &park_paths {
-            Self::fill_polygon_path_on(&mut parks_layer, path, color, BlendMode::SourceOver);
-        }
-        crate::utils::time_end("render_map_bin: park_mask_optimization: parks_layer_fill");
-
-        crate::utils::time("render_map_bin: park_mask_optimization: build_polygon_paths_water");
-        let water_paths = self.build_polygon_paths(water_data);
-        crate::utils::time_end("render_map_bin: park_mask_optimization: build_polygon_paths_water");
-        crate::utils::time("render_map_bin: park_mask_optimization: terrain_clear");
-        for path in &water_paths {
-            Self::fill_polygon_path_on(&mut parks_layer, path, color, BlendMode::Clear);
-        }
-        crate::utils::time_end("render_map_bin: park_mask_optimization: terrain_clear");
-
-        crate::utils::time("render_map_bin: park_mask_optimization: layer_composite");
-        self.pixmap.draw_pixmap(
-            0,
-            0,
-            parks_layer.as_ref(),
-            &PixmapPaint::default(),
-            Transform::identity(),
-            None,
-        );
-        crate::utils::time_end("render_map_bin: park_mask_optimization: layer_composite");
-    }
-
     /// 绘制道路
     // pub fn draw_roads(&mut self, roads: &[Road]) {
     //     // 【优化】委托给 scaled 版本，消除重复代码；scale_factor=1.0 等同于原无缩放行为
@@ -2395,6 +2345,18 @@ mod tests {
         ]);
 
         assert_solid_color(pixel_at(&renderer, 100, 100), 0, 255, 0);
+    }
+
+    #[test]
+    fn water_drawn_after_parks_keeps_overlapping_lake_water_colored() {
+        let mut renderer = test_renderer();
+        renderer.draw_background();
+        renderer.draw_parks(&[solid_rect(10.0, 10.0, 90.0, 90.0)]);
+        renderer.draw_water(&[solid_rect(30.0, 30.0, 70.0, 70.0)]);
+
+        // Screen (100, 100) maps to the shared center at world (50, 50).
+        assert_solid_color(pixel_at(&renderer, 100, 100), 0, 255, 0);
+        assert_solid_color(pixel_at(&renderer, 30, 30), 0, 170, 0);
     }
 
     #[test]

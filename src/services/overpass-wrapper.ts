@@ -24,6 +24,21 @@ import { log } from "./overpass-client";
 
 const DRIVE_SERVICE_RADIUS_THRESHOLD_METERS = 15_000;
 
+type TerrainFeatureType = "water" | "parks";
+
+const WATER_NATURAL_VALUES = new Set(["water", "coastline", "bay", "strait", "cape", "sea"]);
+const WATER_VALUES = new Set(["lake", "reservoir", "pond", "lagoon", "basin"]);
+const WATER_PLACE_VALUES = new Set(["sea", "ocean"]);
+const PARK_LEISURE_VALUES = new Set([
+  "park",
+  "garden",
+  "nature_reserve",
+  "golf_course",
+  "recreation_ground",
+]);
+const PARK_NATURAL_VALUES = new Set(["wood", "scrub", "grassland", "heath", "wetland", "fell", "beach"]);
+const PARK_LANDUSE_VALUES = new Set(["forest", "grass", "meadow", "village_green", "allotments"]);
+
 // OSM Overpass API 返回的 JSON 结构
 interface OverpassResult {
   elements: OSMElement[];
@@ -72,6 +87,60 @@ export function deduplicateOverpassElements(elements: OSMElement[]): OSMElement[
   }
 
   return Array.from(deduped.values());
+}
+
+function hasTagValue(
+  properties: Record<string, unknown>,
+  key: string,
+  acceptedValues: Set<string>
+): boolean {
+  const value = properties[key];
+  return typeof value === "string" && acceptedValues.has(value);
+}
+
+function isWaterFeature(properties: Record<string, unknown>): boolean {
+  // The `>;` clause used to fetch relation members can return island ways in a
+  // water response. Islands are land even when they are also members of a
+  // water multipolygon, and must never be painted as water.
+  if (properties.place === "island") {
+    return false;
+  }
+
+  return (
+    hasTagValue(properties, "natural", WATER_NATURAL_VALUES) ||
+    typeof properties.waterway === "string" ||
+    hasTagValue(properties, "place", WATER_PLACE_VALUES) ||
+    hasTagValue(properties, "water", WATER_VALUES) ||
+    properties.landuse === "reservoir"
+  );
+}
+
+function isParkFeature(properties: Record<string, unknown>): boolean {
+  return (
+    hasTagValue(properties, "leisure", PARK_LEISURE_VALUES) ||
+    hasTagValue(properties, "natural", PARK_NATURAL_VALUES) ||
+    hasTagValue(properties, "landuse", PARK_LANDUSE_VALUES)
+  );
+}
+
+/**
+ * Keep only semantically requested terrain features after osmtogeojson has
+ * used recursive OSM members to assemble relations. The members are needed
+ * during conversion, but untagged/foreign members must not leak into a
+ * render layer merely because they are polygons.
+ */
+export function filterTerrainGeoJSON(
+  geojson: GeoJSON.FeatureCollection,
+  type: TerrainFeatureType
+): GeoJSON.FeatureCollection {
+  const accepts = type === "water" ? isWaterFeature : isParkFeature;
+
+  return {
+    ...geojson,
+    features: geojson.features.filter((feature) =>
+      accepts((feature.properties ?? {}) as Record<string, unknown>)
+    ),
+  };
 }
 
 /**
@@ -181,7 +250,8 @@ export async function fetchFeaturesOverpass(
       results = await downloadParks(region, onProgress, preFetchedPauseMs);
     }
 
-    return convertToGeoJSON(results);
+    const geojson = convertToGeoJSON(results);
+    return geojson ? filterTerrainGeoJSON(geojson, type) : null;
   } catch (error) {
     log("error", `fetchFeaturesOverpass (${type}) failed: ${error}`);
     throw new Error(

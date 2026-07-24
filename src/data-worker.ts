@@ -33,7 +33,10 @@ import {
   fetchFeaturesOverpass,
   fetchPOIsOverpass,
 } from "./services/overpass-wrapper";
-import { mergeSeaPolygonsIntoWaterGeoJSON } from "./services/sea-polygons";
+import {
+  mergeSeaPolygonsIntoWaterGeoJSON,
+  type SeaPolygonDiagnostics,
+} from "./services/sea-polygons";
 import {
   MAP_DATA_CACHE_VERSION,
   bboxToPolygon,
@@ -139,6 +142,38 @@ function createCacheKey(
   return createMapDataCacheKey(country, city, baseRadius, lodMode, type, district);
 }
 
+function mergeWaterGeoForViewport(
+  waterGeo: GeoJSON.FeatureCollection,
+  context: {
+    lat: number;
+    lng: number;
+    baseRadius: number;
+    fetchViewportBbox: ReturnType<typeof buildCanonicalFetchViewportBbox>;
+  },
+  source: string
+) {
+  return mergeSeaPolygonsIntoWaterGeoJSON(waterGeo, {
+    centerLat: context.lat,
+    centerLng: context.lng,
+    baseRadiusMeters: context.baseRadius,
+    viewportBbox: context.fetchViewportBbox,
+    onSeaDiagnostics: (diagnostics: SeaPolygonDiagnostics) => {
+      logTiming("sea", source, {
+        clip: diagnostics.clip_ms,
+        merge: diagnostics.merge_ms,
+        nodePolygonize: diagnostics.node_polygonize_ms,
+        classify: diagnostics.classify_ms,
+        fragments: diagnostics.clipped_fragments.toString(),
+        segments: diagnostics.clipped_segments.toString(),
+        faces: diagnostics.candidate_faces.toString(),
+        generated: diagnostics.generated_faces.toString(),
+        ambiguous: diagnostics.ambiguous_segments.toString(),
+        skipped: diagnostics.skipped_reason,
+      });
+    },
+  });
+}
+
 async function restoreCachedType(
   type: MapDataType,
   blob: Blob,
@@ -184,12 +219,7 @@ async function restoreCachedType(
   } else if (type === "water") {
     report(0.55, "step_cache_merging_water");
     const seaMergeStart = performance.now();
-    const mergedWaterJSON = mergeSeaPolygonsIntoWaterGeoJSON(json, {
-      centerLat: context.lat,
-      centerLng: context.lng,
-      baseRadiusMeters: context.baseRadius,
-      viewportBbox: context.fetchViewportBbox,
-    });
+    const mergedWaterJSON = mergeWaterGeoForViewport(json, context, "cacheRestore");
     seaMergeMs = performance.now() - seaMergeStart;
     if (mergedWaterJSON !== json && context.saveMergedWater) {
       cacheWriteBack = true;
@@ -256,6 +286,7 @@ self.onmessage = async (event: MessageEvent) => {
   try {
     if (type === "GET_MAP_DATA") {
       const { country, city, lat, lng, baseRadius, lodMode, district } = payload;
+      const debugRawWaterGeo = payload.debugRawWaterGeo === true;
       const db = await getDB();
       sendProgress(11, "step_cache_checking");
       const fetchViewportBbox = buildCanonicalFetchViewportBbox({
@@ -273,6 +304,7 @@ self.onmessage = async (event: MessageEvent) => {
         pois: new Float64Array(0), // 合并 POI 到 getMapData
         fromCache: false,
       };
+      let rawWaterGeoForDiagnostics: GeoJSON.FeatureCollection | undefined;
 
       // skipPois: 用户关闭 POI 渲染时跳过 POI 缓存检查和网络请求，节省带宽
       const types: MapDataType[] = payload.skipPois
@@ -282,6 +314,12 @@ self.onmessage = async (event: MessageEvent) => {
       const missingTypes = new Set<MapDataType>();
 
       for (const mapType of types) {
+        // The raw fixture must be captured before coastline merging. Deliberately
+        // bypass only the water cache for this explicit local diagnostic request.
+        if (debugRawWaterGeo && mapType === "water") {
+          missingTypes.add(mapType);
+          continue;
+        }
         const key = createCacheKey(country, city, baseRadius, lodMode, mapType, district);
         const blob = await db.get(STORE_NAME, key);
         if (blob) {
@@ -376,12 +414,12 @@ self.onmessage = async (event: MessageEvent) => {
           }
           if (missingTypes.has("water")) {
             waterGeo = protomapsData.water;
-            const mergedWaterGeo = mergeSeaPolygonsIntoWaterGeoJSON(waterGeo, {
-              centerLat: lat,
-              centerLng: lng,
-              baseRadiusMeters: baseRadius,
-              viewportBbox: fetchViewportBbox,
-            });
+            if (debugRawWaterGeo) rawWaterGeoForDiagnostics = waterGeo;
+            const mergedWaterGeo = mergeWaterGeoForViewport(
+              waterGeo,
+              { lat, lng, baseRadius, fetchViewportBbox },
+              "protomaps"
+            );
             results.water = flattenPolygonsGeoJSON(mergedWaterGeo) as any;
             await saveFetchedType(
               db,
@@ -461,12 +499,12 @@ self.onmessage = async (event: MessageEvent) => {
               createProgressCallback(15, "step_fetching_water")
             );
             if (waterGeo) {
-              const mergedWaterGeo = mergeSeaPolygonsIntoWaterGeoJSON(waterGeo, {
-                centerLat: lat,
-                centerLng: lng,
-                baseRadiusMeters: baseRadius,
-                viewportBbox: fetchViewportBbox,
-              });
+              if (debugRawWaterGeo) rawWaterGeoForDiagnostics = waterGeo;
+              const mergedWaterGeo = mergeWaterGeoForViewport(
+                waterGeo,
+                { lat, lng, baseRadius, fetchViewportBbox },
+                "overpassClient"
+              );
               results.water = flattenPolygonsGeoJSON(mergedWaterGeo) as any;
               await saveFetchedType(
                 db,
@@ -566,12 +604,12 @@ self.onmessage = async (event: MessageEvent) => {
               "water"
             );
             if (waterGeo) {
-              const mergedWaterGeo = mergeSeaPolygonsIntoWaterGeoJSON(waterGeo, {
-                centerLat: lat,
-                centerLng: lng,
-                baseRadiusMeters: baseRadius,
-                viewportBbox: fetchViewportBbox,
-              });
+              if (debugRawWaterGeo) rawWaterGeoForDiagnostics = waterGeo;
+              const mergedWaterGeo = mergeWaterGeoForViewport(
+                waterGeo,
+                { lat, lng, baseRadius, fetchViewportBbox },
+                "legacyOverpass"
+              );
               results.water = flattenPolygonsGeoJSON(mergedWaterGeo) as any;
               await saveFetchedType(
                 db,
@@ -673,6 +711,9 @@ self.onmessage = async (event: MessageEvent) => {
             fromCache: results.fromCache,
             cacheLevel: results.fromCache ? "indexeddb" : "none",
             isProtomaps: USE_PROTOMAPS,
+            ...(debugRawWaterGeo && rawWaterGeoForDiagnostics
+              ? { rawWaterGeo: rawWaterGeoForDiagnostics }
+              : {}),
           },
         },
         transferList

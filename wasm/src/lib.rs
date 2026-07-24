@@ -339,17 +339,13 @@ fn render_map_binary_internal(
             renderer.draw_background();
             time_end("render_map_bin: draw_background");
 
+            time("render_map_bin: draw_parks");
+            renderer.draw_polygons_bin(parks_bin, &parks_color);
+            time_end("render_map_bin: draw_parks");
+
             time("render_map_bin: draw_water");
             renderer.draw_polygons_bin(water_bin, &water_color);
             time_end("render_map_bin: draw_water");
-
-            time("render_map_bin: draw_parks");
-            if config.enable_road_mask_optimization {
-                renderer.draw_parks_bin_masked_by_water(parks_bin, water_bin, &parks_color);
-            } else {
-                renderer.draw_polygons_bin(parks_bin, &parks_color);
-            }
-            time_end("render_map_bin: draw_parks");
 
             time("render_map_bin: draw_roads");
             let road_stats = if config.enable_road_mask_optimization {
@@ -399,16 +395,15 @@ fn render_map_binary_internal(
             time_end("render_map_bin: draw_text");
         } else {
         draw_background_layer(&mut renderer, &config, bounds, scale_config.background);
-        draw_water_layer(&mut renderer, &config, bounds, scale_config.water, water_bin, &water_color);
         draw_parks_layer(
             &mut renderer,
             &config,
             bounds,
             scale_config.parks,
             parks_bin,
-            water_bin,
             &parks_color,
         );
+        draw_water_layer(&mut renderer, &config, bounds, scale_config.water, water_bin, &water_color);
         let road_stats = match draw_roads_layers(
             &mut renderer,
             &config,
@@ -432,17 +427,13 @@ fn render_map_binary_internal(
         renderer.draw_background();
         time_end("render_map_bin: draw_background");
 
+        time("render_map_bin: draw_parks");
+        renderer.draw_polygons_bin(parks_bin, &parks_color);
+        time_end("render_map_bin: draw_parks");
+
         time("render_map_bin: draw_water");
         renderer.draw_polygons_bin(water_bin, &water_color);
         time_end("render_map_bin: draw_water");
-
-        time("render_map_bin: draw_parks");
-        if config.enable_road_mask_optimization {
-            renderer.draw_parks_bin_masked_by_water(parks_bin, water_bin, &parks_color);
-        } else {
-            renderer.draw_polygons_bin(parks_bin, &parks_color);
-        }
-        time_end("render_map_bin: draw_parks");
 
         time("render_map_bin: draw_roads");
         let road_stats = if config.enable_road_mask_optimization {
@@ -586,22 +577,13 @@ fn draw_parks_layer(
     bounds: types::BoundingBox,
     render_scale: u32,
     parks_bin: &[f64],
-    water_bin: &[f64],
     parks_color: &str,
 ) {
     time("render_map_bin: draw_parks");
     if render_scale == renderer.render_scale() {
-        if config.enable_road_mask_optimization {
-            renderer.draw_parks_bin_masked_by_water(parks_bin, water_bin, parks_color);
-        } else {
-            renderer.draw_polygons_bin(parks_bin, parks_color);
-        }
+        renderer.draw_polygons_bin(parks_bin, parks_color);
     } else if let Ok(mut layer) = make_layer_renderer(config, bounds, render_scale) {
-        if config.enable_road_mask_optimization {
-            layer.draw_parks_bin_masked_by_water(parks_bin, water_bin, parks_color);
-        } else {
-            layer.draw_polygons_bin(parks_bin, parks_color);
-        }
+        layer.draw_polygons_bin(parks_bin, parks_color);
         renderer.compose_from(&layer);
     }
     time_end("render_map_bin: draw_parks");
@@ -797,17 +779,13 @@ fn render_map_binary_svg(
     renderer.draw_background();
     time_end("render_map_bin: draw_background");
 
+    time("render_map_bin: draw_parks");
+    renderer.draw_polygons_bin(parks_bin, &parks_color);
+    time_end("render_map_bin: draw_parks");
+
     time("render_map_bin: draw_water");
     renderer.draw_polygons_bin(water_bin, &water_color);
     time_end("render_map_bin: draw_water");
-
-    time("render_map_bin: draw_parks");
-    if config.enable_road_mask_optimization {
-        renderer.draw_parks_bin_masked_by_water(parks_bin, water_bin, &parks_color);
-    } else {
-        renderer.draw_polygons_bin(parks_bin, &parks_color);
-    }
-    time_end("render_map_bin: draw_parks");
 
     time("render_map_bin: draw_roads");
     let road_width_scale = types::calculate_road_width_scale(
@@ -944,13 +922,13 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
     renderer.draw_background();
     time_end("render_map: draw_background");
 
-    time("render_map: draw_water");
-    renderer.draw_water(&request.water);
-    time_end("render_map: draw_water");
-
     time("render_map: draw_parks");
     renderer.draw_parks(&request.parks);
     time_end("render_map: draw_parks");
+
+    time("render_map: draw_water");
+    renderer.draw_water(&request.water);
+    time_end("render_map: draw_water");
 
     time("render_map: draw_roads");
     // 计算动态道路线宽缩放因子并调用缩放绘制方法

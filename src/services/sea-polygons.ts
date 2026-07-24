@@ -25,6 +25,7 @@ interface ViewportOptions {
   baseRadiusMeters: number;
   aspectRatio?: number;
   viewportBbox?: BBox;
+  onSeaDiagnostics?: (diagnostics: SeaPolygonDiagnostics) => void;
 }
 
 const geometryFactory = new GeometryFactory();
@@ -35,6 +36,48 @@ const COORD_EPSILON = 1e-9;
 const ENDPOINT_KEY_DIGITS = 8;
 const BOUNDARY_TOLERANCE = 1e-6;
 const MIN_SEA_POLYGON_AREA_M2 = 1;
+const SEA_GENERATOR_VERSION = "directed-coastline-v1";
+const MIN_DIRECTIONAL_SUPPORT_RATIO = 1e-6;
+const MAX_CLIPPED_FRAGMENT_COUNT = 20_000;
+const MAX_CLIPPED_SEGMENT_COUNT = 6_000;
+const MAX_CLIPPED_VERTEX_COUNT = 100_000;
+
+interface FaceEvidence {
+  water: number;
+  land: number;
+}
+
+interface FaceSpatialIndex {
+  bbox: BBox;
+  columns: number;
+  rows: number;
+  cells: Map<string, number[]>;
+}
+
+export interface SeaPolygonDiagnostics {
+  clipped_fragments: number;
+  clipped_segments: number;
+  candidate_faces: number;
+  sampled_segments: number;
+  ambiguous_segments: number;
+  total_directional_support: number;
+  generated_faces: number;
+  clip_ms: number;
+  merge_ms: number;
+  node_polygonize_ms: number;
+  classify_ms: number;
+  skipped_reason?:
+    | "no-clipped-fragments"
+    | "processing-budget"
+    | "no-candidate-faces"
+    | "ambiguous-segment"
+    | "no-support";
+}
+
+export interface SeaPolygonBuildResult {
+  polygons: Array<Feature<Polygon>>;
+  diagnostics: SeaPolygonDiagnostics;
+}
 
 export function mergeSeaPolygonsIntoWaterGeoJSON(
   waterGeo: FeatureCollection,
@@ -44,29 +87,43 @@ export function mergeSeaPolygonsIntoWaterGeoJSON(
     return waterGeo;
   }
 
-  const coastlineFeatures = extractCoastlineFeatures(waterGeo);
+  // Cached output from an older generator must never remain alongside a new
+  // classification: it can still cover land even when the new classifier safely
+  // declines to generate a replacement sea face.
+  const sourceWaterGeo = removeGeneratedSeaPolygons(waterGeo);
+  const coastlineFeatures = extractCoastlineFeatures(sourceWaterGeo);
   if (coastlineFeatures.length === 0) {
-    return waterGeo;
+    return sourceWaterGeo;
   }
 
   const viewportBbox = buildViewportBbox(options);
-  const seaPolygons = buildSeaPolygonsFromCoastlines(coastlineFeatures, viewportBbox, [
-    options.centerLng,
-    options.centerLat,
-  ]);
+  const seaBuildResult = buildSeaPolygonsWithDiagnostics(coastlineFeatures, viewportBbox);
+  options.onSeaDiagnostics?.(seaBuildResult.diagnostics);
+  const seaPolygons = seaBuildResult.polygons;
 
   if (seaPolygons.length === 0) {
-    return waterGeo;
+    return sourceWaterGeo;
   }
 
   return {
-    ...waterGeo,
-    features: [...waterGeo.features, ...seaPolygons],
+    ...sourceWaterGeo,
+    features: [...sourceWaterGeo.features, ...seaPolygons],
   };
 }
 
 export function hasGeneratedSeaPolygons(waterGeo: FeatureCollection): boolean {
-  return waterGeo.features.some((feature) => feature.properties?.generated === "coastline-sea");
+  return waterGeo.features.some(
+    (feature) =>
+      feature.properties?.generated === "coastline-sea" &&
+      feature.properties?.generator_version === SEA_GENERATOR_VERSION
+  );
+}
+
+function removeGeneratedSeaPolygons(waterGeo: FeatureCollection): FeatureCollection {
+  const features = waterGeo.features.filter(
+    (feature) => feature.properties?.generated !== "coastline-sea"
+  );
+  return features.length === waterGeo.features.length ? waterGeo : { ...waterGeo, features };
 }
 
 export function buildViewportBbox({
@@ -104,17 +161,57 @@ export function extractCoastlineFeatures(
 export function buildSeaPolygonsFromCoastlines(
   coastlineFeatures: Array<Feature<LineString | MultiLineString>>,
   viewportBbox: BBox,
-  centerPoint: LonLatPoint
+  _centerPoint?: LonLatPoint
 ): Array<Feature<Polygon>> {
+  return buildSeaPolygonsWithDiagnostics(coastlineFeatures, viewportBbox).polygons;
+}
+
+export function buildSeaPolygonsWithDiagnostics(
+  coastlineFeatures: Array<Feature<LineString | MultiLineString>>,
+  viewportBbox: BBox
+): SeaPolygonBuildResult {
+  const diagnostics: SeaPolygonDiagnostics = {
+    clipped_fragments: 0,
+    clipped_segments: 0,
+    candidate_faces: 0,
+    sampled_segments: 0,
+    ambiguous_segments: 0,
+    total_directional_support: 0,
+    generated_faces: 0,
+    clip_ms: 0,
+    merge_ms: 0,
+    node_polygonize_ms: 0,
+    classify_ms: 0,
+  };
+  const clipStart = performance.now();
   const clippedFragments = coastlineFeatures.flatMap((feature) =>
     featureToLineStrings(feature).flatMap((line) => clipLineStringToBbox(line, viewportBbox))
   );
+  diagnostics.clip_ms = performance.now() - clipStart;
+  diagnostics.clipped_fragments = clippedFragments.length;
+  diagnostics.clipped_segments = clippedFragments.reduce(
+    (total, fragment) => total + Math.max(0, fragment.length - 1),
+    0
+  );
 
   if (clippedFragments.length === 0) {
-    return [];
+    diagnostics.skipped_reason = "no-clipped-fragments";
+    return { polygons: [], diagnostics };
   }
 
+  const clippedVertexCount = clippedFragments.reduce((total, fragment) => total + fragment.length, 0);
+  if (
+    clippedFragments.length > MAX_CLIPPED_FRAGMENT_COUNT ||
+    diagnostics.clipped_segments > MAX_CLIPPED_SEGMENT_COUNT ||
+    clippedVertexCount > MAX_CLIPPED_VERTEX_COUNT
+  ) {
+    diagnostics.skipped_reason = "processing-budget";
+    return { polygons: [], diagnostics };
+  }
+
+  const mergeStart = performance.now();
   const mergedLineStrings = mergeConnectedLineStrings(clippedFragments);
+  diagnostics.merge_ms = performance.now() - mergeStart;
   const polygonizer = new Polygonizer();
   const linework = [...mergedLineStrings, ...buildViewportBoundarySegments(viewportBbox)];
   const lineGeometries = new ArrayList([]);
@@ -129,6 +226,7 @@ export function buildSeaPolygonsFromCoastlines(
     );
   }
 
+  const nodePolygonizeStart = performance.now();
   const geometryNoder = new GeometryNoder(new PrecisionModel(1_000_000_000));
   geometryNoder.setValidate(true);
   const nodedLinework = geometryNoder.node(lineGeometries);
@@ -136,7 +234,8 @@ export function buildSeaPolygonsFromCoastlines(
 
   const polygonCollection = polygonizer.getPolygons();
   if (!polygonCollection || polygonCollection.size() === 0) {
-    return [];
+    diagnostics.skipped_reason = "no-candidate-faces";
+    return { polygons: [], diagnostics };
   }
 
   const polygons = polygonCollection
@@ -144,20 +243,98 @@ export function buildSeaPolygonsFromCoastlines(
     .map((geometry) => geometryToGeoJSONPolygon(geometry))
     .filter((polygon): polygon is Polygon => polygon !== null)
     .filter((polygon) => turfArea(turfPolygon(polygon.coordinates)) > MIN_SEA_POLYGON_AREA_M2);
+  diagnostics.node_polygonize_ms = performance.now() - nodePolygonizeStart;
+  diagnostics.candidate_faces = polygons.length;
 
   if (polygons.length === 0) {
-    return [];
+    diagnostics.skipped_reason = "no-candidate-faces";
+    return { polygons: [], diagnostics };
   }
 
-  const landFaceIndex = polygons.findIndex((polygon) => pointInPolygon(centerPoint, polygon));
-  if (landFaceIndex === -1) {
-    return [];
+  const faceIndex = buildFaceSpatialIndex(polygons, viewportBbox);
+  const classifyStart = performance.now();
+  const evidence = polygons.map((): FaceEvidence => ({ water: 0, land: 0 }));
+  const sampleOffset = buildDirectionalSampleOffset(viewportBbox);
+  let totalSupport = 0;
+
+  for (const fragment of clippedFragments) {
+    for (let pointIndex = 0; pointIndex < fragment.length - 1; pointIndex++) {
+      const start = fragment[pointIndex];
+      const end = fragment[pointIndex + 1];
+      const dx = end[0] - start[0];
+      const dy = end[1] - start[1];
+      const length = Math.hypot(dx, dy);
+      if (length <= COORD_EPSILON) continue;
+      diagnostics.sampled_segments++;
+
+      const midpoint: LonLatPoint = [(start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5];
+      let rightFaceIndex = -1;
+      let leftFaceIndex = -1;
+
+      // A noded coastline can pass very close to a boundary or an intersection.
+      // Retry a bounded set of offsets before classifying that segment as ambiguous.
+      for (const offsetMultiplier of [1, 0.25, 4]) {
+        const offset = sampleOffset * offsetMultiplier;
+        const rightSample: LonLatPoint = [
+          midpoint[0] + (dy / length) * offset,
+          midpoint[1] - (dx / length) * offset,
+        ];
+        const leftSample: LonLatPoint = [
+          midpoint[0] - (dy / length) * offset,
+          midpoint[1] + (dx / length) * offset,
+        ];
+        const nextRightFaceIndex = findFaceIndexContainingPoint(rightSample, polygons, faceIndex);
+        const nextLeftFaceIndex = findFaceIndexContainingPoint(leftSample, polygons, faceIndex);
+        if (
+          nextRightFaceIndex !== -1 &&
+          nextLeftFaceIndex !== -1 &&
+          nextRightFaceIndex !== nextLeftFaceIndex
+        ) {
+          rightFaceIndex = nextRightFaceIndex;
+          leftFaceIndex = nextLeftFaceIndex;
+          break;
+        }
+      }
+
+      // A coastline must separate two distinct polygonized faces. Ambiguous input
+      // safely declines sea generation instead of risking a land-overwriting fill.
+      if (
+        rightFaceIndex === -1 ||
+        leftFaceIndex === -1 ||
+        rightFaceIndex === leftFaceIndex
+      ) {
+        diagnostics.ambiguous_segments++;
+        diagnostics.classify_ms = performance.now() - classifyStart;
+        diagnostics.skipped_reason = "ambiguous-segment";
+        return { polygons: [], diagnostics };
+      }
+
+      evidence[rightFaceIndex].water += length;
+      evidence[leftFaceIndex].land += length;
+      totalSupport += length;
+    }
   }
+
+  if (totalSupport <= 0) {
+    diagnostics.classify_ms = performance.now() - classifyStart;
+    diagnostics.skipped_reason = "no-support";
+    return { polygons: [], diagnostics };
+  }
+  diagnostics.total_directional_support = totalSupport;
+
+  const minDirectionalSupport = totalSupport * MIN_DIRECTIONAL_SUPPORT_RATIO;
 
   const seen = new Set<string>();
 
-  return polygons
-    .filter((_, index) => index !== landFaceIndex)
+  const seaPolygons = polygons
+    .filter((polygon, index) => {
+      const faceEvidence = evidence[index];
+      return (
+        faceEvidence.water >= minDirectionalSupport &&
+        faceEvidence.land <= COORD_EPSILON &&
+        polygonTouchesViewportBoundary(polygon, viewportBbox)
+      );
+    })
     .map(
       (polygon): Feature<Polygon> => ({
         type: "Feature",
@@ -165,6 +342,8 @@ export function buildSeaPolygonsFromCoastlines(
         properties: {
           generated: "coastline-sea",
           natural: "sea",
+          generator_version: SEA_GENERATOR_VERSION,
+          classification: "right-side-confidence",
         },
       })
     )
@@ -181,6 +360,109 @@ export function buildSeaPolygonsFromCoastlines(
       seen.add(key);
       return true;
     });
+  diagnostics.generated_faces = seaPolygons.length;
+  diagnostics.classify_ms = performance.now() - classifyStart;
+  return { polygons: seaPolygons, diagnostics };
+}
+
+function buildDirectionalSampleOffset(bbox: BBox): number {
+  const width = Math.abs(bbox[2] - bbox[0]);
+  const height = Math.abs(bbox[3] - bbox[1]);
+  return Math.max(Math.hypot(width, height) / 10_000, COORD_EPSILON * 100);
+}
+
+function buildFaceSpatialIndex(polygons: Polygon[], bbox: BBox): FaceSpatialIndex {
+  const dimension = Math.min(64, Math.max(4, Math.ceil(Math.sqrt(polygons.length))));
+  const index: FaceSpatialIndex = {
+    bbox,
+    columns: dimension,
+    rows: dimension,
+    cells: new Map<string, number[]>(),
+  };
+
+  for (let polygonIndex = 0; polygonIndex < polygons.length; polygonIndex++) {
+    const polygonBbox = getPolygonBbox(polygons[polygonIndex]);
+    const [minColumn, minRow] = pointToFaceCell([polygonBbox[0], polygonBbox[1]], index);
+    const [maxColumn, maxRow] = pointToFaceCell([polygonBbox[2], polygonBbox[3]], index);
+
+    for (let column = minColumn; column <= maxColumn; column++) {
+      for (let row = minRow; row <= maxRow; row++) {
+        const key = faceCellKey(column, row);
+        const bucket = index.cells.get(key);
+        if (bucket) {
+          bucket.push(polygonIndex);
+        } else {
+          index.cells.set(key, [polygonIndex]);
+        }
+      }
+    }
+  }
+
+  return index;
+}
+
+function findFaceIndexContainingPoint(
+  point: LonLatPoint,
+  polygons: Polygon[],
+  faceIndex: FaceSpatialIndex
+): number {
+  const [column, row] = pointToFaceCell(point, faceIndex);
+  const candidates = faceIndex.cells.get(faceCellKey(column, row)) ?? [];
+
+  for (const polygonIndex of candidates) {
+    const polygon = polygons[polygonIndex];
+    if (pointInPolygon(point, polygon)) {
+      return polygonIndex;
+    }
+  }
+
+  return -1;
+}
+
+function pointToFaceCell(point: LonLatPoint, index: FaceSpatialIndex): [number, number] {
+  const [minLng, minLat, maxLng, maxLat] = index.bbox;
+  const column = Math.floor(((point[0] - minLng) / (maxLng - minLng || 1)) * index.columns);
+  const row = Math.floor(((point[1] - minLat) / (maxLat - minLat || 1)) * index.rows);
+  return [
+    Math.max(0, Math.min(index.columns - 1, column)),
+    Math.max(0, Math.min(index.rows - 1, row)),
+  ];
+}
+
+function faceCellKey(column: number, row: number): string {
+  return `${column}:${row}`;
+}
+
+function getPolygonBbox(polygon: Polygon): BBox {
+  let minLng = Infinity;
+  let minLat = Infinity;
+  let maxLng = -Infinity;
+  let maxLat = -Infinity;
+
+  for (const ring of polygon.coordinates) {
+    for (const [lng, lat] of ring as LonLatPoint[]) {
+      minLng = Math.min(minLng, lng);
+      minLat = Math.min(minLat, lat);
+      maxLng = Math.max(maxLng, lng);
+      maxLat = Math.max(maxLat, lat);
+    }
+  }
+
+  return [minLng, minLat, maxLng, maxLat];
+}
+
+function polygonTouchesViewportBoundary(polygon: Polygon, bbox: BBox): boolean {
+  const exteriorRing = polygon.coordinates[0] as LonLatPoint[] | undefined;
+  if (!exteriorRing) return false;
+
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  return exteriorRing.some(
+    ([lng, lat]) =>
+      Math.abs(lng - minLng) <= BOUNDARY_TOLERANCE ||
+      Math.abs(lng - maxLng) <= BOUNDARY_TOLERANCE ||
+      Math.abs(lat - minLat) <= BOUNDARY_TOLERANCE ||
+      Math.abs(lat - maxLat) <= BOUNDARY_TOLERANCE
+  );
 }
 
 function featureToLineStrings(feature: Feature<LineString | MultiLineString>): LonLatPoint[][] {

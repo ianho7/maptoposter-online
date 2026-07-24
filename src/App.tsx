@@ -1653,10 +1653,20 @@ export default function MapPosterGenerator() {
         baseRadius,
         lodMode,
         location.district,
-        poiSource !== "overpass"
+        poiSource !== "overpass",
+        shouldDownloadDiagnosticFixtures
       );
 
-      const { roads, water, parks, pois: poisRaw, fromCache, cacheLevel, isProtomaps } = mapResults;
+      const {
+        roads,
+        water,
+        parks,
+        pois: poisRaw,
+        fromCache,
+        cacheLevel,
+        isProtomaps,
+        rawWaterGeo,
+      } = mapResults;
       logClientTiming("mapData", "getMapData", {
         total: performance.now() - mapDataStart,
         cacheLevel: cacheLevel ?? "unknown",
@@ -1823,6 +1833,9 @@ export default function MapPosterGenerator() {
           JSON.stringify(toJsonArrayChunks(processedRoadShards))
         );
         downloadTextFile(`${fixturePrefix}-water-bin.json`, JSON.stringify(Array.from(waterBin)));
+        if (rawWaterGeo) {
+          downloadTextFile(`${fixturePrefix}-raw-water-geo.json`, JSON.stringify(rawWaterGeo));
+        }
         downloadTextFile(`${fixturePrefix}-parks-bin.json`, JSON.stringify(Array.from(parksBin)));
         downloadTextFile(`${fixturePrefix}-config.json`, configJson);
         logClientTiming("download", "diagnostic_fixture", {

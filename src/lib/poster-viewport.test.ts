@@ -62,5 +62,6 @@ describe("poster viewport helpers", () => {
 
   it("exposes a cache version prefix for canonical fetch viewport data", () => {
     expect(MAP_DATA_CACHE_VERSION).toContain("canonical-fetch-viewport");
+    expect(MAP_DATA_CACHE_VERSION).toContain("directed-coastline");
   });
 });

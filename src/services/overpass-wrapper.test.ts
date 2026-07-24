@@ -1,5 +1,28 @@
 import { describe, expect, it } from "bun:test";
-import { deduplicateOverpassElements, resolveRoadNetworkType } from "./overpass-wrapper";
+import {
+  deduplicateOverpassElements,
+  filterTerrainGeoJSON,
+  resolveRoadNetworkType,
+} from "./overpass-wrapper";
+
+function polygonFeature(properties: Record<string, string>): GeoJSON.Feature {
+  return {
+    type: "Feature",
+    properties,
+    geometry: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [118.7, 32.0],
+          [118.8, 32.0],
+          [118.8, 32.1],
+          [118.7, 32.1],
+          [118.7, 32.0],
+        ],
+      ],
+    },
+  };
+}
 
 describe("overpass wrapper road network selection", () => {
   it("keeps detailed mode on the all network", () => {
@@ -48,5 +71,42 @@ describe("overpass wrapper road network selection", () => {
     expect(way?.nodes).toEqual([1, 2, 3]);
     expect(way?.geometry).toHaveLength(3);
     expect(way?.tags).toEqual({ highway: "residential", name: "Test Road" });
+  });
+});
+
+describe("overpass wrapper terrain filtering", () => {
+  it("keeps only water-tagged features and drops recursive island members", () => {
+    const filtered = filterTerrainGeoJSON(
+      {
+        type: "FeatureCollection",
+        features: [
+          polygonFeature({ natural: "water", water: "lake", name: "玄武湖" }),
+          polygonFeature({ place: "island", name: "梁洲" }),
+          polygonFeature({ natural: "wood", name: "鹭鸟岛" }),
+        ],
+      },
+      "water"
+    );
+
+    expect(filtered.features.map((feature) => feature.properties?.name)).toEqual(["玄武湖"]);
+  });
+
+  it("keeps green land features while excluding recursively returned water members", () => {
+    const filtered = filterTerrainGeoJSON(
+      {
+        type: "FeatureCollection",
+        features: [
+          polygonFeature({ natural: "wood", name: "鹭鸟岛" }),
+          polygonFeature({ leisure: "park", name: "玄武公园" }),
+          polygonFeature({ natural: "water", water: "lake", name: "玄武湖" }),
+        ],
+      },
+      "parks"
+    );
+
+    expect(filtered.features.map((feature) => feature.properties?.name)).toEqual([
+      "鹭鸟岛",
+      "玄武公园",
+    ]);
   });
 });

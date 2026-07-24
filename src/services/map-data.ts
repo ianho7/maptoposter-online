@@ -11,6 +11,8 @@ export interface MapData {
   fromCache: boolean;
   cacheLevel?: "memory" | "indexeddb" | "none"; // 缓存层级
   isProtomaps?: boolean;
+  /** Present only for an explicitly requested local diagnostic export. */
+  rawWaterGeo?: GeoJSON.FeatureCollection;
 }
 
 export interface POIData {
@@ -71,7 +73,8 @@ class MapDataService {
     baseRadius: number,
     lodMode: "simplified" | "detailed" = "simplified",
     district?: string,
-    skipPois?: boolean
+    skipPois?: boolean,
+    debugRawWaterGeo = false
   ): Promise<MapData> {
     // district 不等于 city 时才加入 key，保证城市级缓存仍可命中旧数据
     const districtPart = district && district !== city ? `:${district}` : "";
@@ -80,7 +83,7 @@ class MapDataService {
     const cacheKey = `${MAP_DATA_CACHE_VERSION}:${country}:${city}${districtPart}:${baseRadius}:${lodMode}${poiPart}`;
 
     // 1. 尝试 L1 内存缓存
-    if (this.memoryCache.has(cacheKey)) {
+    if (!debugRawWaterGeo && this.memoryCache.has(cacheKey)) {
       console.log(
         `[MapDataService] L1 Memory Hit: ${city}${district ? ` > ${district}` : ""} (LOD: ${lodMode})`
       );
@@ -108,7 +111,7 @@ class MapDataService {
     this.worker.postMessage({
       id,
       type: "GET_MAP_DATA",
-      payload: { country, city, lat, lng, baseRadius, lodMode, district, skipPois },
+      payload: { country, city, lat, lng, baseRadius, lodMode, district, skipPois, debugRawWaterGeo },
     });
 
     const result = await promise;
@@ -116,15 +119,17 @@ class MapDataService {
     // 3. 存入 L1 内存缓存
     // 我们存一份副本在内存里，把原始结果返回（或者反过来）
     // 这里选择存副本，返回原始值，因为原始值马上就要被 App.tsx 消耗掉
-    this.memoryCache.set(cacheKey, {
-      roads: result.roads.slice(),
-      water: result.water.slice(),
-      parks: result.parks.slice(),
-      pois: result.pois.slice(), // 合并 POI
-      fromCache: result.fromCache,
-      cacheLevel: result.cacheLevel,
-      isProtomaps: result.isProtomaps,
-    });
+    if (!debugRawWaterGeo) {
+      this.memoryCache.set(cacheKey, {
+        roads: result.roads.slice(),
+        water: result.water.slice(),
+        parks: result.parks.slice(),
+        pois: result.pois.slice(), // 合并 POI
+        fromCache: result.fromCache,
+        cacheLevel: result.cacheLevel,
+        isProtomaps: result.isProtomaps,
+      });
+    }
 
     return result;
   }

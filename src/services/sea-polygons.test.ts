@@ -3,6 +3,7 @@ import osmtogeojson from "osmtogeojson";
 import type { FeatureCollection, LineString, Polygon } from "geojson";
 import {
   buildSeaPolygonsFromCoastlines,
+  buildSeaPolygonsWithDiagnostics,
   buildViewportBbox,
   extractCoastlineFeatures,
   mergeSeaPolygonsIntoWaterGeoJSON,
@@ -48,7 +49,35 @@ describe("sea polygon generation", () => {
     expect(coastlines[0].properties?.natural).toBe("coastline");
   });
 
-  it("builds a sea polygon from a coastline crossing the viewport", () => {
+  it("uses the right side of a directed coastline as water", () => {
+    const coastlineFeatures: FeatureCollection["features"] = [
+      {
+        type: "Feature",
+        properties: { natural: "coastline" },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 2],
+            [0, -2],
+          ],
+        },
+      },
+    ];
+
+    const seaPolygons = buildSeaPolygonsFromCoastlines(
+      coastlineFeatures as any,
+      [-1, -1, 1, 1],
+      [-0.5, 0]
+    );
+
+    expect(seaPolygons).toHaveLength(1);
+    expect(seaPolygons[0].properties?.generated).toBe("coastline-sea");
+    expect(seaPolygons[0].properties?.classification).toBe("right-side-confidence");
+    expect(pointInPolygon([-0.5, 0], seaPolygons[0].geometry)).toBe(true);
+    expect(pointInPolygon([0.5, 0], seaPolygons[0].geometry)).toBe(false);
+  });
+
+  it("reverses the selected sea face when coastline direction reverses", () => {
     const coastlineFeatures: FeatureCollection["features"] = [
       {
         type: "Feature",
@@ -66,13 +95,111 @@ describe("sea polygon generation", () => {
     const seaPolygons = buildSeaPolygonsFromCoastlines(
       coastlineFeatures as any,
       [-1, -1, 1, 1],
-      [0.5, 0]
+      [-0.5, 0]
     );
 
     expect(seaPolygons).toHaveLength(1);
-    expect(seaPolygons[0].properties?.generated).toBe("coastline-sea");
-    expect(pointInPolygon([-0.5, 0], seaPolygons[0].geometry)).toBe(true);
-    expect(pointInPolygon([0.5, 0], seaPolygons[0].geometry)).toBe(false);
+    expect(pointInPolygon([-0.5, 0], seaPolygons[0].geometry)).toBe(false);
+    expect(pointInPolygon([0.5, 0], seaPolygons[0].geometry)).toBe(true);
+  });
+
+  it("reports bounded classifier diagnostics without per-segment logging", () => {
+    const coastlineFeatures: FeatureCollection["features"] = [
+      {
+        type: "Feature",
+        properties: { natural: "coastline" },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, -2],
+            [0, 2],
+          ],
+        },
+      },
+    ];
+
+    const result = buildSeaPolygonsWithDiagnostics(coastlineFeatures as any, [-1, -1, 1, 1]);
+
+    expect(result.polygons).toHaveLength(1);
+    expect(result.diagnostics.generated_faces).toBe(1);
+    expect(result.diagnostics.ambiguous_segments).toBe(0);
+    expect(result.diagnostics.clip_ms).toBeGreaterThanOrEqual(0);
+    expect(result.diagnostics.merge_ms).toBeGreaterThanOrEqual(0);
+    expect(result.diagnostics.node_polygonize_ms).toBeGreaterThanOrEqual(0);
+    expect(result.diagnostics.classify_ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it("safely skips a NYC-scale dense coastline before noding when the segment budget is exceeded", () => {
+    const coordinates = Array.from({ length: 12_004 }, (_, index) => [
+      -2 + (index * 4) / 12_003,
+      0,
+    ]);
+    const coastlineFeatures: FeatureCollection["features"] = [
+      {
+        type: "Feature",
+        properties: { natural: "coastline" },
+        geometry: { type: "LineString", coordinates },
+      },
+    ];
+
+    const result = buildSeaPolygonsWithDiagnostics(coastlineFeatures as any, [-1, -1, 1, 1]);
+
+    expect(result.polygons).toHaveLength(0);
+    expect(result.diagnostics.clipped_segments).toBeGreaterThan(6_000);
+    expect(result.diagnostics.skipped_reason).toBe("processing-budget");
+    expect(result.diagnostics.node_polygonize_ms).toBe(0);
+  });
+
+  it("does not turn a non-center land face into sea in a multi-land viewport", () => {
+    const coastlineFeatures: FeatureCollection["features"] = [
+      {
+        type: "Feature",
+        properties: { natural: "coastline" },
+        geometry: {
+          type: "LineString",
+          // Water is west of this southbound coastline.
+          coordinates: [
+            [-0.5, 2],
+            [-0.5, -2],
+          ],
+        },
+      },
+      {
+        type: "Feature",
+        properties: { natural: "coastline" },
+        geometry: {
+          type: "LineString",
+          // Water is east of this northbound coastline.
+          coordinates: [
+            [0, -2],
+            [0, 2],
+          ],
+        },
+      },
+      {
+        type: "Feature",
+        properties: { natural: "coastline" },
+        geometry: {
+          type: "LineString",
+          // Water is west of this southbound coastline; the outer east face is land.
+          coordinates: [
+            [0.5, 2],
+            [0.5, -2],
+          ],
+        },
+      },
+    ];
+
+    const seaPolygons = buildSeaPolygonsFromCoastlines(
+      coastlineFeatures as any,
+      [-1, -1, 1, 1],
+      [-0.25, 0]
+    );
+
+    expect(isCoveredByAnySea([-0.75, 0], seaPolygons)).toBe(true);
+    expect(isCoveredByAnySea([0.25, 0], seaPolygons)).toBe(true);
+    expect(isCoveredByAnySea([-0.25, 0], seaPolygons)).toBe(false);
+    expect(isCoveredByAnySea([0.75, 0], seaPolygons)).toBe(false);
   });
 
   it("returns no sea polygon when linework cannot form a closed region", () => {
@@ -107,7 +234,7 @@ describe("sea polygon generation", () => {
         geometry: {
           type: "LineString",
           coordinates: [
-            [0, -2],
+            [0, 2],
             [0, 0],
           ],
         },
@@ -119,7 +246,7 @@ describe("sea polygon generation", () => {
           type: "LineString",
           coordinates: [
             [0, 0],
-            [0, 2],
+            [0, -2],
           ],
         },
       },
@@ -199,7 +326,11 @@ describe("sea polygon generation", () => {
         },
         {
           type: "Feature",
-          properties: { generated: "coastline-sea", natural: "sea" },
+          properties: {
+            generated: "coastline-sea",
+            natural: "sea",
+            generator_version: "directed-coastline-v1",
+          },
           geometry: {
             type: "Polygon",
             coordinates: [
@@ -227,6 +358,56 @@ describe("sea polygon generation", () => {
     expect(
       merged.features.filter((feature) => feature.properties?.generated === "coastline-sea")
     ).toHaveLength(1);
+  });
+
+  it("replaces legacy generated sea instead of reusing it as current cache data", () => {
+    const waterGeo: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { natural: "coastline" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, -2],
+              [0, 2],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: { generated: "coastline-sea", natural: "sea", generator_version: "legacy-v0" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [-1, -1],
+                [0, -1],
+                [0, 1],
+                [-1, 1],
+                [-1, -1],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+
+    const merged = mergeSeaPolygonsIntoWaterGeoJSON(waterGeo, {
+      centerLat: 0,
+      centerLng: 0,
+      baseRadiusMeters: 111_320,
+      aspectRatio: 1,
+    });
+
+    const generated = merged.features.filter(
+      (feature) => feature.properties?.generated === "coastline-sea"
+    );
+    expect(generated).toHaveLength(1);
+    expect(generated[0].properties?.generator_version).toBe("directed-coastline-v1");
+    expect(pointInPolygon([-0.5, 0], generated[0].geometry as Polygon)).toBe(false);
+    expect(pointInPolygon([0.5, 0], generated[0].geometry as Polygon)).toBe(true);
   });
 
   it("builds viewport bbox using aspect ratio", () => {
@@ -299,6 +480,13 @@ function pointInPolygon(point: [number, number], polygon: Polygon): boolean {
   }
 
   return true;
+}
+
+function isCoveredByAnySea(
+  point: [number, number],
+  seaPolygons: Array<{ geometry: Polygon }>
+): boolean {
+  return seaPolygons.some((feature) => pointInPolygon(point, feature.geometry));
 }
 
 function pointInRing(point: [number, number], ring: [number, number][]): boolean {
