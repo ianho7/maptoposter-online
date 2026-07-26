@@ -24,6 +24,7 @@ _Auto-maintained by `/filetree:update`. Each entry carries a content hash; misma
 - public
   - font
     - `NOTICE`: 字体版权声明；记录打包字体的授权与归属信息 <!--hash:79400243-->
+  - `llms.txt`: 面向 LLM 的站点用途、入口与源码链接说明 <!--hash:pending-->
 - scripts
   - `check-poi-svg-icons.ts`: POI SVG 图标检查脚本；校验图标资源是否完整且可用 <!--hash:cadb67e6-->
   - `generate-location-data.mjs`: 地点数据生成脚本；整理国家地区城市数据供前端选择器使用 <!--hash:939fec07-->

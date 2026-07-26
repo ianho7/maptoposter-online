@@ -1,6 +1,5 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, FileCheck, Loader2 } from "lucide-react";
 import * as m from "@/paraglide/messages";
 
@@ -38,26 +37,33 @@ export function FontSettings({
         <h2 className="text-lg text-foreground">{m.font_settings()}</h2>
       </div>
 
-      <Tabs defaultValue="default" className="w-full">
-        <TabsList className="w-full bg-secondary">
-          {PRESETS.map((preset) => {
-            const isLoading = fontLoadingPreset === preset.key;
+      <div
+        role="radiogroup"
+        aria-label={m.font_settings()}
+        className="flex w-full rounded-md bg-secondary p-1"
+      >
+        {PRESETS.map((preset) => {
+          const isLoading = fontLoadingPreset === preset.key;
+          const isSelected = selectedPreset === preset.key;
 
-            return (
-              <TabsTrigger
-                key={preset.key}
-                value={preset.key}
-                className="flex-1 text-foreground data-[state=active]:text-vanilla"
-                onClick={() => onPresetFontSelect(preset.key)}
-                disabled={isLoading}
-              >
-                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                {preset.label()}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-      </Tabs>
+          return (
+            <button
+              key={preset.key}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              className={`flex flex-1 items-center justify-center gap-1 rounded-sm px-3 py-1.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 ${
+                isSelected ? "bg-primary text-vanilla" : "text-foreground hover:bg-background/60"
+              }`}
+              onClick={() => onPresetFontSelect(preset.key)}
+              disabled={isLoading}
+            >
+              {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+              {preset.label()}
+            </button>
+          );
+        })}
+      </div>
 
       {/* 自定义上传：与 preset 无关，始终可见 */}
       <div className="">

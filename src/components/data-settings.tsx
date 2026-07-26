@@ -34,7 +34,10 @@ export function DataSettings({ baseRadius, onBaseRadiusChange }: DataSettingsPro
             value={baseRadius.toString()}
             onValueChange={(val) => onBaseRadiusChange(parseInt(val))}
           >
-            <SelectTrigger className="w-full h-9 border-border bg-card">
+            <SelectTrigger
+              className="w-full h-9 border-border bg-card"
+              aria-label={m.label_map_radius()}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
