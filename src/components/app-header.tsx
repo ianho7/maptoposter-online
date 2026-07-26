@@ -7,11 +7,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Download, GithubIcon, Heart, Loader2 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
-import { SupportDialog } from "@/components/support-dialog";
+import { lazy, Suspense, useEffect, useId, useState } from "react";
 import { locales } from "@/paraglide/runtime";
 type AvailableLanguageTag = (typeof locales)[number];
 import * as m from "@/paraglide/messages";
+
+const LazySupportDialog = lazy(() =>
+  import("@/components/support-dialog").then(({ SupportDialog }) => ({ default: SupportDialog }))
+);
 
 const languageNames: Record<AvailableLanguageTag, string> = {
   en: "English",
@@ -194,7 +197,11 @@ export function AppHeader({
           </Button>
         </div>
       </div>
-      <SupportDialog open={supportOpen} onOpenChange={setSupportOpen} activeLang={activeLang} />
+      {supportOpen ? (
+        <Suspense fallback={null}>
+          <LazySupportDialog open={true} onOpenChange={setSupportOpen} activeLang={activeLang} />
+        </Suspense>
+      ) : null}
     </header>
   );
 }

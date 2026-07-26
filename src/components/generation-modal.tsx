@@ -2,9 +2,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Clock } from "lucide-react";
-import { useState, useEffect } from "react";
-import SnakeGame from "@/components/snake-game";
+import { lazy, Suspense, useEffect, useState } from "react";
 import * as m from "@/paraglide/messages";
+
+const LazySnakeGame = lazy(() => import("@/components/snake-game"));
 
 interface GenerationModalProps {
   isGenerating: boolean;
@@ -75,21 +76,23 @@ export function GenerationModal({
           >
             {generationProgress === 100 && isGameOpen ? m.game_complete_hint() : generationStep}
           </p>
-          <SnakeGame
-            inline={true}
-            onOpenChange={(open) => {
-              onGameOpenChange(open);
-              if (!open && generationCompleteRef.current) {
-                onClose();
-                generationCompleteRef.current = false;
-              }
-            }}
-            // 当用户有任何交互（键盘方向键或 UI 方向键）时，不再自动关闭
-            onUserInteracted={() => {
-              setHasUserInteracted(true);
-            }}
-            triggerLabel={triggerLabel}
-          />
+          <Suspense fallback={<div className="h-[436px]" aria-hidden="true" />}>
+            <LazySnakeGame
+              inline={true}
+              onOpenChange={(open) => {
+                onGameOpenChange(open);
+                if (!open && generationCompleteRef.current) {
+                  onClose();
+                  generationCompleteRef.current = false;
+                }
+              }}
+              // 当用户有任何交互（键盘方向键或 UI 方向键）时，不再自动关闭
+              onUserInteracted={() => {
+                setHasUserInteracted(true);
+              }}
+              triggerLabel={triggerLabel}
+            />
+          </Suspense>
           <div
             className="flex justify-end pt-2"
             style={{

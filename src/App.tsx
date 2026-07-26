@@ -45,11 +45,9 @@ import { FontSettings } from "./components/font-settings";
 import { RenderControlSettings } from "./components/render-control-settings";
 import { PosterSizeSelector } from "./components/poster-size-selector";
 import { GenerationModal } from "./components/generation-modal";
-import { ErrorModal } from "./components/error-modal";
 import { useReverseGeocode } from "@/hooks/useReverseGeocode";
 import { getPoiIconDefinition } from "@/lib/poi-icon-registry";
 import { CustomPOISettings } from "./components/custom-poi-settings";
-import { POIManagementDialog } from "./components/poi-management-dialog";
 import {
   buildResolvedLocation,
   coalesceCoordinates,
@@ -63,6 +61,14 @@ const LazyMapPreview = lazy(() =>
 );
 const LazyPosterGallery = lazy(() =>
   import("./components/gallery").then(({ PosterGallery }) => ({ default: PosterGallery }))
+);
+const LazyErrorModal = lazy(() =>
+  import("./components/error-modal").then(({ ErrorModal }) => ({ default: ErrorModal }))
+);
+const LazyPOIManagementDialog = lazy(() =>
+  import("./components/poi-management-dialog").then(({ POIManagementDialog }) => ({
+    default: POIManagementDialog,
+  }))
 );
 
 let wasmInitialization: Promise<void> | null = null;
@@ -1593,22 +1599,51 @@ export default function MapPosterGenerator() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  // 海报图库包含高分辨率图片；仅在用户滚动到该区域时才下载组件和图片。
+  // 海报图库包含高分辨率图片。必须既进入可见区域、又有实际滚动意图才开始加载，
+  // 防止初始布局或 IntersectionObserver 边界判定在首屏提前触发请求。
   useEffect(() => {
     const placeholder = galleryPlaceholderRef.current;
+    const scrollRoot = mainContentRef.current;
     if (!placeholder) return;
+
+    let hasEnteredViewport = false;
+    let hasScrollIntent = false;
+    let hasLoadedGallery = false;
+
+    const loadGallery = () => {
+      if (!hasEnteredViewport || !hasScrollIntent || hasLoadedGallery) return;
+      hasLoadedGallery = true;
+      setIsPosterGalleryReady(true);
+      observer.disconnect();
+      scrollRoot?.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", handleScroll);
+    };
+
+    const handleScroll = () => {
+      if ((scrollRoot?.scrollTop ?? 0) > 0 || window.scrollY > 0) {
+        hasScrollIntent = true;
+        loadGallery();
+      }
+    };
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry.isIntersecting) return;
-        setIsPosterGalleryReady(true);
-        observer.disconnect();
+        hasEnteredViewport = true;
+        loadGallery();
       },
-      { root: mainContentRef.current }
+      { root: scrollRoot, rootMargin: "0px 0px -20% 0px", threshold: 0.01 }
     );
 
     observer.observe(placeholder);
-    return () => observer.disconnect();
+    scrollRoot?.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      scrollRoot?.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, []);
 
   const handleDownload = async (scale: number, exportFormat: ExportFormat = "png") => {
@@ -2068,38 +2103,46 @@ export default function MapPosterGenerator() {
           triggerLabel={m.snake_game_trigger()}
         />
 
-        <ErrorModal
-          open={errorModal !== null}
-          onClose={() => setErrorModal(null)}
-          error={errorModal?.error ?? null}
-          errorStep={errorModal?.step ?? ""}
-          diagnosticInfo={errorModal?.diagnostics ?? {}}
-        />
+        {errorModal ? (
+          <Suspense fallback={null}>
+            <LazyErrorModal
+              open={true}
+              onClose={() => setErrorModal(null)}
+              error={errorModal.error}
+              errorStep={errorModal.step}
+              diagnosticInfo={errorModal.diagnostics}
+            />
+          </Suspense>
+        ) : null}
 
-        <POIManagementDialog
-          open={isPoiDialogOpen}
-          onOpenChange={setIsPoiDialogOpen}
-          customPois={customPois}
-          setCustomPois={setCustomPois}
-          amapApiKey={amapApiKey}
-          setAmapApiKey={setAmapApiKey}
-          currentLat={location.lat ?? null}
-          currentLng={location.lng ?? null}
-          areaCacheKey={[
-            location.country,
-            location.state,
-            location.city,
-            location.district,
-            location.lat?.toFixed(4),
-            location.lng?.toFixed(4),
-          ]
-            .filter(Boolean)
-            .join("|")}
-          searchCity={selectedCity || location.city || location.district || ""}
-          searchCountry={selectedCountry || location.country || ""}
-          countryIso2={selectedCountryIso2}
-          language={activeLang}
-        />
+        {isPoiDialogOpen ? (
+          <Suspense fallback={null}>
+            <LazyPOIManagementDialog
+              open={true}
+              onOpenChange={setIsPoiDialogOpen}
+              customPois={customPois}
+              setCustomPois={setCustomPois}
+              amapApiKey={amapApiKey}
+              setAmapApiKey={setAmapApiKey}
+              currentLat={location.lat ?? null}
+              currentLng={location.lng ?? null}
+              areaCacheKey={[
+                location.country,
+                location.state,
+                location.city,
+                location.district,
+                location.lat?.toFixed(4),
+                location.lng?.toFixed(4),
+              ]
+                .filter(Boolean)
+                .join("|")}
+              searchCity={selectedCity || location.city || location.district || ""}
+              searchCountry={selectedCountry || location.country || ""}
+              countryIso2={selectedCountryIso2}
+              language={activeLang}
+            />
+          </Suspense>
+        ) : null}
 
         <main
           ref={mainContentRef}
