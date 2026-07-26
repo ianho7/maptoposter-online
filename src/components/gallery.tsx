@@ -379,7 +379,10 @@ export function PosterGallery() {
       </div>
 
       {/* Lightbox */}
-      <Dialog open={selectedPoster !== null} onOpenChange={(open) => !open && handleCloseLightbox()}>
+      <Dialog
+        open={selectedPoster !== null}
+        onOpenChange={(open) => !open && handleCloseLightbox()}
+      >
         {selectedPoster ? (
           <DialogContent
             className="max-w-none w-screen h-screen p-0 border-0 bg-foreground/95 backdrop-blur-sm shadow-none"
@@ -394,126 +397,129 @@ export function PosterGallery() {
               className="absolute inset-0 flex items-center justify-center p-4 md:p-8"
               onClick={handleCloseLightbox}
             >
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={handleCloseLightbox}
-              aria-label={m.a11y_close_lightbox()}
-              data-ai-action="close-lightbox"
-              className={cn(
-                "absolute top-4 right-4 sm:top-6 sm:right-6 md:top-10 md:right-10 z-10",
-                "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
-                "text-background/80 hover:text-background",
-                "hover:bg-background/10 active:bg-background/20",
-                "active:scale-75 transition-all duration-150",
-                "cursor-pointer"
-              )}
-            >
-              <X className="w-5 h-5" aria-hidden="true" />
-            </button>
-
-            {/* Navigation */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleLightboxNavigate("prev");
-              }}
-              aria-label={m.a11y_previous_poster()}
-              data-ai-action="navigate-prev-poster"
-              className={cn(
-                "absolute left-2 sm:left-10 z-10",
-                "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
-                "text-background/80 hover:text-background",
-                "hover:bg-background/10 active:bg-background/20",
-                "active:scale-75 transition-all duration-150",
-                "cursor-pointer"
-              )}
-            >
-              <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
-            </button>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleLightboxNavigate("next");
-              }}
-              aria-label={m.a11y_next_poster()}
-              data-ai-action="navigate-next-poster"
-              className={cn(
-                "absolute right-2 sm:right-10 z-10",
-                "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
-                "text-background/80 hover:text-background",
-                "hover:bg-background/10 active:bg-background/20",
-                "active:scale-75 transition-all duration-150",
-                "cursor-pointer"
-              )}
-            >
-              <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
-            </button>
-
-            {/* Main Image */}
-            <div
-              ref={containerRef}
-              className="relative max-w-[95vw] max-h-[95vh] animate-scale-in"
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                cursor: scale > 1 ? (isDraggingRef.current ? "grabbing" : "grab") : "default",
-              }}
-            >
-              <div className="bg-card p-2 sm:p-4 md:p-6 shadow-2xl overflow-hidden">
-                {/* Loading Spinner */}
-                {imageLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-card/80 z-10">
-                    <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                  </div>
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={handleCloseLightbox}
+                aria-label={m.a11y_close_lightbox()}
+                data-ai-action="close-lightbox"
+                className={cn(
+                  "absolute top-4 right-4 sm:top-6 sm:right-6 md:top-10 md:right-10 z-10",
+                  "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
+                  "text-background/80 hover:text-background",
+                  "hover:bg-background/10 active:bg-background/20",
+                  "active:scale-75 transition-all duration-150",
+                  "cursor-pointer"
                 )}
-                {/* Reset Zoom Button */}
-                {scale !== 1 && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleResetZoom();
-                    }}
-                    className={cn(
-                      "absolute top-2 right-2 sm:top-3 sm:right-3 z-20",
-                      "flex items-center gap-1.5 px-3 py-1.5",
-                      "bg-foreground/80 hover:bg-foreground text-background rounded-full",
-                      "text-xs font-medium",
-                      "transition-all duration-300 shadow-lg"
-                    )}
-                    title={m.gallery_zoom_hint()}
-                  >
-                    <ZoomOut className="w-3.5 h-3.5" />
-                    <span>{m.gallery_reset_zoom()}</span>
-                  </button>
+              >
+                <X className="w-5 h-5" aria-hidden="true" />
+              </button>
+
+              {/* Navigation */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLightboxNavigate("prev");
+                }}
+                aria-label={m.a11y_previous_poster()}
+                data-ai-action="navigate-prev-poster"
+                className={cn(
+                  "absolute left-2 sm:left-10 z-10",
+                  "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
+                  "text-background/80 hover:text-background",
+                  "hover:bg-background/10 active:bg-background/20",
+                  "active:scale-75 transition-all duration-150",
+                  "cursor-pointer"
                 )}
-                <div
-                  key={imageKey}
-                  ref={imgWrapperRef}
-                  className={cn(
-                    "flex items-center justify-center transition-all duration-300",
-                    imageLoading ? "opacity-90 scale-95" : "opacity-100 scale-100"
+              >
+                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLightboxNavigate("next");
+                }}
+                aria-label={m.a11y_next_poster()}
+                data-ai-action="navigate-next-poster"
+                className={cn(
+                  "absolute right-2 sm:right-10 z-10",
+                  "w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full",
+                  "text-background/80 hover:text-background",
+                  "hover:bg-background/10 active:bg-background/20",
+                  "active:scale-75 transition-all duration-150",
+                  "cursor-pointer"
+                )}
+              >
+                <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
+              </button>
+
+              {/* Main Image */}
+              <div
+                ref={containerRef}
+                className="relative max-w-[95vw] max-h-[95vh] animate-scale-in"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  cursor: scale > 1 ? (isDraggingRef.current ? "grabbing" : "grab") : "default",
+                }}
+              >
+                <div className="bg-card p-2 sm:p-4 md:p-6 shadow-2xl overflow-hidden">
+                  {/* Loading Spinner */}
+                  {imageLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-card/80 z-10">
+                      <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                    </div>
                   )}
-                  style={{ overflow: "hidden" }}
-                >
-                  <img
-                    src={selectedPoster.image}
-                    alt={selectedPoster.title}
-                    onLoad={() => setImageLoading(false)}
-                    onError={() => setImageLoading(false)}
-                    className={cn("max-h-[85vh] w-auto object-contain", scale > 1 && "select-none")}
-                    style={{
-                      transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
-                      transformOrigin: "center center",
-                    }}
-                    draggable={false}
-                  />
+                  {/* Reset Zoom Button */}
+                  {scale !== 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleResetZoom();
+                      }}
+                      className={cn(
+                        "absolute top-2 right-2 sm:top-3 sm:right-3 z-20",
+                        "flex items-center gap-1.5 px-3 py-1.5",
+                        "bg-foreground/80 hover:bg-foreground text-background rounded-full",
+                        "text-xs font-medium",
+                        "transition-all duration-300 shadow-lg"
+                      )}
+                      title={m.gallery_zoom_hint()}
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                      <span>{m.gallery_reset_zoom()}</span>
+                    </button>
+                  )}
+                  <div
+                    key={imageKey}
+                    ref={imgWrapperRef}
+                    className={cn(
+                      "flex items-center justify-center transition-all duration-300",
+                      imageLoading ? "opacity-90 scale-95" : "opacity-100 scale-100"
+                    )}
+                    style={{ overflow: "hidden" }}
+                  >
+                    <img
+                      src={selectedPoster.image}
+                      alt={selectedPoster.title}
+                      onLoad={() => setImageLoading(false)}
+                      onError={() => setImageLoading(false)}
+                      className={cn(
+                        "max-h-[85vh] w-auto object-contain",
+                        scale > 1 && "select-none"
+                      )}
+                      style={{
+                        transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
+                        transformOrigin: "center center",
+                      }}
+                      draggable={false}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
             </div>
           </DialogContent>
         ) : null}

@@ -111,7 +111,17 @@ class MapDataService {
     this.worker.postMessage({
       id,
       type: "GET_MAP_DATA",
-      payload: { country, city, lat, lng, baseRadius, lodMode, district, skipPois, debugRawWaterGeo },
+      payload: {
+        country,
+        city,
+        lat,
+        lng,
+        baseRadius,
+        lodMode,
+        district,
+        skipPois,
+        debugRawWaterGeo,
+      },
     });
 
     const result = await promise;

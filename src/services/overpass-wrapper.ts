@@ -36,7 +36,15 @@ const PARK_LEISURE_VALUES = new Set([
   "golf_course",
   "recreation_ground",
 ]);
-const PARK_NATURAL_VALUES = new Set(["wood", "scrub", "grassland", "heath", "wetland", "fell", "beach"]);
+const PARK_NATURAL_VALUES = new Set([
+  "wood",
+  "scrub",
+  "grassland",
+  "heath",
+  "wetland",
+  "fell",
+  "beach",
+]);
 const PARK_LANDUSE_VALUES = new Set(["forest", "grass", "meadow", "village_green", "allotments"]);
 
 // OSM Overpass API 返回的 JSON 结构

@@ -89,31 +89,31 @@ export function AppHeader({
           </Select>
           {/* 下载按钮 + 画质选择下拉菜单 */}
           <div className="relative group">
-              <Button
-                disabled={isGenerating || locationLoading}
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-                data-ai-action="download-poster"
-                aria-label={
-                  isGenerating
-                    ? m.generating({}, localeOptions)
-                    : m.download_button({}, localeOptions)
-                }
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                aria-controls={downloadMenuId}
-              >
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Download className="w-4 h-4" aria-hidden="true" />
-                )}
-                <span className="hidden sm:inline">
-                  {isGenerating
-                    ? m.generating({}, localeOptions)
+            <Button
+              disabled={isGenerating || locationLoading}
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="gap-1 sm:gap-2 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+              data-ai-action="download-poster"
+              aria-label={
+                isGenerating
+                  ? m.generating({}, localeOptions)
+                  : m.download_button({}, localeOptions)
+              }
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-controls={downloadMenuId}
+            >
+              {isGenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="w-4 h-4" aria-hidden="true" />
+              )}
+              <span className="hidden sm:inline">
+                {isGenerating
+                  ? m.generating({}, localeOptions)
                   : m.download_button({}, localeOptions)}
-                </span>
-              </Button>
+              </span>
+            </Button>
             <div
               id={downloadMenuId}
               role="menu"

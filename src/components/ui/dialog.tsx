@@ -36,9 +36,10 @@ const DialogContent = forwardRef<
   ElementRef<typeof DialogPrimitive.Content>,
   ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => {
-  const { ["data-hide-default-close"]: hideDefaultClose, ...contentProps } = props as typeof props & {
-    "data-hide-default-close"?: boolean;
-  };
+  const { ["data-hide-default-close"]: hideDefaultClose, ...contentProps } =
+    props as typeof props & {
+      "data-hide-default-close"?: boolean;
+    };
 
   return (
     <DialogPortal>

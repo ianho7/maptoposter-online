@@ -32,8 +32,7 @@ const MAX_SUPPORTED_INVERSE_ASPECT = Math.max(
   ...SUPPORTED_POSTER_DIMENSIONS.map(({ width, height }) => height / width)
 );
 
-export const MAP_DATA_CACHE_VERSION =
-  "v11-canonical-fetch-viewport-semantic-terrain-filtering";
+export const MAP_DATA_CACHE_VERSION = "v11-canonical-fetch-viewport-semantic-terrain-filtering";
 
 export function buildRenderViewportBbox({
   centerLat,

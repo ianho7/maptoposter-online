@@ -34,7 +34,6 @@ import { useDynamicFont } from "./hooks/useDynamicFont";
 import { useLanguage } from "./hooks/useLanguage";
 import { useConfigNavigation } from "./hooks/useConfigNavigation";
 import { useFontManagement } from "./hooks/useFontManagement";
-import { PosterGallery } from "./components/gallery";
 import Footer from "./components/footer";
 import { ConfigNav, type NavSection } from "./components/config-nav";
 import { SEOHead } from "./hooks/useSEO";
@@ -61,6 +60,9 @@ import {
 
 const LazyMapPreview = lazy(() =>
   import("./components/map-preview").then(({ MapPreview }) => ({ default: MapPreview }))
+);
+const LazyPosterGallery = lazy(() =>
+  import("./components/gallery").then(({ PosterGallery }) => ({ default: PosterGallery }))
 );
 
 let wasmInitialization: Promise<void> | null = null;
@@ -691,7 +693,10 @@ export default function MapPosterGenerator() {
   } | null>(null);
   const [customTitle, setCustomTitle] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
+  const mainContentRef = useRef<HTMLElement>(null);
+  const galleryPlaceholderRef = useRef<HTMLDivElement>(null);
   const [isMapPreviewReady, setIsMapPreviewReady] = useState(false);
+  const [isPosterGalleryReady, setIsPosterGalleryReady] = useState(false);
   const [locationMode, setLocationMode] = useState<"search" | "coordinates">("search");
   const locationFlowRequestIdRef = useRef(0);
 
@@ -794,7 +799,8 @@ export default function MapPosterGenerator() {
   const [selectedCity, setSelectedCity] = useState<string>("");
   const [selectedDistrict, setSelectedDistrict] = useState<string>(""); // 区/县/郡，通过 Overpass API 动态获取
   const selectedCountryIso2 =
-    countries.find((country) => country.name.toLowerCase() === selectedCountry.toLowerCase())?.iso2 || "";
+    countries.find((country) => country.name.toLowerCase() === selectedCountry.toLowerCase())
+      ?.iso2 || "";
   const [states, setStates] = useState<State[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [districts, setDistricts] = useState<District[]>([]); // 始终包含城市自身作为首选项（id=0）
@@ -1587,6 +1593,24 @@ export default function MapPosterGenerator() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  // 海报图库包含高分辨率图片；仅在用户滚动到该区域时才下载组件和图片。
+  useEffect(() => {
+    const placeholder = galleryPlaceholderRef.current;
+    if (!placeholder) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setIsPosterGalleryReady(true);
+        observer.disconnect();
+      },
+      { root: mainContentRef.current }
+    );
+
+    observer.observe(placeholder);
+    return () => observer.disconnect();
+  }, []);
+
   const handleDownload = async (scale: number, exportFormat: ExportFormat = "png") => {
     const generationStart = performance.now();
     const renderScaleConfig = INTERNAL_RENDER_SCALE_CONFIG;
@@ -2077,7 +2101,10 @@ export default function MapPosterGenerator() {
           language={activeLang}
         />
 
-        <main className="flex-1 overflow-auto custom-scrollbar w-full mx-auto px-4 py-6">
+        <main
+          ref={mainContentRef}
+          className="flex-1 overflow-auto custom-scrollbar w-full mx-auto px-4 py-6"
+        >
           <div className="grid md:grid-cols-[480px_1fr] px-0 md:px-20 gap-8 md:h-full">
             <div className="flex flex-row gap-8 md:min-h-0">
               <ConfigNav
@@ -2190,59 +2217,67 @@ export default function MapPosterGenerator() {
 
             {isMapPreviewReady ? (
               <Suspense
-                fallback={<div className="min-h-[400px] md:h-full animate-pulse bg-card border border-border" />}
+                fallback={
+                  <div className="min-h-[400px] md:h-full animate-pulse bg-card border border-border" />
+                }
               >
                 <LazyMapPreview
-              location={location}
-              selectedSize={selectedSize}
-              selectedThemeName={themeNameMap[selectedTheme.id] || selectedTheme.name}
-              poiSourceLabel={
-                poiSource === "off"
-                  ? m.poi_source_off()
-                  : poiSource === "overpass"
-                    ? m.poi_source_overpass()
-                    : m.poi_source_custom()
-              }
-              summaryLabels={{
-                title: m.preview_summary_title(),
-                location: m.preview_summary_location(),
-                coordinates: m.preview_summary_coordinates(),
-                size: m.preview_summary_size(),
-                theme: m.preview_summary_theme(),
-                poi: m.preview_summary_poi(),
-                text: m.preview_summary_text(),
-                none: m.preview_summary_none(),
-                city: m.toggle_show_city(),
-                country: m.toggle_show_country(),
-                coordinatesToggle: m.toggle_show_coords(),
-              }}
-              colors={colors}
-              customPois={customPois}
-              showCustomPois={poiSource === "custom"}
-              fontCacheRef={fontCacheRef}
-              selectedPreset={deferredSelectedPreset}
-              baseRadius={baseRadius}
-              customTitle={customTitle}
-              showCoords={showCoords}
-              showCity={showCity}
-              showCountry={showCountry}
-              previewRef={previewRef}
-              previewHint={m.preview_actual_result()}
-              interactive={locationMode === "coordinates"}
-              onMove={(loc) => {
-                setLocation((prev) => ({ ...prev, lat: loc.lat, lng: loc.lon }));
-              }}
-              onMoveEnd={(loc) => {
-                setLocation((prev) => ({ ...prev, lat: loc.lat, lng: loc.lon }));
-                handleCoordinateReverseGeocode(loc.lat, loc.lon);
-              }}
+                  location={location}
+                  selectedSize={selectedSize}
+                  selectedThemeName={themeNameMap[selectedTheme.id] || selectedTheme.name}
+                  poiSourceLabel={
+                    poiSource === "off"
+                      ? m.poi_source_off()
+                      : poiSource === "overpass"
+                        ? m.poi_source_overpass()
+                        : m.poi_source_custom()
+                  }
+                  summaryLabels={{
+                    title: m.preview_summary_title(),
+                    location: m.preview_summary_location(),
+                    coordinates: m.preview_summary_coordinates(),
+                    size: m.preview_summary_size(),
+                    theme: m.preview_summary_theme(),
+                    poi: m.preview_summary_poi(),
+                    text: m.preview_summary_text(),
+                    none: m.preview_summary_none(),
+                    city: m.toggle_show_city(),
+                    country: m.toggle_show_country(),
+                    coordinatesToggle: m.toggle_show_coords(),
+                  }}
+                  colors={colors}
+                  customPois={customPois}
+                  showCustomPois={poiSource === "custom"}
+                  fontCacheRef={fontCacheRef}
+                  selectedPreset={deferredSelectedPreset}
+                  baseRadius={baseRadius}
+                  customTitle={customTitle}
+                  showCoords={showCoords}
+                  showCity={showCity}
+                  showCountry={showCountry}
+                  previewRef={previewRef}
+                  previewHint={m.preview_actual_result()}
+                  interactive={locationMode === "coordinates"}
+                  onMove={(loc) => {
+                    setLocation((prev) => ({ ...prev, lat: loc.lat, lng: loc.lon }));
+                  }}
+                  onMoveEnd={(loc) => {
+                    setLocation((prev) => ({ ...prev, lat: loc.lat, lng: loc.lon }));
+                    handleCoordinateReverseGeocode(loc.lat, loc.lon);
+                  }}
                 />
               </Suspense>
             ) : (
               <div className="min-h-[400px] md:h-full animate-pulse bg-card border border-border" />
             )}
           </div>
-          <PosterGallery />
+          <div ref={galleryPlaceholderRef} className="min-h-[50vh]">
+            {isPosterGalleryReady ? (
+              <Suspense fallback={<div className="min-h-[50vh]" />}>
+                <LazyPosterGallery />
+              </Suspense>
+            ) : null}
+          </div>
           <Footer activeLang={activeLang} />
         </main>
       </div>

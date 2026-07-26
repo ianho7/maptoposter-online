@@ -1,10 +1,4 @@
-import {
-  useRef,
-  useState,
-  type ChangeEvent,
-  type MutableRefObject,
-  type RefObject,
-} from "react";
+import { useRef, useState, type ChangeEvent, type MutableRefObject, type RefObject } from "react";
 import * as m from "@/paraglide/messages";
 
 interface CachedFont {

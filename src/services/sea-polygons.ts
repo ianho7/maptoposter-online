@@ -199,7 +199,10 @@ export function buildSeaPolygonsWithDiagnostics(
     return { polygons: [], diagnostics };
   }
 
-  const clippedVertexCount = clippedFragments.reduce((total, fragment) => total + fragment.length, 0);
+  const clippedVertexCount = clippedFragments.reduce(
+    (total, fragment) => total + fragment.length,
+    0
+  );
   if (
     clippedFragments.length > MAX_CLIPPED_FRAGMENT_COUNT ||
     diagnostics.clipped_segments > MAX_CLIPPED_SEGMENT_COUNT ||
@@ -298,11 +301,7 @@ export function buildSeaPolygonsWithDiagnostics(
 
       // A coastline must separate two distinct polygonized faces. Ambiguous input
       // safely declines sea generation instead of risking a land-overwriting fill.
-      if (
-        rightFaceIndex === -1 ||
-        leftFaceIndex === -1 ||
-        rightFaceIndex === leftFaceIndex
-      ) {
+      if (rightFaceIndex === -1 || leftFaceIndex === -1 || rightFaceIndex === leftFaceIndex) {
         diagnostics.ambiguous_segments++;
         diagnostics.classify_ms = performance.now() - classifyStart;
         diagnostics.skipped_reason = "ambiguous-segment";

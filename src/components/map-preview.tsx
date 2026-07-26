@@ -173,11 +173,7 @@ export function MapPreview({
           {previewHint}
         </p>
       ) : null}
-      <section
-        aria-label={summaryLabels.title}
-        data-testid="preview.summary"
-        className="sr-only"
-      >
+      <section aria-label={summaryLabels.title} data-testid="preview.summary" className="sr-only">
         <h3>{summaryLabels.title}</h3>
         <dl>
           <div>
@@ -209,9 +205,7 @@ export function MapPreview({
           </div>
           <div>
             <dt>{summaryLabels.text}</dt>
-            <dd>
-              {textSummary.length > 0 ? textSummary.join(", ") : summaryLabels.none}
-            </dd>
+            <dd>{textSummary.length > 0 ? textSummary.join(", ") : summaryLabels.none}</dd>
           </div>
         </dl>
       </section>

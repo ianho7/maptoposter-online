@@ -3,6 +3,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * 中文首屏先使用本机宋体。Noto Serif SC 的异步样式表完成下载后会替换它；
+ * 轻微缩放让两者的视觉字号更接近，降低字体交换时的布局与观感跳变。
+ */
+@font-face {
+  font-family: "Noto Serif SC Fallback";
+  src: local("STSong"), local("Songti SC"), local("SimSun");
+  size-adjust: 98%;
+}
+
 :root {
   /* New Style Theme - Cream & Orange-Red Accent */
   --background: #faf7f5;

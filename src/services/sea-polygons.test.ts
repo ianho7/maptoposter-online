@@ -377,7 +377,11 @@ describe("sea polygon generation", () => {
         },
         {
           type: "Feature",
-          properties: { generated: "coastline-sea", natural: "sea", generator_version: "legacy-v0" },
+          properties: {
+            generated: "coastline-sea",
+            natural: "sea",
+            generator_version: "legacy-v0",
+          },
           geometry: {
             type: "Polygon",
             coordinates: [

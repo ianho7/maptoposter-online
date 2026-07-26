@@ -139,7 +139,9 @@ function isSameResult(existing: CustomPOI, candidate: PoiSearchResult) {
   if (existing.sourceId && existing.sourceId === candidateSourceId) return true;
   if (existing.sourceId && existing.sourceId === candidate.id) return true;
   const [lng, lat] =
-    candidate.coordinateSystem === "gcj02" ? gcj02ToWgs84(candidate.lng, candidate.lat) : [candidate.lng, candidate.lat];
+    candidate.coordinateSystem === "gcj02"
+      ? gcj02ToWgs84(candidate.lng, candidate.lat)
+      : [candidate.lng, candidate.lat];
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
 
   // Fall back to exact address + coordinate proximity when upstream ids are coarse.
@@ -354,7 +356,10 @@ export function POIManagementDialog({
   };
 
   const handleNominatimSearch = async () => {
-    if (provider !== "nominatim" || getSearchTermLength(deferredSearchTerm) < MIN_SEARCH_TERM_LENGTH) {
+    if (
+      provider !== "nominatim" ||
+      getSearchTermLength(deferredSearchTerm) < MIN_SEARCH_TERM_LENGTH
+    ) {
       return;
     }
     if (!NOMINATIM_PROXY_ENDPOINT) {
@@ -375,7 +380,8 @@ export function POIManagementDialog({
       url.searchParams.set("language", language);
       const response = await fetch(url, { signal: controller.signal });
       const payload: unknown = await response.json();
-      const responseBody = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const responseBody =
+        payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
       const rawResults = responseBody.results;
       if (!response.ok || !Array.isArray(rawResults)) {
         throw new Error(
@@ -411,7 +417,9 @@ export function POIManagementDialog({
       if (controller.signal.aborted) return;
       setResults([]);
       setSearchStatus("error");
-      setSearchMessage(error instanceof Error ? error.message : m.custom_poi_search_error_generic());
+      setSearchMessage(
+        error instanceof Error ? error.message : m.custom_poi_search_error_generic()
+      );
     }
   };
 
@@ -540,7 +548,9 @@ export function POIManagementDialog({
           <section className="border-b border-border px-6 py-2 md:border-b-0 md:border-r">
             <div className="space-y-5">
               <div className="space-y-2">
-                <h3 className="text-sm font-medium text-foreground">{m.custom_poi_provider_label()}</h3>
+                <h3 className="text-sm font-medium text-foreground">
+                  {m.custom_poi_provider_label()}
+                </h3>
                 <Select
                   value={provider}
                   onValueChange={(value) => {
@@ -550,7 +560,10 @@ export function POIManagementDialog({
                     setResults([]);
                   }}
                 >
-                  <SelectTrigger className="w-full border-border bg-card" aria-label={m.custom_poi_provider_label()}>
+                  <SelectTrigger
+                    className="w-full border-border bg-card"
+                    aria-label={m.custom_poi_provider_label()}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -561,55 +574,58 @@ export function POIManagementDialog({
               </div>
 
               {provider === "amap" ? (
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-medium text-foreground">
-                    1. {m.custom_poi_api_key_label()}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {m.custom_poi_api_key_help()}{" "}
-                    <a
-                      href={AMAP_API_KEY_TUTORIAL_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline underline-offset-2 transition-opacity hover:opacity-80"
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium text-foreground">
+                      1. {m.custom_poi_api_key_label()}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {m.custom_poi_api_key_help()}{" "}
+                      <a
+                        href={AMAP_API_KEY_TUTORIAL_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2 transition-opacity hover:opacity-80"
+                      >
+                        {m.custom_poi_api_key_tutorial()}
+                      </a>
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      value={amapApiKey}
+                      onChange={(event) => setAmapApiKey(event.target.value)}
+                      placeholder={m.custom_poi_api_key_placeholder()}
+                      aria-label={m.custom_poi_api_key_label()}
+                      className="border-border bg-card"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleTestApiKey}
+                      disabled={apiKeyStatus === "testing"}
                     >
-                      {m.custom_poi_api_key_tutorial()}
-                    </a>
-                  </p>
+                      {apiKeyStatus === "testing" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : null}
+                      {m.custom_poi_api_key_test_button()}
+                    </Button>
+                  </div>
+                  {renderApiMessage()}
                 </div>
-                <div className="flex gap-2">
-                  <Input
-                    type="password"
-                    value={amapApiKey}
-                    onChange={(event) => setAmapApiKey(event.target.value)}
-                    placeholder={m.custom_poi_api_key_placeholder()}
-                    aria-label={m.custom_poi_api_key_label()}
-                    className="border-border bg-card"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleTestApiKey}
-                    disabled={apiKeyStatus === "testing"}
-                  >
-                    {apiKeyStatus === "testing" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : null}
-                    {m.custom_poi_api_key_test_button()}
-                  </Button>
-                </div>
-                {renderApiMessage()}
-              </div>
               ) : null}
 
               <div className="space-y-3">
                 <div className="space-y-1">
                   <h3 className="text-sm font-medium text-foreground">
-                    {provider === "amap" ? "2. " : "1. "}{m.custom_poi_search_label()}
+                    {provider === "amap" ? "2. " : "1. "}
+                    {m.custom_poi_search_label()}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {provider === "amap" ? m.custom_poi_search_help() : m.custom_poi_nominatim_search_help()}
+                    {provider === "amap"
+                      ? m.custom_poi_search_help()
+                      : m.custom_poi_nominatim_search_help()}
                   </p>
                 </div>
                 <div className="relative">
@@ -623,7 +639,11 @@ export function POIManagementDialog({
                         void handleNominatimSearch();
                       }
                     }}
-                    placeholder={provider === "amap" ? m.custom_poi_search_placeholder() : m.custom_poi_nominatim_placeholder()}
+                    placeholder={
+                      provider === "amap"
+                        ? m.custom_poi_search_placeholder()
+                        : m.custom_poi_nominatim_placeholder()
+                    }
                     aria-label={m.custom_poi_search_label()}
                     className="border-border bg-card pl-9"
                   />
@@ -633,7 +653,10 @@ export function POIManagementDialog({
                     type="button"
                     variant="outline"
                     onClick={() => void handleNominatimSearch()}
-                    disabled={searchStatus === "loading" || getSearchTermLength(deferredSearchTerm) < MIN_SEARCH_TERM_LENGTH}
+                    disabled={
+                      searchStatus === "loading" ||
+                      getSearchTermLength(deferredSearchTerm) < MIN_SEARCH_TERM_LENGTH
+                    }
                   >
                     {m.custom_poi_nominatim_search_button()}
                   </Button>
@@ -641,7 +664,12 @@ export function POIManagementDialog({
                 {renderSearchBody()}
                 {provider === "nominatim" ? (
                   <p className="text-xs text-muted-foreground">
-                    <a className="underline underline-offset-2" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
+                    <a
+                      className="underline underline-offset-2"
+                      href="https://www.openstreetmap.org/copyright"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       © OpenStreetMap contributors
                     </a>
                   </p>
@@ -678,10 +706,10 @@ export function POIManagementDialog({
                       </p>
                     </div>
 
-                      <Select
-                        value={poi.poiType}
-                        onValueChange={(value) => updatePoiType(poi.id, value)}
-                      >
+                    <Select
+                      value={poi.poiType}
+                      onValueChange={(value) => updatePoiType(poi.id, value)}
+                    >
                       <SelectTrigger
                         size="sm"
                         className="w-full border-border bg-background"
