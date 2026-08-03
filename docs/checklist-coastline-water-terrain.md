@@ -1,5 +1,7 @@
 # 海岸线海面补全与水体地形优先级 Checklist
 
+> 迁移说明（2026-08-01）：本清单中的 V1 左右采样海岸线分类已由 [Topology V2 checklist](./checklist/coastline-topology-v2-checklist.md) 取代。旧项仅保留历史证据；水体/绿地语义与 WASM 图层验收仍然有效。
+
 关联计划：[plan-coastline-water-terrain.md](plan-coastline-water-terrain.md)
 
 ## Checklist Objective

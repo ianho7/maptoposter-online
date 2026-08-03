@@ -30,6 +30,8 @@ docs/inner-docs
 docs/handoff
 docs/reflections
 fixtures/
+!src/services/fixtures/
+!src/services/fixtures/lisbon-coastline.geo.json
 
 .env
 .tmp-chrome-perf

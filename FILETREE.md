@@ -5,11 +5,16 @@ _Auto-maintained by `/filetree:update`. Each entry carries a content hash; misma
 - .github
   - `FUNDING.yml`: GitHub 赞助配置；定义项目资助入口与展示方式 <!--hash:12e42ee0-->
 - docs
+  - checklist
+    - `coastline-topology-v2-checklist.md`: 海岸线拓扑分类 V2 执行清单；定义闭环状态、原子任务、证据门禁、反思与退出条件 <!--hash:pending-->
   - `analysis-poi-pin-rendering.md`: POI 图钉渲染分析文档；记录视觉方案、实现取舍与问题排查 <!--hash:32102b98-->
+  - `analysis-water-terrain-rendering-root-cause-fix.md`: 水体渲染问题复盘文章；说明反复翻工的原因、V2 根因修复与适用边界 <!--hash:pending-->
   - `checklist-custom-poi.md`: 自定义 POI 功能检查清单；跟踪实现步骤与验收项 <!--hash:4ebccb4f-->
   - `checklist-nominatim-poi.md`: Nominatim POI 扩展实施清单；定义服务选择、Worker、UI 与验证任务 <!--hash:pending-->
   - `loop-nominatim-poi.md`: Nominatim POI 实施闭环；记录状态、验证、重试和退出规则 <!--hash:pending-->
+  - `plan-coastline-topology-v2.md`: 海岸线拓扑分类 V2 实施计划；定义里斯本回归、拓扑保形简化、区域邻接分类与安全验收 <!--hash:pending-->
   - `plan-mvp-custom-poi.md`: 自定义 POI MVP 方案文档；定义范围、优先级与落地路径 <!--hash:4ca6a707-->
+  - `reflections/`: 任务级工程反思与验证记录；按任务编号留存，避免在总文件树中逐项罗列 <!--hash:pending-->
 - messages
   - `de.json`: 德语翻译消息；提供界面文案本地化文本 <!--hash:d8f55a7f-->
   - `en.json`: 英语翻译消息；提供界面文案本地化文本 <!--hash:5a1a2669-->
@@ -94,6 +99,8 @@ _Auto-maintained by `/filetree:update`. Each entry carries a content hash; misma
     - `wasm_bg.wasm`: Rust 编译的 WASM 二进制；执行地图渲染核心逻辑 <!--hash:95dc53db-->
     - `wasm_bg.wasm.d.ts`: WASM 二进制类型声明；描述底层导出项接口 <!--hash:c5c3c2c7-->
   - services
+    - fixtures
+      - `lisbon-coastline.geo.json`: 里斯本海岸线精简回归夹具；保留真实高密度岸线以复现西南外海缺失 <!--hash:pending-->
     - overpass-client
       - `README.md`: Overpass 客户端说明；介绍查询模块的职责与使用方式 <!--hash:27b9e4fa-->
       - `config.ts`: Overpass 客户端配置；定义接口地址、超时与默认选项 <!--hash:3d40645a-->
@@ -109,10 +116,13 @@ _Auto-maintained by `/filetree:update`. Each entry carries a content hash; misma
     - `ip-geolocation.ts`: IP 定位服务；基于网络信息推断用户所在地 <!--hash:1a5ecc62-->
     - `location-service.ts`: 地点服务；统一地点查询、筛选与层级组织逻辑 <!--hash:bfc42ee5-->
     - `location-types.ts`: 地点服务类型定义；约束国家州城市区县等数据结构 <!--hash:ca85f961-->
+    - `map-data.test.ts`: 地图数据服务测试；验证数据 Worker 诊断日志可传递到应用导出日志 <!--hash:pending-->
     - `map-data.ts`: 地图数据服务；协调缓存、Worker 通信与地图数据获取 <!--hash:2e2a0704-->
     - `overpass-wrapper.test.ts`: Overpass 包装层测试；验证上层地图查询流程 <!--hash:a37b86b0-->
     - `overpass-wrapper.ts`: Overpass 包装服务；向应用层提供更易用的查询接口 <!--hash:b240ec96-->
     - `reverse-geocoding.ts`: 逆地理编码服务；把经纬度解析为国家城市等名称 <!--hash:35913180-->
+    - `coastline-topology.test.ts`: 海岸线拓扑预处理测试；验证局部米制投影、线段清理与方向保持 <!--hash:pending-->
+    - `coastline-topology.ts`: 海岸线拓扑模块；提供米制预处理、带来源切分与区域邻接分类 <!--hash:pending-->
     - `sea-polygons.test.ts`: 海域多边形测试；验证海陆边界数据处理逻辑 <!--hash:5cfcfcd8-->
     - `sea-polygons.ts`: 海域多边形服务；生成或裁剪海面区域几何数据 <!--hash:7cb6cfb6-->
   - utils

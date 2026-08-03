@@ -1,5 +1,3 @@
-import { area as turfArea } from "@turf/area";
-import { polygon as turfPolygon } from "@turf/helpers";
 import type {
   BBox,
   Feature,
@@ -8,14 +6,18 @@ import type {
   MultiLineString,
   Polygon,
 } from "geojson";
-import ArrayList from "jsts/java/util/ArrayList.js";
-import GeometryFactory from "jsts/org/locationtech/jts/geom/GeometryFactory.js";
-import PrecisionModel from "jsts/org/locationtech/jts/geom/PrecisionModel.js";
-import GeoJSONReader from "jsts/org/locationtech/jts/io/GeoJSONReader.js";
-import GeoJSONWriter from "jsts/org/locationtech/jts/io/GeoJSONWriter.js";
-import GeometryNoder from "jsts/org/locationtech/jts/noding/snapround/GeometryNoder.js";
-import Polygonizer from "jsts/org/locationtech/jts/operation/polygonize/Polygonizer.js";
 import { buildRenderViewportBbox } from "@/lib/poster-viewport";
+import {
+  buildTopologyFaces,
+  cleanDirectedMetricLines,
+  createLocalMetricProjection,
+  projectLonLat,
+  simplifyMetricLinesForBudget,
+  unprojectMetricPoint,
+  type DirectedMetricLine,
+  type MetricBbox,
+  type SegmentBudgetOptions,
+} from "./coastline-topology";
 
 type LonLatPoint = [number, number];
 
@@ -28,50 +30,34 @@ interface ViewportOptions {
   onSeaDiagnostics?: (diagnostics: SeaPolygonDiagnostics) => void;
 }
 
-const geometryFactory = new GeometryFactory();
-const geoJsonReader = new GeoJSONReader(geometryFactory);
-const geoJsonWriter = new GeoJSONWriter();
-
 const COORD_EPSILON = 1e-9;
-const ENDPOINT_KEY_DIGITS = 8;
 const BOUNDARY_TOLERANCE = 1e-6;
-const MIN_SEA_POLYGON_AREA_M2 = 1;
-const SEA_GENERATOR_VERSION = "directed-coastline-v1";
-const MIN_DIRECTIONAL_SUPPORT_RATIO = 1e-6;
-const MAX_CLIPPED_FRAGMENT_COUNT = 20_000;
-const MAX_CLIPPED_SEGMENT_COUNT = 6_000;
-const MAX_CLIPPED_VERTEX_COUNT = 100_000;
-
-interface FaceEvidence {
-  water: number;
-  land: number;
-}
-
-interface FaceSpatialIndex {
-  bbox: BBox;
-  columns: number;
-  rows: number;
-  cells: Map<string, number[]>;
-}
+const SEA_GENERATOR_VERSION = "directed-coastline-v2";
 
 export interface SeaPolygonDiagnostics {
   clipped_fragments: number;
   clipped_segments: number;
   candidate_faces: number;
-  sampled_segments: number;
-  ambiguous_segments: number;
-  total_directional_support: number;
   generated_faces: number;
   clip_ms: number;
-  merge_ms: number;
   node_polygonize_ms: number;
   classify_ms: number;
+  input_segments: number;
+  deduplicated_segments: number;
+  simplified_segments: number;
+  simplification_tolerance_m: number;
+  simplify_ms: number;
+  noded_segments: number;
+  matched_coastline_segments: number;
+  unmatched_coastline_segments: number;
+  accepted_faces: number;
+  rejected_conflict_faces: number;
+  rejected_insufficient_support_faces: number;
   skipped_reason?:
     | "no-clipped-fragments"
-    | "processing-budget"
-    | "no-candidate-faces"
-    | "ambiguous-segment"
-    | "no-support";
+    | "no-support"
+    | "processing-budget-after-simplification"
+    | "topology-error";
 }
 
 export interface SeaPolygonBuildResult {
@@ -168,300 +154,118 @@ export function buildSeaPolygonsFromCoastlines(
 
 export function buildSeaPolygonsWithDiagnostics(
   coastlineFeatures: Array<Feature<LineString | MultiLineString>>,
-  viewportBbox: BBox
+  viewportBbox: BBox,
+  segmentBudgetOptions: SegmentBudgetOptions = {}
 ): SeaPolygonBuildResult {
   const diagnostics: SeaPolygonDiagnostics = {
     clipped_fragments: 0,
     clipped_segments: 0,
     candidate_faces: 0,
-    sampled_segments: 0,
-    ambiguous_segments: 0,
-    total_directional_support: 0,
     generated_faces: 0,
     clip_ms: 0,
-    merge_ms: 0,
     node_polygonize_ms: 0,
     classify_ms: 0,
+    input_segments: 0,
+    deduplicated_segments: 0,
+    simplified_segments: 0,
+    simplification_tolerance_m: 0,
+    simplify_ms: 0,
+    noded_segments: 0,
+    matched_coastline_segments: 0,
+    unmatched_coastline_segments: 0,
+    accepted_faces: 0,
+    rejected_conflict_faces: 0,
+    rejected_insufficient_support_faces: 0,
   };
   const clipStart = performance.now();
-  const clippedFragments = coastlineFeatures.flatMap((feature) =>
-    featureToLineStrings(feature).flatMap((line) => clipLineStringToBbox(line, viewportBbox))
+  const clippedFragments = coastlineFeatures.flatMap((feature, featureIndex) =>
+    featureToLineStrings(feature).flatMap((line, lineIndex) =>
+      clipLineStringToBbox(line, viewportBbox).map((coordinates) => ({
+        sourceId: `coastline-${featureIndex}-${lineIndex}`,
+        coordinates,
+      }))
+    )
   );
   diagnostics.clip_ms = performance.now() - clipStart;
   diagnostics.clipped_fragments = clippedFragments.length;
   diagnostics.clipped_segments = clippedFragments.reduce(
-    (total, fragment) => total + Math.max(0, fragment.length - 1),
+    (total, fragment) => total + Math.max(0, fragment.coordinates.length - 1),
     0
   );
+  diagnostics.input_segments = diagnostics.clipped_segments;
 
   if (clippedFragments.length === 0) {
     diagnostics.skipped_reason = "no-clipped-fragments";
     return { polygons: [], diagnostics };
   }
 
-  const clippedVertexCount = clippedFragments.reduce(
-    (total, fragment) => total + fragment.length,
-    0
-  );
-  if (
-    clippedFragments.length > MAX_CLIPPED_FRAGMENT_COUNT ||
-    diagnostics.clipped_segments > MAX_CLIPPED_SEGMENT_COUNT ||
-    clippedVertexCount > MAX_CLIPPED_VERTEX_COUNT
-  ) {
-    diagnostics.skipped_reason = "processing-budget";
-    return { polygons: [], diagnostics };
-  }
-
-  const mergeStart = performance.now();
-  const mergedLineStrings = mergeConnectedLineStrings(clippedFragments);
-  diagnostics.merge_ms = performance.now() - mergeStart;
-  const polygonizer = new Polygonizer();
-  const linework = [...mergedLineStrings, ...buildViewportBoundarySegments(viewportBbox)];
-  const lineGeometries = new ArrayList([]);
-
-  for (const line of linework) {
-    if (line.length < 2) continue;
-    lineGeometries.add(
-      geoJsonReader.read({
-        type: "LineString",
-        coordinates: line,
-      })
+  try {
+    const projection = createLocalMetricProjection(viewportBbox);
+    const projectedLines: DirectedMetricLine[] = clippedFragments.map((fragment) => ({
+      sourceId: fragment.sourceId,
+      closed:
+        fragment.coordinates.length > 2 &&
+        pointsAlmostEqual(fragment.coordinates[0], fragment.coordinates.at(-1)!),
+      coordinates: fragment.coordinates.map((point) => projectLonLat(point, projection)),
+    }));
+    const preprocessStart = performance.now();
+    const cleaned = cleanDirectedMetricLines(projectedLines);
+    diagnostics.deduplicated_segments = cleaned.outputSegments;
+    const simplified = simplifyMetricLinesForBudget(
+      cleaned.lines,
+      viewportBbox,
+      projection,
+      segmentBudgetOptions
     );
-  }
+    diagnostics.simplify_ms = performance.now() - preprocessStart;
+    diagnostics.simplified_segments = simplified.simplifiedSegments;
+    diagnostics.simplification_tolerance_m = simplified.toleranceMeters;
 
-  const nodePolygonizeStart = performance.now();
-  const geometryNoder = new GeometryNoder(new PrecisionModel(1_000_000_000));
-  geometryNoder.setValidate(true);
-  const nodedLinework = geometryNoder.node(lineGeometries);
-  polygonizer.add(nodedLinework);
-
-  const polygonCollection = polygonizer.getPolygons();
-  if (!polygonCollection || polygonCollection.size() === 0) {
-    diagnostics.skipped_reason = "no-candidate-faces";
-    return { polygons: [], diagnostics };
-  }
-
-  const polygons = polygonCollection
-    .toArray()
-    .map((geometry) => geometryToGeoJSONPolygon(geometry))
-    .filter((polygon): polygon is Polygon => polygon !== null)
-    .filter((polygon) => turfArea(turfPolygon(polygon.coordinates)) > MIN_SEA_POLYGON_AREA_M2);
-  diagnostics.node_polygonize_ms = performance.now() - nodePolygonizeStart;
-  diagnostics.candidate_faces = polygons.length;
-
-  if (polygons.length === 0) {
-    diagnostics.skipped_reason = "no-candidate-faces";
-    return { polygons: [], diagnostics };
-  }
-
-  const faceIndex = buildFaceSpatialIndex(polygons, viewportBbox);
-  const classifyStart = performance.now();
-  const evidence = polygons.map((): FaceEvidence => ({ water: 0, land: 0 }));
-  const sampleOffset = buildDirectionalSampleOffset(viewportBbox);
-  let totalSupport = 0;
-
-  for (const fragment of clippedFragments) {
-    for (let pointIndex = 0; pointIndex < fragment.length - 1; pointIndex++) {
-      const start = fragment[pointIndex];
-      const end = fragment[pointIndex + 1];
-      const dx = end[0] - start[0];
-      const dy = end[1] - start[1];
-      const length = Math.hypot(dx, dy);
-      if (length <= COORD_EPSILON) continue;
-      diagnostics.sampled_segments++;
-
-      const midpoint: LonLatPoint = [(start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5];
-      let rightFaceIndex = -1;
-      let leftFaceIndex = -1;
-
-      // A noded coastline can pass very close to a boundary or an intersection.
-      // Retry a bounded set of offsets before classifying that segment as ambiguous.
-      for (const offsetMultiplier of [1, 0.25, 4]) {
-        const offset = sampleOffset * offsetMultiplier;
-        const rightSample: LonLatPoint = [
-          midpoint[0] + (dy / length) * offset,
-          midpoint[1] - (dx / length) * offset,
-        ];
-        const leftSample: LonLatPoint = [
-          midpoint[0] - (dy / length) * offset,
-          midpoint[1] + (dx / length) * offset,
-        ];
-        const nextRightFaceIndex = findFaceIndexContainingPoint(rightSample, polygons, faceIndex);
-        const nextLeftFaceIndex = findFaceIndexContainingPoint(leftSample, polygons, faceIndex);
-        if (
-          nextRightFaceIndex !== -1 &&
-          nextLeftFaceIndex !== -1 &&
-          nextRightFaceIndex !== nextLeftFaceIndex
-        ) {
-          rightFaceIndex = nextRightFaceIndex;
-          leftFaceIndex = nextLeftFaceIndex;
-          break;
-        }
-      }
-
-      // A coastline must separate two distinct polygonized faces. Ambiguous input
-      // safely declines sea generation instead of risking a land-overwriting fill.
-      if (rightFaceIndex === -1 || leftFaceIndex === -1 || rightFaceIndex === leftFaceIndex) {
-        diagnostics.ambiguous_segments++;
-        diagnostics.classify_ms = performance.now() - classifyStart;
-        diagnostics.skipped_reason = "ambiguous-segment";
-        return { polygons: [], diagnostics };
-      }
-
-      evidence[rightFaceIndex].water += length;
-      evidence[leftFaceIndex].land += length;
-      totalSupport += length;
+    if (simplified.exceededHardLimit || !simplified.structurePreserved) {
+      diagnostics.skipped_reason = "processing-budget-after-simplification";
+      return { polygons: [], diagnostics };
     }
-  }
 
-  if (totalSupport <= 0) {
-    diagnostics.classify_ms = performance.now() - classifyStart;
-    diagnostics.skipped_reason = "no-support";
-    return { polygons: [], diagnostics };
-  }
-  diagnostics.total_directional_support = totalSupport;
+    const southwest = projectLonLat([viewportBbox[0], viewportBbox[1]], projection);
+    const northeast = projectLonLat([viewportBbox[2], viewportBbox[3]], projection);
+    const metricBbox: MetricBbox = [southwest[0], southwest[1], northeast[0], northeast[1]];
+    const topology = buildTopologyFaces(simplified.lines, metricBbox, simplified.toleranceMeters);
+    diagnostics.node_polygonize_ms =
+      topology.diagnostics.nodeMs + topology.diagnostics.polygonizeMs;
+    diagnostics.classify_ms = topology.diagnostics.classifyMs;
+    diagnostics.noded_segments = topology.diagnostics.nodedSegments;
+    diagnostics.matched_coastline_segments = topology.diagnostics.matchedCoastlineSegments;
+    diagnostics.unmatched_coastline_segments = topology.diagnostics.unmatchedCoastlineSegments;
+    diagnostics.candidate_faces = topology.diagnostics.candidateFaces;
+    diagnostics.accepted_faces = topology.diagnostics.acceptedFaces;
+    diagnostics.rejected_conflict_faces = topology.diagnostics.rejectedConflictFaces;
+    diagnostics.rejected_insufficient_support_faces =
+      topology.diagnostics.rejectedInsufficientSupportFaces;
 
-  const minDirectionalSupport = totalSupport * MIN_DIRECTIONAL_SUPPORT_RATIO;
-
-  const seen = new Set<string>();
-
-  const seaPolygons = polygons
-    .filter((polygon, index) => {
-      const faceEvidence = evidence[index];
-      return (
-        faceEvidence.water >= minDirectionalSupport &&
-        faceEvidence.land <= COORD_EPSILON &&
-        polygonTouchesViewportBoundary(polygon, viewportBbox)
-      );
-    })
-    .map(
-      (polygon): Feature<Polygon> => ({
+    const polygons = topology.acceptedFaces.map(
+      (face): Feature<Polygon> => ({
         type: "Feature",
-        geometry: polygon,
+        geometry: {
+          type: "Polygon",
+          coordinates: face.map((ring) =>
+            ring.map((point) => unprojectMetricPoint(point, projection))
+          ),
+        },
         properties: {
           generated: "coastline-sea",
           natural: "sea",
           generator_version: SEA_GENERATOR_VERSION,
-          classification: "right-side-confidence",
+          classification: "right-side-topology",
         },
       })
-    )
-    .filter((feature) => {
-      const key = JSON.stringify(
-        feature.geometry.coordinates[0].map(([lng, lat]) => [
-          roundCoord(lng, 6),
-          roundCoord(lat, 6),
-        ])
-      );
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
-  diagnostics.generated_faces = seaPolygons.length;
-  diagnostics.classify_ms = performance.now() - classifyStart;
-  return { polygons: seaPolygons, diagnostics };
-}
-
-function buildDirectionalSampleOffset(bbox: BBox): number {
-  const width = Math.abs(bbox[2] - bbox[0]);
-  const height = Math.abs(bbox[3] - bbox[1]);
-  return Math.max(Math.hypot(width, height) / 10_000, COORD_EPSILON * 100);
-}
-
-function buildFaceSpatialIndex(polygons: Polygon[], bbox: BBox): FaceSpatialIndex {
-  const dimension = Math.min(64, Math.max(4, Math.ceil(Math.sqrt(polygons.length))));
-  const index: FaceSpatialIndex = {
-    bbox,
-    columns: dimension,
-    rows: dimension,
-    cells: new Map<string, number[]>(),
-  };
-
-  for (let polygonIndex = 0; polygonIndex < polygons.length; polygonIndex++) {
-    const polygonBbox = getPolygonBbox(polygons[polygonIndex]);
-    const [minColumn, minRow] = pointToFaceCell([polygonBbox[0], polygonBbox[1]], index);
-    const [maxColumn, maxRow] = pointToFaceCell([polygonBbox[2], polygonBbox[3]], index);
-
-    for (let column = minColumn; column <= maxColumn; column++) {
-      for (let row = minRow; row <= maxRow; row++) {
-        const key = faceCellKey(column, row);
-        const bucket = index.cells.get(key);
-        if (bucket) {
-          bucket.push(polygonIndex);
-        } else {
-          index.cells.set(key, [polygonIndex]);
-        }
-      }
-    }
+    );
+    diagnostics.generated_faces = polygons.length;
+    if (polygons.length === 0) diagnostics.skipped_reason = "no-support";
+    return { polygons, diagnostics };
+  } catch {
+    diagnostics.skipped_reason = "topology-error";
+    return { polygons: [], diagnostics };
   }
-
-  return index;
-}
-
-function findFaceIndexContainingPoint(
-  point: LonLatPoint,
-  polygons: Polygon[],
-  faceIndex: FaceSpatialIndex
-): number {
-  const [column, row] = pointToFaceCell(point, faceIndex);
-  const candidates = faceIndex.cells.get(faceCellKey(column, row)) ?? [];
-
-  for (const polygonIndex of candidates) {
-    const polygon = polygons[polygonIndex];
-    if (pointInPolygon(point, polygon)) {
-      return polygonIndex;
-    }
-  }
-
-  return -1;
-}
-
-function pointToFaceCell(point: LonLatPoint, index: FaceSpatialIndex): [number, number] {
-  const [minLng, minLat, maxLng, maxLat] = index.bbox;
-  const column = Math.floor(((point[0] - minLng) / (maxLng - minLng || 1)) * index.columns);
-  const row = Math.floor(((point[1] - minLat) / (maxLat - minLat || 1)) * index.rows);
-  return [
-    Math.max(0, Math.min(index.columns - 1, column)),
-    Math.max(0, Math.min(index.rows - 1, row)),
-  ];
-}
-
-function faceCellKey(column: number, row: number): string {
-  return `${column}:${row}`;
-}
-
-function getPolygonBbox(polygon: Polygon): BBox {
-  let minLng = Infinity;
-  let minLat = Infinity;
-  let maxLng = -Infinity;
-  let maxLat = -Infinity;
-
-  for (const ring of polygon.coordinates) {
-    for (const [lng, lat] of ring as LonLatPoint[]) {
-      minLng = Math.min(minLng, lng);
-      minLat = Math.min(minLat, lat);
-      maxLng = Math.max(maxLng, lng);
-      maxLat = Math.max(maxLat, lat);
-    }
-  }
-
-  return [minLng, minLat, maxLng, maxLat];
-}
-
-function polygonTouchesViewportBoundary(polygon: Polygon, bbox: BBox): boolean {
-  const exteriorRing = polygon.coordinates[0] as LonLatPoint[] | undefined;
-  if (!exteriorRing) return false;
-
-  const [minLng, minLat, maxLng, maxLat] = bbox;
-  return exteriorRing.some(
-    ([lng, lat]) =>
-      Math.abs(lng - minLng) <= BOUNDARY_TOLERANCE ||
-      Math.abs(lng - maxLng) <= BOUNDARY_TOLERANCE ||
-      Math.abs(lat - minLat) <= BOUNDARY_TOLERANCE ||
-      Math.abs(lat - maxLat) <= BOUNDARY_TOLERANCE
-  );
 }
 
 function featureToLineStrings(feature: Feature<LineString | MultiLineString>): LonLatPoint[][] {
@@ -470,145 +274,6 @@ function featureToLineStrings(feature: Feature<LineString | MultiLineString>): L
   }
 
   return feature.geometry.coordinates.map((line) => line as LonLatPoint[]);
-}
-
-function mergeConnectedLineStrings(lineStrings: LonLatPoint[][]): LonLatPoint[][] {
-  const segments = lineStrings.filter((line) => line.length >= 2);
-  if (segments.length <= 1) {
-    return segments.map((line) => [...line]);
-  }
-
-  const endpointIndex = buildEndpointIndex(segments);
-  const used = new Uint8Array(segments.length);
-  const merged: LonLatPoint[][] = [];
-
-  for (let i = 0; i < segments.length; i++) {
-    if (used[i]) continue;
-
-    const current = [...segments[i]];
-    used[i] = 1;
-
-    extendLineEnd(current, segments, endpointIndex, used);
-    current.reverse();
-    extendLineEnd(current, segments, endpointIndex, used);
-    current.reverse();
-
-    merged.push(current);
-  }
-
-  return merged;
-}
-
-function buildEndpointIndex(lineStrings: LonLatPoint[][]): Map<string, number[]> {
-  const endpointIndex = new Map<string, number[]>();
-
-  for (let i = 0; i < lineStrings.length; i++) {
-    addEndpoint(endpointIndex, lineStrings[i][0], i);
-    addEndpoint(endpointIndex, lineStrings[i][lineStrings[i].length - 1], i);
-  }
-
-  return endpointIndex;
-}
-
-function addEndpoint(index: Map<string, number[]>, point: LonLatPoint, lineIndex: number) {
-  const key = pointKey(point);
-  const bucket = index.get(key);
-  if (bucket) {
-    bucket.push(lineIndex);
-  } else {
-    index.set(key, [lineIndex]);
-  }
-}
-
-function extendLineEnd(
-  line: LonLatPoint[],
-  segments: LonLatPoint[][],
-  endpointIndex: Map<string, number[]>,
-  used: Uint8Array
-) {
-  while (true) {
-    const endpoint = line[line.length - 1];
-    const candidates = endpointIndex.get(pointKey(endpoint));
-    if (!candidates) {
-      return;
-    }
-
-    let nextIndex = -1;
-    let reverse = false;
-
-    for (const candidateIndex of candidates) {
-      if (used[candidateIndex]) continue;
-
-      const candidate = segments[candidateIndex];
-      if (pointsAlmostEqual(endpoint, candidate[0])) {
-        nextIndex = candidateIndex;
-        reverse = false;
-        break;
-      }
-      if (pointsAlmostEqual(endpoint, candidate[candidate.length - 1])) {
-        nextIndex = candidateIndex;
-        reverse = true;
-        break;
-      }
-    }
-
-    if (nextIndex === -1) {
-      return;
-    }
-
-    used[nextIndex] = 1;
-    appendLine(line, segments[nextIndex], reverse);
-  }
-}
-
-function appendLine(target: LonLatPoint[], source: LonLatPoint[], reverse: boolean) {
-  if (reverse) {
-    for (let i = source.length - 2; i >= 0; i--) {
-      pushUniquePoint(target, source[i]);
-    }
-    return;
-  }
-
-  for (let i = 1; i < source.length; i++) {
-    pushUniquePoint(target, source[i]);
-  }
-}
-
-function buildViewportBoundarySegments(bbox: BBox): LonLatPoint[][] {
-  const [minLng, minLat, maxLng, maxLat] = bbox;
-
-  return [
-    [
-      [minLng, minLat],
-      [maxLng, minLat],
-    ],
-    [
-      [maxLng, minLat],
-      [maxLng, maxLat],
-    ],
-    [
-      [maxLng, maxLat],
-      [minLng, maxLat],
-    ],
-    [
-      [minLng, maxLat],
-      [minLng, minLat],
-    ],
-  ];
-}
-
-function geometryToGeoJSONPolygon(geometry: unknown): Polygon | null {
-  const geoJson = geoJsonWriter.write(geometry as never) as Polygon | null;
-  if (!geoJson || geoJson.type !== "Polygon" || !Array.isArray(geoJson.coordinates)) {
-    return null;
-  }
-
-  return {
-    type: "Polygon",
-    coordinates: geoJson.coordinates.map((ring) =>
-      ring.map(([lng, lat]) => [lng, lat] as LonLatPoint)
-    ),
-  };
 }
 
 function clipLineStringToBbox(coords: LonLatPoint[], bbox: BBox): LonLatPoint[][] {
@@ -708,43 +373,6 @@ function computeOutCode(x: number, y: number, bbox: BBox): number {
   return code;
 }
 
-function pointInPolygon(point: LonLatPoint, polygon: Polygon): boolean {
-  if (polygon.coordinates.length === 0) {
-    return false;
-  }
-
-  if (!pointInRing(point, polygon.coordinates[0] as LonLatPoint[])) {
-    return false;
-  }
-
-  for (let i = 1; i < polygon.coordinates.length; i++) {
-    if (pointInRing(point, polygon.coordinates[i] as LonLatPoint[])) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function pointInRing(point: LonLatPoint, ring: LonLatPoint[]): boolean {
-  const [x, y] = point;
-  let inside = false;
-
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
-
-    const intersects =
-      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi || Number.EPSILON) + xi;
-
-    if (intersects) {
-      inside = !inside;
-    }
-  }
-
-  return inside;
-}
-
 function snapPointToBoundary(point: LonLatPoint, bbox: BBox): LonLatPoint {
   let [lng, lat] = point;
   const [minLng, minLat, maxLng, maxLat] = bbox;
@@ -765,13 +393,4 @@ function pushUniquePoint(points: LonLatPoint[], nextPoint: LonLatPoint) {
 
 function pointsAlmostEqual(a: LonLatPoint, b: LonLatPoint): boolean {
   return Math.abs(a[0] - b[0]) <= COORD_EPSILON && Math.abs(a[1] - b[1]) <= COORD_EPSILON;
-}
-
-function pointKey(point: LonLatPoint): string {
-  return `${roundCoord(point[0], ENDPOINT_KEY_DIGITS)},${roundCoord(point[1], ENDPOINT_KEY_DIGITS)}`;
-}
-
-function roundCoord(value: number, digits: number): number {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
 }

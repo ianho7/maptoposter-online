@@ -27,6 +27,7 @@ import {
   type PoiSource,
 } from "@/lib/types";
 import { mapDataService } from "./services/map-data";
+import { MAP_DATA_CACHE_VERSION } from "@/lib/poster-viewport";
 import { type State, type City, type District } from "@/services/location-types";
 // Paraglide i18n
 import * as m from "@/paraglide/messages";
@@ -1692,6 +1693,9 @@ export default function MapPosterGenerator() {
       setGenerationProgress(progress);
     };
     mapDataService.setProgressCallback(progressHandler);
+    mapDataService.setDiagnosticLogCallback((line) => {
+      appendDiagnosticLog(`[DataWorker] ${line}`);
+    });
 
     try {
       await ensureWasmInitialized();
@@ -1739,6 +1743,7 @@ export default function MapPosterGenerator() {
       } = mapResults;
       logClientTiming("mapData", "getMapData", {
         total: performance.now() - mapDataStart,
+        cacheVersion: MAP_DATA_CACHE_VERSION,
         cacheLevel: cacheLevel ?? "unknown",
         roads: roads.length.toString(),
         water: water.length.toString(),
@@ -2027,6 +2032,7 @@ export default function MapPosterGenerator() {
         )} generationCompleteRef=${String(generationCompleteRef.current)}`
       );
       mapDataService.setProgressCallback(null);
+      mapDataService.setDiagnosticLogCallback(null);
       if (!isGameOpenRef.current) {
         logDiagnosticMessage("[App] finally: closing loading because game is not open");
         setIsGenerating(false);

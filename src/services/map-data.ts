@@ -23,23 +23,30 @@ export interface POIData {
 
 // 进度回调类型
 export type ProgressCallback = (progress: number, step: string) => void;
+export type DiagnosticLogCallback = (line: string) => void;
 
-class MapDataService {
+export class MapDataService {
   private memoryCache = new Map<string, MapData>();
   private worker: Worker | null = null;
   private pendingRequests = new Map<number, { resolve: Function; reject: Function }>();
   private requestId = 0;
   private progressCallback: ProgressCallback | null = null;
+  private diagnosticLogCallback: DiagnosticLogCallback | null = null;
 
   constructor() {
     if (typeof window !== "undefined") {
       this.worker = new Worker(new URL("../data-worker.ts", import.meta.url), { type: "module" });
       this.worker.onmessage = (event) => {
-        const { id, success, payload, error, progress, step, type } = event.data;
+        const { id, success, payload, error, progress, step, type, line } = event.data;
 
         // 处理进度消息
         if (type === "PROGRESS" && this.progressCallback) {
           this.progressCallback(progress, step);
+          return;
+        }
+
+        if (type === "DIAGNOSTIC_LOG") {
+          this.diagnosticLogCallback?.(line);
           return;
         }
 
@@ -59,6 +66,10 @@ class MapDataService {
   // 设置进度回调
   setProgressCallback(callback: ProgressCallback | null) {
     this.progressCallback = callback;
+  }
+
+  setDiagnosticLogCallback(callback: DiagnosticLogCallback | null) {
+    this.diagnosticLogCallback = callback;
   }
 
   /**

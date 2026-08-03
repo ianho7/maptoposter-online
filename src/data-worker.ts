@@ -61,6 +61,10 @@ function sendProgress(progress: number, step: string) {
   (self as WorkerSelf).postMessage({ type: "PROGRESS", progress, step });
 }
 
+function sendDiagnosticLog(line: string) {
+  (self as WorkerSelf).postMessage({ type: "DIAGNOSTIC_LOG", line });
+}
+
 function formatMs(duration: number): string {
   return `${Math.round(duration)}ms`;
 }
@@ -73,7 +77,9 @@ function logTiming(
   const parts = Object.entries(timings)
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => `${key}=${typeof value === "number" ? formatMs(value) : value}`);
-  console.log(`[Timing][${scope}][${name}] ${parts.join(" ")}`);
+  const line = `[Timing][${scope}][${name}] ${parts.join(" ")}`;
+  console.log(line);
+  sendDiagnosticLog(line);
 }
 
 // 创建带基础进度的进度回调
@@ -160,14 +166,21 @@ function mergeWaterGeoForViewport(
     onSeaDiagnostics: (diagnostics: SeaPolygonDiagnostics) => {
       logTiming("sea", source, {
         clip: diagnostics.clip_ms,
-        merge: diagnostics.merge_ms,
+        simplify: diagnostics.simplify_ms,
         nodePolygonize: diagnostics.node_polygonize_ms,
         classify: diagnostics.classify_ms,
         fragments: diagnostics.clipped_fragments.toString(),
-        segments: diagnostics.clipped_segments.toString(),
+        inputSegments: diagnostics.input_segments.toString(),
+        deduplicatedSegments: diagnostics.deduplicated_segments.toString(),
+        simplifiedSegments: diagnostics.simplified_segments.toString(),
+        simplificationToleranceM: diagnostics.simplification_tolerance_m,
+        nodedSegments: diagnostics.noded_segments.toString(),
+        matchedCoastlineSegments: diagnostics.matched_coastline_segments.toString(),
+        unmatchedCoastlineSegments: diagnostics.unmatched_coastline_segments.toString(),
         faces: diagnostics.candidate_faces.toString(),
-        generated: diagnostics.generated_faces.toString(),
-        ambiguous: diagnostics.ambiguous_segments.toString(),
+        accepted: diagnostics.accepted_faces.toString(),
+        rejectedConflict: diagnostics.rejected_conflict_faces.toString(),
+        rejectedInsufficientSupport: diagnostics.rejected_insufficient_support_faces.toString(),
         skipped: diagnostics.skipped_reason,
       });
     },

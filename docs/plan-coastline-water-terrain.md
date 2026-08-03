@@ -41,6 +41,8 @@ Overpass water GeoJSON
 
 ### Implementation status (2026-07-23)
 
+> 2026-08-01 更新：本节的 `directed-coastline-v1` 偏移采样方案已由 [海岸线拓扑分类 V2](./plan-coastline-topology-v2.md) 取代。迁移原因是固定线段预算和任一局部采样歧义都会使整片外海归零；V2 改用分辨率感知简化、带来源切分和精确区域边邻接。水体优先于绿地、递归成员语义过滤和 WASM 图层顺序结论保持不变。
+
 - Implemented: the center-point sea classifier was replaced with directed right-side face evidence, a bounded face index, provenance, and safe rejection of ambiguous linework.
 - Implemented: PNG, SVG, legacy JSON, uniform-scale, and non-uniform-scale paths now draw `parks` before `water`; the road terrain switch no longer controls that relationship. The obsolete park-water offscreen mask was removed.
 - Implemented: cache version was advanced to `v11-canonical-fetch-viewport-semantic-terrain-filtering`; legacy generated sea is removed before a fresh classification and pre-filter terrain cache entries cannot be reused.
