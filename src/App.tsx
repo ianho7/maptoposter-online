@@ -2275,9 +2275,18 @@ export default function MapPosterGenerator() {
                       setHighlightRoadData(null);
                       setHighlightRoadBbox(null);
                     }}
-                    onSearchSuggestions={(keyword) =>
-                      searchRoadNames(keyword, location.lat ?? 0, location.lng ?? 0, baseRadius)
-                    }
+                    onSearchSuggestions={async (keyword) => {
+                      const cached = await mapDataService.searchRoadNames(
+                        location.country ?? "",
+                        location.city ?? "",
+                        baseRadius,
+                        lodMode,
+                        keyword,
+                        location.district
+                      );
+                      if (cached.length > 0) return cached;
+                      return searchRoadNames(keyword, location.lat ?? 0, location.lng ?? 0, baseRadius);
+                    }}
                   />
                 </div>
 

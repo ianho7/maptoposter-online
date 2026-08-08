@@ -171,6 +171,31 @@ export class MapDataService {
       isProtomaps: mapData.isProtomaps,
     };
   }
+  async searchRoadNames(
+    country: string,
+    city: string,
+    baseRadius: number,
+    lodMode: "simplified" | "detailed",
+    keyword: string,
+    district?: string
+  ): Promise<Array<{ name: string; nameZh?: string; nameEn?: string }>> {
+    if (!this.worker || !keyword.trim()) return [];
+
+    const id = this.requestId++;
+    const promise = new Promise<Array<{ name: string; nameZh?: string; nameEn?: string }>>(
+      (resolve, reject) => {
+        this.pendingRequests.set(id, { resolve, reject });
+      }
+    );
+
+    this.worker.postMessage({
+      id,
+      type: "SEARCH_ROAD_NAMES",
+      payload: { country, city, baseRadius, lodMode, keyword: keyword.trim(), district },
+    });
+
+    return promise;
+  }
 }
 
 export const mapDataService = new MapDataService();

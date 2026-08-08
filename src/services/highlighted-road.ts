@@ -1,4 +1,4 @@
-import { OVERPASS_RACE_SERVERS } from "./overpass-client/config";
+import { overpassRequest } from "./overpass-client/overpass";
 
 export interface HighlightedRoadResult {
   geojson: GeoJSON.FeatureCollection;
@@ -11,6 +11,21 @@ export interface RoadSuggestion {
   nameEn?: string;
 }
 
+function buildBbox(
+  centerLat: number,
+  centerLon: number,
+  radiusMeters: number
+): string {
+  const degPerMeter = 1 / 111320;
+  const latDelta = radiusMeters * degPerMeter;
+  const lonDelta = radiusMeters * degPerMeter / Math.cos(centerLat * Math.PI / 180);
+  const south = centerLat - latDelta;
+  const north = centerLat + latDelta;
+  const west = centerLon - lonDelta;
+  const east = centerLon + lonDelta;
+  return `${south},${west},${north},${east}`;
+}
+
 export async function searchRoadNames(
   keyword: string,
   centerLat: number,
@@ -19,53 +34,25 @@ export async function searchRoadNames(
 ): Promise<RoadSuggestion[]> {
   if (!keyword.trim()) return [];
 
-  const degPerMeter = 1 / 111320;
-  const latDelta = radiusMeters * degPerMeter;
-  const lonDelta = radiusMeters * degPerMeter / Math.cos(centerLat * Math.PI / 180);
-  const south = centerLat - latDelta;
-  const north = centerLat + latDelta;
-  const west = centerLon - lonDelta;
-  const east = centerLon + lonDelta;
-  const bbox = `${south},${west},${north},${east}`;
-
+  const bbox = buildBbox(centerLat, centerLon, radiusMeters);
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const query = `[out:json][timeout:10];way["highway"]["name"~"${escaped}",i](${bbox});out tags 50;`;
 
-  const servers = [...OVERPASS_RACE_SERVERS];
-  let lastError: Error | null = null;
+  const json = await overpassRequest(query, 3) as { elements?: Array<{ tags?: Record<string, string> }> };
 
-  for (const server of servers) {
-    try {
-      const interpreterUrl = `${server.replace(/\/+$/, "")}/interpreter`;
-      const res = await fetch(interpreterUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(query)}`,
-      });
-      if (!res.ok) {
-        lastError = new Error(`Overpass ${res.status}: ${res.statusText}`);
-        continue;
-      }
-      const json = await res.json();
-      const seen = new Set<string>();
-      const results: RoadSuggestion[] = [];
-      for (const el of json.elements ?? []) {
-        const name = el.tags?.name;
-        if (!name || seen.has(name)) continue;
-        seen.add(name);
-        results.push({
-          name,
-          nameZh: el.tags?.["name:zh"],
-          nameEn: el.tags?.["name:en"],
-        });
-      }
-      return results;
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
-    }
+  const seen = new Set<string>();
+  const results: RoadSuggestion[] = [];
+  for (const el of json.elements ?? []) {
+    const name = el.tags?.name;
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    results.push({
+      name,
+      nameZh: el.tags?.["name:zh"],
+      nameEn: el.tags?.["name:en"],
+    });
   }
-
-  throw lastError ?? new Error("All Overpass servers failed");
+  return results;
 }
 
 export async function fetchHighlightedRoad(
@@ -74,40 +61,11 @@ export async function fetchHighlightedRoad(
   centerLon: number,
   radiusMeters: number
 ): Promise<HighlightedRoadResult> {
-  const degPerMeter = 1 / 111320;
-  const latDelta = radiusMeters * degPerMeter;
-  const lonDelta = radiusMeters * degPerMeter / Math.cos(centerLat * Math.PI / 180);
-  const south = centerLat - latDelta;
-  const north = centerLat + latDelta;
-  const west = centerLon - lonDelta;
-  const east = centerLon + lonDelta;
-  const bbox = `${south},${west},${north},${east}`;
-
+  const bbox = buildBbox(centerLat, centerLon, radiusMeters);
   const query = `[out:json][timeout:30];(way["name"="${roadName}"](${bbox});way["name:zh"="${roadName}"](${bbox});way["name:en"="${roadName}"](${bbox}););out geom;`;
 
-  const servers = [...OVERPASS_RACE_SERVERS];
-  let lastError: Error | null = null;
-
-  for (const server of servers) {
-    try {
-      const interpreterUrl = `${server.replace(/\/+$/, "")}/interpreter`;
-      const res = await fetch(interpreterUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(query)}`,
-      });
-      if (!res.ok) {
-        lastError = new Error(`Overpass ${res.status}: ${res.statusText}`);
-        continue;
-      }
-      const json = await res.json();
-      return parseOverpassToGeoJSON(json);
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
-    }
-  }
-
-  throw lastError ?? new Error("All Overpass servers failed");
+  const json = await overpassRequest(query, 3);
+  return parseOverpassToGeoJSON(json as Parameters<typeof parseOverpassToGeoJSON>[0]);
 }
 
 function parseOverpassToGeoJSON(

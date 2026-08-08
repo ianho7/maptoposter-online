@@ -731,6 +731,40 @@ self.onmessage = async (event: MessageEvent) => {
         },
         transferList
       );
+    } else if (type === "SEARCH_ROAD_NAMES") {
+      const { country, city, baseRadius, lodMode, keyword, district } = payload;
+      const key = createCacheKey(country, city, baseRadius, lodMode, "roads", district);
+      const db = await getDB();
+      const blob = await db.get(STORE_NAME, key);
+
+      const results: Array<{ name: string; nameZh?: string; nameEn?: string }> = [];
+
+      if (blob) {
+        const rawJson = await decompress(blob);
+        const json = JSON.parse(rawJson) as GeoJSON.FeatureCollection;
+        const lowerKeyword = keyword.toLowerCase();
+        const seen = new Set<string>();
+
+        for (const feature of json.features) {
+          const props = (feature as any).properties;
+          if (!props) continue;
+          const name: string | undefined = props.name;
+          if (!name || seen.has(name)) continue;
+          const nameZh: string | undefined = props["name:zh"];
+          const nameEn: string | undefined = props["name:en"];
+          if (
+            name.toLowerCase().includes(lowerKeyword) ||
+            (nameZh && nameZh.includes(keyword)) ||
+            (nameEn && nameEn.toLowerCase().includes(lowerKeyword))
+          ) {
+            seen.add(name);
+            results.push({ name, nameZh, nameEn });
+            if (results.length >= 50) break;
+          }
+        }
+      }
+
+      (self as WorkerSelf).postMessage({ id, success: true, payload: results });
     }
   } catch (error) {
     self.postMessage({
