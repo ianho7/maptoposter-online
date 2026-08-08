@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use tiny_skia::Color;
 
 use crate::projection;
-use crate::types::{BoundingBox, PinThemeConfig, PinThemeStyle, PoiShape, RoadRenderStats, RoadType, TextPosition, Theme};
+use crate::types::{BoundingBox, PinThemeConfig, PinThemeStyle, PoiShape, RoadRenderStats, RoadType, TextPosition, Theme, ROAD_TYPE_COUNT};
 use crate::utils::{calculate_font_size, format_city_name, format_coordinates, parse_hex_color};
 
 pub struct SvgRenderer {
@@ -103,7 +103,7 @@ impl SvgRenderer {
             Some(mask_id)
         };
 
-        let mut combined_paths: [String; 6] = std::array::from_fn(|_| String::new());
+        let mut combined_paths: [String; ROAD_TYPE_COUNT] = std::array::from_fn(|_| String::new());
         for shard in road_shards {
             if shard.is_empty() {
                 continue;
@@ -111,7 +111,7 @@ impl SvgRenderer {
             let build_start = crate::utils::performance_now();
             let (shard_paths, raw_points, simplified_points) = self.build_road_path_data(shard);
             stats.build_paths_ms += crate::utils::performance_now() - build_start;
-            for i in 0..6 {
+            for i in 0..ROAD_TYPE_COUNT {
                 combined_paths[i].push_str(&shard_paths[i]);
                 stats.record_points(i, raw_points[i], simplified_points[i]);
             }
@@ -133,7 +133,7 @@ impl SvgRenderer {
 
         let mut stats = RoadRenderStats::default();
         let scale_factor = scale_factor.max(0.0);
-        let mut combined_paths: [String; 6] = std::array::from_fn(|_| String::new());
+        let mut combined_paths: [String; ROAD_TYPE_COUNT] = std::array::from_fn(|_| String::new());
         for shard in road_shards {
             if shard.is_empty() {
                 continue;
@@ -141,7 +141,7 @@ impl SvgRenderer {
             let build_start = crate::utils::performance_now();
             let (shard_paths, raw_points, simplified_points) = self.build_road_path_data(shard);
             stats.build_paths_ms += crate::utils::performance_now() - build_start;
-            for i in 0..6 {
+            for i in 0..ROAD_TYPE_COUNT {
                 combined_paths[i].push_str(&shard_paths[i]);
                 stats.record_points(i, raw_points[i], simplified_points[i]);
             }
@@ -153,7 +153,7 @@ impl SvgRenderer {
 
     fn draw_road_paths(
         &mut self,
-        paths: &[String; 6],
+        paths: &[String; ROAD_TYPE_COUNT],
         scale_factor: f32,
         mask_id: Option<&str>,
         stats: &mut RoadRenderStats,
@@ -162,8 +162,8 @@ impl SvgRenderer {
             .map(|id| format!(r#" mask="url(#{id})""#))
             .unwrap_or_default();
 
-        const DRAW_ORDER: [usize; 6] = [5, 4, 3, 2, 1, 0];
-        let path_ids: [Option<String>; 6] = std::array::from_fn(|idx| {
+        const DRAW_ORDER: [usize; ROAD_TYPE_COUNT] = [5, 4, 3, 2, 1, 0, 6];
+        let path_ids: [Option<String>; ROAD_TYPE_COUNT] = std::array::from_fn(|idx| {
             if paths[idx].is_empty() {
                 None
             } else {
@@ -499,6 +499,7 @@ impl SvgRenderer {
             RoadType::Tertiary => &self.theme.road_tertiary,
             RoadType::Residential => &self.theme.road_residential,
             RoadType::Default => &self.theme.road_default,
+            RoadType::Highlighted => &self.theme.road_highlighted,
         }
     }
 
@@ -557,11 +558,11 @@ impl SvgRenderer {
         paths
     }
 
-    fn build_road_path_data(&self, data: &[f64]) -> ([String; 6], [usize; 6], [usize; 6]) {
+    fn build_road_path_data(&self, data: &[f64]) -> ([String; ROAD_TYPE_COUNT], [usize; ROAD_TYPE_COUNT], [usize; ROAD_TYPE_COUNT]) {
         let road_count = data[0] as usize;
-        let mut paths: [String; 6] = std::array::from_fn(|_| String::new());
-        let mut raw_points = [0usize; 6];
-        let mut simplified_points = [0usize; 6];
+        let mut paths: [String; ROAD_TYPE_COUNT] = std::array::from_fn(|_| String::new());
+        let mut raw_points = [0usize; ROAD_TYPE_COUNT];
+        let mut simplified_points = [0usize; ROAD_TYPE_COUNT];
         let mut offset = 1;
 
         for _ in 0..road_count {
@@ -572,7 +573,7 @@ impl SvgRenderer {
             let count = data[offset + 1] as usize;
             offset += 2;
 
-            if t < 6 && offset + count * 2 <= data.len() && count >= 2 {
+            if t < ROAD_TYPE_COUNT && offset + count * 2 <= data.len() && count >= 2 {
                 raw_points[t] += count;
                 let coords: Vec<(f32, f32)> = (0..count)
                     .map(|i| self.world_to_screen((data[offset + i * 2], data[offset + i * 2 + 1])))
@@ -593,6 +594,7 @@ impl SvgRenderer {
     #[inline]
     fn road_simplify_epsilon_sq(road_type: RoadType) -> f32 {
         match road_type {
+            RoadType::Highlighted => 0.25 * 0.25,
             RoadType::Motorway | RoadType::Primary => 0.5 * 0.5,
             RoadType::Secondary => 0.75 * 0.75,
             RoadType::Tertiary => 1.0 * 1.0,

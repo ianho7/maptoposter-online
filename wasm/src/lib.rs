@@ -149,6 +149,10 @@ pub struct BinaryRenderConfig {
     pub pin_theme_config: types::PinThemeConfig,
     #[serde(default)]
     pub render_scale_config: Option<types::DiagnosticSamplingConfig>,
+    #[serde(default = "types::default_false")]
+    pub road_poster_mode: bool,
+    #[serde(default)]
+    pub road_poster_road_name: Option<String>,
 }
 
 /// 主渲染函数 (二进制直读版本)
@@ -236,7 +240,7 @@ fn render_map_binary_internal(
     ));
 
     let mut total_roads = 0usize;
-    let mut road_type_counts = [0usize; 6];
+    let mut road_type_counts = [0usize; types::ROAD_TYPE_COUNT];
 
     for shard in &road_shards {
         let vec = shard.as_slice();
@@ -249,7 +253,7 @@ fn render_map_binary_internal(
                 if offset + 2 <= vec.len() {
                     let type_val = vec[offset] as usize;
                     let point_count = vec[offset + 1] as usize;
-                    if type_val < 6 {
+                    if type_val < types::ROAD_TYPE_COUNT {
                         road_type_counts[type_val] += 1;
                     }
                     offset += 2 + point_count * 2;
@@ -263,13 +267,14 @@ fn render_map_binary_internal(
         total_roads, water_count, parks_count, poi_count, custom_poi_count
     ));
     log(&format!(
-        "[Render] Roads by type: Motorway={}, Primary={}, Secondary={}, Tertiary={}, Residential={}, Default={}",
+        "[Render] Roads by type: Motorway={}, Primary={}, Secondary={}, Tertiary={}, Residential={}, Default={}, Highlighted={}",
         road_type_counts[0],
         road_type_counts[1],
         road_type_counts[2],
         road_type_counts[3],
         road_type_counts[4],
-        road_type_counts[5]
+        road_type_counts[5],
+        road_type_counts[6]
     ));
 
     let render_scale_config = config.render_scale_config.as_ref();
@@ -309,6 +314,7 @@ fn render_map_binary_internal(
         Some(r) => r,
         None => return RenderResult::error("Failed to create renderer".to_string()),
     };
+    renderer.set_road_poster_mode(config.road_poster_mode);
     log(&format!(
         "[Timing][wasm][renderer_new] total={:.2}ms render_scale={} width={} height={} total_pixels={} main_pixmap_bytes={}",
         crate::utils::performance_now() - renderer_new_start,
@@ -389,6 +395,8 @@ fn render_map_binary_internal(
                 config.show_city,
                 config.show_country,
                 config.show_coords,
+                config.road_poster_mode,
+                config.road_poster_road_name.as_deref(),
             ) {
                 return RenderResult::error(format!("Failed to draw text: {}", e));
             }
@@ -477,6 +485,8 @@ fn render_map_binary_internal(
             config.show_city,
             config.show_country,
             config.show_coords,
+            config.road_poster_mode,
+            config.road_poster_road_name.as_deref(),
         ) {
             return RenderResult::error(format!("Failed to draw text: {}", e));
         }
@@ -526,7 +536,7 @@ fn make_layer_renderer(
     render_scale: u32,
 ) -> Result<MapRenderer, String> {
     let text_pos = config.text_position.unwrap_or(types::TextPosition::Top);
-    MapRenderer::new(
+    let mut r = MapRenderer::new(
         config.width,
         config.height,
         config.theme.clone(),
@@ -534,7 +544,9 @@ fn make_layer_renderer(
         text_pos,
         render_scale,
     )
-    .ok_or_else(|| format!("Failed to create layer renderer for render_scale={render_scale}"))
+    .ok_or_else(|| format!("Failed to create layer renderer for render_scale={render_scale}"))?;
+    r.set_road_poster_mode(config.road_poster_mode);
+    Ok(r)
 }
 
 fn draw_background_layer(
@@ -613,6 +625,7 @@ fn draw_roads_layers(
             road_scales.tertiary == scale,
             road_scales.residential == scale,
             road_scales.default_road == scale,
+            true,
         ];
         if !enabled_types.iter().any(|enabled| *enabled) {
             continue;
@@ -696,6 +709,8 @@ fn draw_poi_layers(
             config.show_city,
             config.show_country,
             config.show_coords,
+            config.road_poster_mode,
+            config.road_poster_road_name.as_deref(),
         )?;
     } else {
         let mut layer = make_layer_renderer(config, bounds, scale_config.text)?;
@@ -708,6 +723,8 @@ fn draw_poi_layers(
             config.show_city,
             config.show_country,
             config.show_coords,
+            config.road_poster_mode,
+            config.road_poster_road_name.as_deref(),
         )?;
         renderer.compose_from(&layer);
     }
@@ -961,6 +978,8 @@ fn render_map_internal(mut request: RenderRequest) -> RenderResult {
         request.show_city,
         request.show_country,
         request.show_coords,
+        false,
+        None,
     ) {
         return RenderResult::error(format!("Failed to draw text: {}", e));
     }

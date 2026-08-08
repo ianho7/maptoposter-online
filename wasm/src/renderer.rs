@@ -9,7 +9,7 @@ use tiny_skia::{
 };
 
 use crate::projection;
-use crate::types::{BoundingBox, PinThemeConfig, PinThemeStyle, PoiShape, PolyFeature, Road, RoadRenderStats, RoadType, TextPosition, Theme};
+use crate::types::{BoundingBox, PinThemeConfig, PinThemeStyle, PoiShape, PolyFeature, Road, RoadRenderStats, RoadType, TextPosition, Theme, ROAD_TYPE_COUNT};
 use crate::utils::{calculate_font_size, format_city_name, format_coordinates, log, parse_hex_color};
 
 /// 地图渲染引擎
@@ -25,6 +25,7 @@ pub struct MapRenderer {
     /// [超采样] 内部渲染倍数。实际 Pixmap = width×render_scale × height×render_scale。
     /// 导出时通过 Box Filter 下采样回逻辑尺寸，所有边缘细节更平滑。
     render_scale: u32,
+    road_poster_mode: bool,
 }
 
 impl MapRenderer {
@@ -56,12 +57,17 @@ impl MapRenderer {
             height,
             text_position,
             render_scale,
+            road_poster_mode: false,
         })
     }
 
     /// 获取当前配色
     pub fn get_theme(&self) -> &Theme {
         &self.theme
+    }
+
+    pub fn set_road_poster_mode(&mut self, enabled: bool) {
+        self.road_poster_mode = enabled;
     }
 
     // ── [超采样] 内部辅助：实际画布像素尺寸 ──────────────────────────────────
@@ -119,6 +125,7 @@ impl MapRenderer {
             RoadType::Tertiary => &self.theme.road_tertiary,
             RoadType::Residential => &self.theme.road_residential,
             RoadType::Default => &self.theme.road_default,
+            RoadType::Highlighted => &self.theme.road_highlighted,
         }
     }
 
@@ -191,7 +198,7 @@ impl MapRenderer {
                 let build_start = crate::utils::performance_now();
                 let (paths, raw_points, simplified_points) = self.build_road_paths(shard);
                 stats.build_paths_ms += crate::utils::performance_now() - build_start;
-                for i in 0..6 {
+                for i in 0..ROAD_TYPE_COUNT {
                     stats.record_points(i, raw_points[i], simplified_points[i]);
                 }
                 Self::draw_road_paths_on_pixmap(
@@ -201,6 +208,7 @@ impl MapRenderer {
                     &paths,
                     scale_factor,
                     &mut stats,
+                    self.road_poster_mode,
                 );
             }
             crate::utils::time_end("render_map_bin: road_mask_optimization: roads_layer_stroke");
@@ -254,7 +262,7 @@ impl MapRenderer {
         &mut self,
         road_shards: &[Vec<f64>],
         logical_scale_factor: f32,
-        enabled_types: &[bool; 6],
+        enabled_types: &[bool; ROAD_TYPE_COUNT],
     ) -> RoadRenderStats {
         if road_shards.is_empty() {
             return RoadRenderStats::default();
@@ -273,6 +281,7 @@ impl MapRenderer {
                 paths,
                 effective_scale_factor,
                 &mut stats,
+                self.road_poster_mode,
             );
         }
         stats
@@ -289,7 +298,7 @@ impl MapRenderer {
             let build_start = crate::utils::performance_now();
             let (paths, raw_points, simplified_points) = self.build_road_paths(shard);
             stats.build_paths_ms += crate::utils::performance_now() - build_start;
-            for i in 0..6 {
+            for i in 0..ROAD_TYPE_COUNT {
                 stats.record_points(i, raw_points[i], simplified_points[i]);
             }
             prebuilt_paths.push(paths);
@@ -304,6 +313,7 @@ impl MapRenderer {
                 &paths,
                 scale_factor,
                 stats,
+                self.road_poster_mode,
             );
         }
     }
@@ -312,7 +322,7 @@ impl MapRenderer {
         &self,
         road_shards: &[Vec<f64>],
         render_scale_override: u32,
-        enabled_types: &[bool; 6],
+        enabled_types: &[bool; ROAD_TYPE_COUNT],
         stats: &mut RoadRenderStats,
     ) -> Vec<Vec<Option<tiny_skia::Path>>> {
         let mut prebuilt_paths: Vec<Vec<Option<tiny_skia::Path>>> = Vec::new();
@@ -321,7 +331,7 @@ impl MapRenderer {
             let (paths, raw_points, simplified_points) =
                 self.build_road_paths_filtered(shard, render_scale_override, enabled_types);
             stats.build_paths_ms += crate::utils::performance_now() - build_start;
-            for i in 0..6 {
+            for i in 0..ROAD_TYPE_COUNT {
                 stats.record_points(i, raw_points[i], simplified_points[i]);
             }
             prebuilt_paths.push(paths);
@@ -336,17 +346,27 @@ impl MapRenderer {
         paths: &[Option<tiny_skia::Path>],
         scale_factor: f32,
         stats: &mut RoadRenderStats,
+        road_poster_mode: bool,
     ) {
         // [Z-order] 道路绘制顺序：低优先级 → 高优先级，确保主干道始终在最上层
-        // 枚举 index：Motorway=0, Primary=1, Secondary=2, Tertiary=3, Residential=4, Default=5
-        // 从 index 5 向 0 渲染 = 从最低优先级到最高优先级
-        const DRAW_ORDER: [usize; 6] = [5, 4, 3, 2, 1, 0];
+        // Highlighted (6) 最后绘制，始终在最上层
+        const DRAW_ORDER: [usize; ROAD_TYPE_COUNT] = [5, 4, 3, 2, 1, 0, 6];
 
         // [Road Casing] 第一遍：按 Z 序绘制所有道路的「描边底色」（Casing）
         // 所有 Casing 先于所有 Fill 渲染，防止低等级 Casing 压住高等级 Fill
         // [优化] Residential 跳过 Casing：宽度仅 0.4px，casing 效果几乎不可见
         for &t_idx in &DRAW_ORDER {
-            if t_idx == RoadType::Residential as usize || t_idx == RoadType::Default as usize {
+            let road_type = RoadType::from_u32(t_idx as u32);
+            let is_highlighted = road_type == RoadType::Highlighted;
+
+            // road_poster_mode: 非高亮道路跳过 casing
+            if road_poster_mode && !is_highlighted {
+                continue;
+            }
+
+            if !road_poster_mode
+                && (t_idx == RoadType::Residential as usize || t_idx == RoadType::Default as usize)
+            {
                 continue;
             }
 
@@ -356,20 +376,21 @@ impl MapRenderer {
 
             let start = crate::utils::performance_now();
 
-            let road_type = RoadType::from_u32(t_idx as u32);
             let base_color = parse_hex_color(Self::road_color_hex_for_theme(theme, road_type));
 
-            // [Road Casing] Casing 宽度 = 道路宽 + 两侧各 1 逻辑像素（已含 render_scale 倍数）
-            let casing_width = road_type.get_width_scaled(scale_factor) + 2.0 * render_scale as f32;
-            // [Road Casing] Casing 颜色 = 道路色压暗 50%，形成描边对比
-            let mut casing_color = darken_color(base_color, 0.9);
+            let (casing_width, casing_alpha) = if road_poster_mode && is_highlighted {
+                // 高亮道路：加粗 casing，更强对比
+                (road_type.get_width_scaled(scale_factor) * 1.5 + 3.0 * render_scale as f32, 0.4)
+            } else {
+                (road_type.get_width_scaled(scale_factor) + 2.0 * render_scale as f32, 0.2)
+            };
 
-            // 把 alpha 降到 0.4，边缘隐约可见即可
+            let mut casing_color = darken_color(base_color, 0.9);
             casing_color = Color::from_rgba(
                 casing_color.red(),
                 casing_color.green(),
                 casing_color.blue(),
-                0.2,
+                casing_alpha,
             )
             .unwrap_or(casing_color);
 
@@ -379,8 +400,8 @@ impl MapRenderer {
 
             let stroke = Stroke {
                 width: casing_width,
-                line_cap: LineCap::Round, // [Road Casing] 圆头端点，道路末端更自然
-                line_join: LineJoin::Round, // [Road Casing] 圆角拐点，消除锐角处的尖刺
+                line_cap: LineCap::Round,
+                line_join: LineJoin::Round,
                 ..Default::default()
             };
             pixmap.stroke_path(path, &paint, &stroke, Transform::identity(), None);
@@ -400,13 +421,28 @@ impl MapRenderer {
             let start = crate::utils::performance_now();
 
             let road_type = RoadType::from_u32(t_idx as u32);
+            let is_highlighted = road_type == RoadType::Highlighted;
+
+            let mut color = parse_hex_color(Self::road_color_hex_for_theme(theme, road_type));
+
+            // road_poster_mode: 非高亮道路降低透明度
+            if road_poster_mode && !is_highlighted {
+                color = Color::from_rgba(color.red(), color.green(), color.blue(), 0.15)
+                    .unwrap_or(color);
+            }
 
             let mut paint = Paint::default();
-            paint.set_color(parse_hex_color(Self::road_color_hex_for_theme(theme, road_type)));
+            paint.set_color(color);
             paint.anti_alias = true;
 
+            let road_width = if road_poster_mode && is_highlighted {
+                road_type.get_width_scaled(scale_factor) * 1.5
+            } else {
+                road_type.get_width_scaled(scale_factor)
+            };
+
             let stroke = Stroke {
-                width: road_type.get_width_scaled(scale_factor),
+                width: road_width,
                 line_cap: LineCap::Round,
                 line_join: LineJoin::Round,
                 ..Default::default()
@@ -471,18 +507,17 @@ impl MapRenderer {
         // [超采样] 将外部传入的缩放因子乘以内部超采样倍数，保持视觉比例一致
         let scale_factor = scale_factor * self.render_scale as f32;
 
-        // 【优化】使用固定大小数组替代 HashMap，道路类型仅 6 种，无需哈希开销
-        let mut groups: [Vec<&Road>; 6] = [vec![], vec![], vec![], vec![], vec![], vec![]];
+        let mut groups: [Vec<&Road>; ROAD_TYPE_COUNT] = Default::default();
         for road in roads {
             let idx = road.road_type as usize;
-            if idx < 6 {
+            if idx < ROAD_TYPE_COUNT {
                 groups[idx].push(road);
             }
         }
 
         // [Z-order + Road Casing] 将每种类型的 Road 列表预先构建为 Path
-        let mut paths: [Option<tiny_skia::Path>; 6] = Default::default();
-        for t_idx in 0..6usize {
+        let mut paths: [Option<tiny_skia::Path>; ROAD_TYPE_COUNT] = Default::default();
+        for t_idx in 0..ROAD_TYPE_COUNT {
             let road_group = &groups[t_idx];
             if road_group.is_empty() {
                 continue;
@@ -502,26 +537,35 @@ impl MapRenderer {
             paths[t_idx] = pb.finish();
         }
 
-        // [Z-order] 低优先级 → 高优先级渲染顺序
-        const DRAW_ORDER: [usize; 6] = [5, 4, 3, 2, 1, 0];
+        // [Z-order] 低优先级 → 高优先级渲染顺序，Highlighted 最后绘制
+        const DRAW_ORDER: [usize; ROAD_TYPE_COUNT] = [5, 4, 3, 2, 1, 0, 6];
 
         // [Road Casing] 第一遍：所有道路的 Casing（加宽暗色描边）
         for &t_idx in &DRAW_ORDER {
+            let road_type = crate::types::RoadType::from_u32(t_idx as u32);
+            let is_highlighted = road_type == RoadType::Highlighted;
+
+            if self.road_poster_mode && !is_highlighted {
+                continue;
+            }
+
             let Some(path) = &paths[t_idx] else {
                 continue;
             };
-            let road_type = crate::types::RoadType::from_u32(t_idx as u32);
             let base_color = parse_hex_color(self.road_color_hex(road_type));
-            let casing_width =
-                road_type.get_width_scaled(scale_factor) + 2.0 * self.render_scale as f32;
-            let mut casing_color = darken_color(base_color, 0.9);
 
-            // 把 alpha 降到 0.4，边缘隐约可见即可
+            let (casing_width, casing_alpha) = if self.road_poster_mode && is_highlighted {
+                (road_type.get_width_scaled(scale_factor) * 1.5 + 3.0 * self.render_scale as f32, 0.4)
+            } else {
+                (road_type.get_width_scaled(scale_factor) + 2.0 * self.render_scale as f32, 0.2)
+            };
+
+            let mut casing_color = darken_color(base_color, 0.9);
             casing_color = Color::from_rgba(
                 casing_color.red(),
                 casing_color.green(),
                 casing_color.blue(),
-                0.2,
+                casing_alpha,
             )
             .unwrap_or(casing_color);
 
@@ -545,13 +589,26 @@ impl MapRenderer {
                 continue;
             };
             let road_type = crate::types::RoadType::from_u32(t_idx as u32);
+            let is_highlighted = road_type == RoadType::Highlighted;
+
+            let mut color = parse_hex_color(self.road_color_hex(road_type));
+            if self.road_poster_mode && !is_highlighted {
+                color = Color::from_rgba(color.red(), color.green(), color.blue(), 0.15)
+                    .unwrap_or(color);
+            }
 
             let mut paint = Paint::default();
-            paint.set_color(parse_hex_color(self.road_color_hex(road_type)));
+            paint.set_color(color);
             paint.anti_alias = true;
 
+            let road_width = if self.road_poster_mode && is_highlighted {
+                road_type.get_width_scaled(scale_factor) * 1.5
+            } else {
+                road_type.get_width_scaled(scale_factor)
+            };
+
             let stroke = Stroke {
-                width: road_type.get_width_scaled(scale_factor),
+                width: road_width,
                 line_cap: LineCap::Round,
                 line_join: LineJoin::Round,
                 ..Default::default()
@@ -1475,21 +1532,21 @@ impl MapRenderer {
         paths
     }
 
-    fn build_road_paths(&self, data: &[f64]) -> (Vec<Option<tiny_skia::Path>>, [usize; 6], [usize; 6]) {
-        self.build_road_paths_filtered(data, self.render_scale, &[true; 6])
+    fn build_road_paths(&self, data: &[f64]) -> (Vec<Option<tiny_skia::Path>>, [usize; ROAD_TYPE_COUNT], [usize; ROAD_TYPE_COUNT]) {
+        self.build_road_paths_filtered(data, self.render_scale, &[true; ROAD_TYPE_COUNT])
     }
 
     fn build_road_paths_filtered(
         &self,
         data: &[f64],
         render_scale_override: u32,
-        enabled_types: &[bool; 6],
-    ) -> (Vec<Option<tiny_skia::Path>>, [usize; 6], [usize; 6]) {
+        enabled_types: &[bool; ROAD_TYPE_COUNT],
+    ) -> (Vec<Option<tiny_skia::Path>>, [usize; ROAD_TYPE_COUNT], [usize; ROAD_TYPE_COUNT]) {
         let road_count = data[0] as usize;
-        let mut pbs: Vec<PathBuilder> = (0..6).map(|_| PathBuilder::new()).collect();
-        let mut found = vec![false; 6];
-        let mut raw_points = [0usize; 6];
-        let mut simplified_points = [0usize; 6];
+        let mut pbs: Vec<PathBuilder> = (0..ROAD_TYPE_COUNT).map(|_| PathBuilder::new()).collect();
+        let mut found = vec![false; ROAD_TYPE_COUNT];
+        let mut raw_points = [0usize; ROAD_TYPE_COUNT];
+        let mut simplified_points = [0usize; ROAD_TYPE_COUNT];
         let mut curr_offset = 1;
 
         for _ in 0..road_count {
@@ -1500,7 +1557,7 @@ impl MapRenderer {
             let count = data[curr_offset + 1] as usize;
             curr_offset += 2;
 
-            if t < 6 && enabled_types[t] && curr_offset + count * 2 <= data.len() && count >= 2 {
+            if t < ROAD_TYPE_COUNT && enabled_types[t] && curr_offset + count * 2 <= data.len() && count >= 2 {
                 raw_points[t] += count;
                 let screen_coords: Vec<(f32, f32)> = (0..count)
                     .map(|i| {
@@ -1545,12 +1602,14 @@ impl MapRenderer {
             RoadType::Tertiary => &theme.road_tertiary,
             RoadType::Residential => &theme.road_residential,
             RoadType::Default => &theme.road_default,
+            RoadType::Highlighted => &theme.road_highlighted,
         }
     }
 
     #[inline]
     fn road_simplify_epsilon_sq(road_type: RoadType) -> f32 {
         match road_type {
+            RoadType::Highlighted => 0.25 * 0.25,
             RoadType::Motorway | RoadType::Primary => 0.5 * 0.5,
             RoadType::Secondary => 0.75 * 0.75,
             RoadType::Tertiary => 1.0 * 1.0,
@@ -1570,93 +1629,110 @@ impl MapRenderer {
         show_city: bool,
         show_country: bool,
         show_coords: bool,
+        road_poster_mode: bool,
+        road_name: Option<&str>,
     ) -> Result<(), String> {
         let font = Font::from_bytes(font_data, FontSettings::default())
             .map_err(|e| format!("Failed to load font: {}", e))?;
 
         let text_color = parse_hex_color(&self.theme.text);
 
-        // 改进：限制缩放系数
-        // 取 Width/800 和 Height/800*1.1 中的较小值。
-        // *1.1 是为了让 A4 (0.7宽高比) 这种瘦长比例依然由宽度主导缩放。
-        // 但是对于 16:9 (1.77宽高比) 这种扁平比例，Height/800*1.1 (约0.6) 会小于 Width/800 (1.0)，
-        // 从而强制缩小字体，避免文字撑出高度。
-        // [超采样] 使用实际渲染像素尺寸计算 scale_factor，使字体在 2× 画布上保持正确视觉大小
         let width_scale = self.render_width() as f32 / 1200.0;
         let height_scale = (self.render_height() as f32 / 1200.0) * 1.1;
         let scale_factor = width_scale.min(height_scale);
 
-        // 计算画幅宽高比，用于动态调整 Bottom anchor
         let aspect_ratio = self.height as f32 / self.width as f32;
 
-        // 根据画幅比例计算 Bottom 的动态 anchor
-        // - 竖版 (aspect > 1): 文字视觉偏上，增加 anchor 使其靠下
-        // - 横版/方形 (aspect <= 1): 当前 0.85 效果理想
-        // 公式: 0.85 + (aspect_ratio - 1.0) * 0.1，上限 0.88
         let bottom_anchor = if aspect_ratio > 1.0 {
             (0.85 + (aspect_ratio - 1.0) * 0.1).min(0.88)
         } else {
             0.85
         };
 
-        // 计算基准锚点 Y 坐标 (屏幕绝对坐标)
         let base_y_px = match self.text_position {
             TextPosition::Top => self.render_height() as f32 * 0.10,
             TextPosition::Center => self.render_height() as f32 * 0.50,
             TextPosition::Bottom => self.render_height() as f32 * bottom_anchor,
         };
 
-        // 减去 padding_offset，与 TSX 端的 rootFontSize 逻辑一致
-        // 这样文字 baseline 不会紧贴容器底部，而是留出约一个 font-size 的边距
         let padding_offset: f32 = 16.0;
         let base_y_px = base_y_px - padding_offset;
 
-        // 定义相对偏移量 (基于 800px 宽度的标准像素值)
-        // 偏移池按从最显眼（顶部）到最不显眼（底部）排列
-        // 可见元素按 city → country → coords 优先级依次取偏移
         let offset_pool: [f32; 3] = [50.0 * scale_factor, 0.0, -40.0 * scale_factor];
-        let mut visible_index = 0usize;
 
-        if show_city {
-            let formatted_city = format_city_name(city);
-            let city_size = calculate_font_size(&formatted_city, 80.0 * scale_factor, 30);
-            self.draw_text_centered(
-                &font,
-                &formatted_city,
-                base_y_px + offset_pool[visible_index],
-                city_size,
-                text_color,
-            );
-            visible_index += 1;
+        if road_poster_mode {
+            if let Some(rn) = road_name {
+                // Line 1: Road name (large title)
+                let formatted_road = format_city_name(rn);
+                let road_size = calculate_font_size(&formatted_road, 80.0 * scale_factor, 30);
+                self.draw_text_centered(
+                    &font,
+                    &formatted_road,
+                    base_y_px + offset_pool[0],
+                    road_size,
+                    text_color,
+                );
+
+                // Line 2: "ROAD POSTER" subtitle
+                self.draw_text_centered(
+                    &font,
+                    "ROAD POSTER",
+                    base_y_px + offset_pool[1],
+                    28.0 * scale_factor,
+                    text_color,
+                );
+
+                // Line 3: "CITY · coords"
+                let coords_str = format_coordinates(lat, lon);
+                let city_coords = format!("{} \u{00B7} {}", city.to_uppercase(), coords_str);
+                self.draw_text_centered(
+                    &font,
+                    &city_coords,
+                    base_y_px + offset_pool[2],
+                    18.0 * scale_factor,
+                    text_color,
+                );
+            }
+        } else {
+            let mut visible_index = 0usize;
+
+            if show_city {
+                let formatted_city = format_city_name(city);
+                let city_size = calculate_font_size(&formatted_city, 80.0 * scale_factor, 30);
+                self.draw_text_centered(
+                    &font,
+                    &formatted_city,
+                    base_y_px + offset_pool[visible_index],
+                    city_size,
+                    text_color,
+                );
+                visible_index += 1;
+            }
+
+            if show_country {
+                let country_upper = country.to_uppercase();
+                self.draw_text_centered(
+                    &font,
+                    &country_upper,
+                    base_y_px + offset_pool[visible_index],
+                    28.0 * scale_factor,
+                    text_color,
+                );
+                visible_index += 1;
+            }
+
+            if show_coords {
+                let coords_str = format_coordinates(lat, lon);
+                self.draw_text_centered(
+                    &font,
+                    &coords_str,
+                    base_y_px + offset_pool[visible_index],
+                    18.0 * scale_factor,
+                    text_color,
+                );
+            }
         }
 
-        if show_country {
-            let country_upper = country.to_uppercase();
-            self.draw_text_centered(
-                &font,
-                &country_upper,
-                base_y_px + offset_pool[visible_index],
-                28.0 * scale_factor,
-                text_color,
-            );
-            visible_index += 1;
-        }
-
-        if show_coords {
-            let coords_str = format_coordinates(lat, lon);
-            self.draw_text_centered(
-                &font,
-                &coords_str,
-                base_y_px + offset_pool[visible_index],
-                18.0 * scale_factor,
-                text_color,
-            );
-        }
-
-        // 绘制装饰线
-        // self.draw_decoration_line(text_color, scale_factor, base_y_px + decor_offset);
-
-        // 绘制署名 (修正底部边距逻辑)
         let attr_text = "© OpenStreetMap contributors";
         self.draw_text_bottom_right(
             &font,

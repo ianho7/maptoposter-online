@@ -12,6 +12,7 @@ export interface MapColors {
   road_tertiary: string;
   road_residential: string;
   road_default: string;
+  road_highlighted: string;
 }
 
 export interface MapTheme {
@@ -173,6 +174,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#AEB6BF",
       road_residential: "#D6DBDF",
       road_default: "#AEB6BF",
+      road_highlighted: "#FF4500",
     },
   },
   {
@@ -192,6 +194,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#E2BCA4",
       road_residential: "#EAD7D1",
       road_default: "#E2BCA4",
+      road_highlighted: "#E63946",
     },
   },
   {
@@ -211,6 +214,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#4B0082",
       road_residential: "#241744",
       road_default: "#4B0082",
+      road_highlighted: "#FF073A",
     },
   },
   {
@@ -230,6 +234,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#505050",
       road_residential: "#333333",
       road_default: "#505050",
+      road_highlighted: "#FF4500",
     },
   },
   {
@@ -249,6 +254,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#A2ABB5",
       road_residential: "#C5CCD3",
       road_default: "#A2ABB5",
+      road_highlighted: "#E63946",
     },
   },
   {
@@ -268,6 +274,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#BEB7D8",
       road_residential: "#DFDBED",
       road_default: "#BEB7D8",
+      road_highlighted: "#FF4500",
     },
   },
   {
@@ -287,6 +294,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#606060",
       road_residential: "#303030",
       road_default: "#606060",
+      road_highlighted: "#39FF14",
     },
   },
   {
@@ -306,6 +314,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#AE2012",
       road_residential: "#9B2226",
       road_default: "#AE2012",
+      road_highlighted: "#00BFFF",
     },
   },
   {
@@ -325,6 +334,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#666666",
       road_residential: "#4A3B52",
       road_default: "#666666",
+      road_highlighted: "#FF4500",
     },
   },
   {
@@ -344,6 +354,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#7A6424",
       road_residential: "#4D3F16",
       road_default: "#7A6424",
+      road_highlighted: "#FF4500",
     },
   },
   {
@@ -363,6 +374,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#FCE4EC",
       road_residential: "#FFFFFF",
       road_default: "#FCE4EC",
+      road_highlighted: "#E63946",
     },
   },
   {
@@ -382,6 +394,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#888888",
       road_residential: "#B0B0B0",
       road_default: "#888888",
+      road_highlighted: "#FF4500",
     },
   },
   {
@@ -401,6 +414,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#93A1A1",
       road_residential: "#073642",
       road_default: "#93A1A1",
+      road_highlighted: "#DC322F",
     },
   },
   {
@@ -420,6 +434,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#BFD8AF",
       road_residential: "#FFFFFF",
       road_default: "#BFD8AF",
+      road_highlighted: "#E63946",
     },
   },
   {
@@ -439,6 +454,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#4D0000",
       road_residential: "#2A2A2A",
       road_default: "#4D0000",
+      road_highlighted: "#00BFFF",
     },
   },
   {
@@ -458,6 +474,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#635634",
       road_residential: "#3D3728",
       road_default: "#635634",
+      road_highlighted: "#FF4500",
     },
   },
   {
@@ -477,6 +494,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#004D57",
       road_residential: "#00282E",
       road_default: "#004D57",
+      road_highlighted: "#FF073A",
     },
   },
   {
@@ -496,6 +514,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#D3D3D3",
       road_residential: "#F0F0F0",
       road_default: "#D3D3D3",
+      road_highlighted: "#E63946",
     },
   },
   {
@@ -515,6 +534,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#D2B48C",
       road_residential: "#EADBC8",
       road_default: "#D2B48C",
+      road_highlighted: "#E63946",
     },
   },
   {
@@ -534,6 +554,7 @@ export const MAP_THEMES: MapTheme[] = [
       road_tertiary: "#4B0082",
       road_residential: "#1A0020",
       road_default: "#4B0082",
+      road_highlighted: "#FF073A",
     },
   },
 ];

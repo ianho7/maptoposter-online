@@ -12,6 +12,7 @@ import {
   FileText,
   Scaling,
   Pin,
+  Route,
 } from "lucide-react";
 import { useLocationData } from "@/hooks/useLocationData";
 import { getUserGeolocation } from "@/services/ip-geolocation";
@@ -45,6 +46,7 @@ import { ThemeColors } from "./components/theme-colors";
 import { FontSettings } from "./components/font-settings";
 import { RenderControlSettings } from "./components/render-control-settings";
 import { PosterSizeSelector } from "./components/poster-size-selector";
+import { HighlightRoadSettings } from "./components/highlight-road-settings";
 import { GenerationModal } from "./components/generation-modal";
 import { useReverseGeocode } from "@/hooks/useReverseGeocode";
 import { getPoiIconDefinition } from "@/lib/poi-icon-registry";
@@ -56,6 +58,13 @@ import {
   parseCityCoordinates,
   resolveCitySelection,
 } from "@/services/location-resolution";
+import {
+  flattenHighlightedRoads,
+  mergeRoadsWithHighlighted,
+  roadBboxToViewport,
+  searchRoadNamesPhoton,
+  buildHighlightedRoadFromFeatures,
+} from "@/services/highlighted-road";
 
 const LazyMapPreview = lazy(() =>
   import("./components/map-preview").then(({ MapPreview }) => ({ default: MapPreview }))
@@ -866,6 +875,10 @@ export default function MapPosterGenerator() {
   const [customPois, setCustomPois] = useState<CustomPOI[]>([]);
   const [amapApiKey, setAmapApiKey] = useState("");
   const [isPoiDialogOpen, setIsPoiDialogOpen] = useState(false);
+  const [highlightRoadName, setHighlightRoadName] = useState("");
+  const [highlightRoadData, setHighlightRoadData] = useState<Float64Array | null>(null);
+  const [highlightRoadBbox, setHighlightRoadBbox] = useState<[number, number, number, number] | null>(null);
+  const [isHighlightRoadLoading, setIsHighlightRoadLoading] = useState(false);
   const internalPinThemeConfig = INTERNAL_PIN_THEME_CONFIGS[INTERNAL_PIN_THEME_STYLE][poiShape];
 
   const beginLocationFlow = () => ++locationFlowRequestIdRef.current;
@@ -1709,6 +1722,20 @@ export default function MapPosterGenerator() {
 
       const width = selectedSize.width * scale;
       const height = selectedSize.height * scale;
+
+      // Road poster mode: auto-fit viewport to road bounding box
+      const isRoadPosterMode = !!highlightRoadData && !!highlightRoadBbox;
+      let effectiveLat = lat;
+      let effectiveLng = lng;
+      let effectiveRadius = baseRadius;
+      if (isRoadPosterMode && highlightRoadBbox) {
+        const posterAspect = selectedSize.width / selectedSize.height;
+        const vp = roadBboxToViewport(highlightRoadBbox, posterAspect);
+        effectiveLat = vp.centerLat;
+        effectiveLng = vp.centerLng;
+        effectiveRadius = vp.radius;
+      }
+
       setGenerationProgress(10);
       // 初始获取数据消息，会被 worker 的进度更新覆盖
       currentStepRef.current = "step_fetching_data";
@@ -1727,7 +1754,7 @@ export default function MapPosterGenerator() {
         baseRadius,
         lodMode,
         location.district,
-        poiSource !== "overpass",
+        isRoadPosterMode || poiSource !== "overpass",
         shouldDownloadDiagnosticFixtures
       );
 
@@ -1768,12 +1795,17 @@ export default function MapPosterGenerator() {
       await yieldMainThread();
 
       setGenerationProgress(62);
+
+      const finalRoads = highlightRoadData
+        ? mergeRoadsWithHighlighted(roads, highlightRoadData)
+        : roads;
+
       currentStepRef.current = "step_sharding_roads";
       setGenerationStep(m.step_sharding_roads());
       await yieldMainThread();
 
       const shardStart = performance.now();
-      const roadShards = shardRoadsBinary(roads, numWorkers);
+      const roadShards = shardRoadsBinary(finalRoads, numWorkers);
       logClientTiming("processing", "shardRoads", {
         total: performance.now() - shardStart,
         shards: roadShards.length.toString(),
@@ -1829,8 +1861,8 @@ export default function MapPosterGenerator() {
       // 准备渲染配置
       const configStart = performance.now();
       const config = {
-        center: { lat, lon: lng },
-        radius: baseRadius,
+        center: { lat: effectiveLat, lon: effectiveLng },
+        radius: effectiveRadius,
         theme: colors,
         width,
         height,
@@ -1839,6 +1871,8 @@ export default function MapPosterGenerator() {
           customTitle || location.district?.toUpperCase() || location.city.toUpperCase(),
         display_country: location.country,
         text_position: "bottom",
+        road_poster_mode: isRoadPosterMode,
+        ...(isRoadPosterMode ? { road_poster_road_name: highlightRoadName.trim() } : {}),
         selected_size_height: selectedSize.height * scale,
         frontend_scale: scale,
         road_width_boost: isProtomaps ? 1.8 : 1.0,
@@ -2049,6 +2083,7 @@ export default function MapPosterGenerator() {
     () => [
       { id: "section-location", icon: <MapPin className="w-5 h-5" />, label: m.location() },
       { id: "section-data", icon: <Settings2 className="w-5 h-5" />, label: m.label_map_radius() },
+      { id: "section-highlight-road", icon: <Route className="w-5 h-5" />, label: "道路海报" },
       {
         id: "section-theme-colors",
         icon: <Palette className="w-5 h-5" />,
@@ -2199,6 +2234,89 @@ export default function MapPosterGenerator() {
 
                 <div id="section-data" ref={setSectionRef("section-data")}>
                   <DataSettings baseRadius={baseRadius} onBaseRadiusChange={setBaseRadius} />
+                </div>
+
+                <div id="section-highlight-road" ref={setSectionRef("section-highlight-road")}>
+                  <HighlightRoadSettings
+                    roadName={highlightRoadName}
+                    onRoadNameChange={setHighlightRoadName}
+                    isLoading={isHighlightRoadLoading}
+                    hasData={!!highlightRoadData}
+                    onSearch={async () => {
+                      if (!highlightRoadName.trim()) {
+                        setHighlightRoadData(null);
+                        return;
+                      }
+                      setIsHighlightRoadLoading(true);
+                      try {
+                        let cached = await mapDataService.fetchRoadGeometry(
+                          location.country ?? "",
+                          location.city ?? "",
+                          baseRadius,
+                          lodMode,
+                          highlightRoadName.trim(),
+                          location.district
+                        );
+                        if (!cached.found) {
+                          await mapDataService.getMapData(
+                            location.country ?? "",
+                            location.city ?? "",
+                            location.lat ?? 0,
+                            location.lng ?? 0,
+                            baseRadius,
+                            lodMode,
+                            location.district,
+                            true
+                          );
+                          cached = await mapDataService.fetchRoadGeometry(
+                            location.country ?? "",
+                            location.city ?? "",
+                            baseRadius,
+                            lodMode,
+                            highlightRoadName.trim(),
+                            location.district
+                          );
+                        }
+                        if (!cached.found) {
+                          setHighlightRoadData(null);
+                          setHighlightRoadBbox(null);
+                          alert(`未找到道路「${highlightRoadName}」，请确认道路名称是否正确`);
+                        } else {
+                          const result = buildHighlightedRoadFromFeatures(cached.features);
+                          if (result.geojson.features.length === 0) {
+                            setHighlightRoadData(null);
+                            setHighlightRoadBbox(null);
+                            alert(`未找到道路「${highlightRoadName}」`);
+                          } else {
+                            setHighlightRoadData(flattenHighlightedRoads(result.geojson));
+                            setHighlightRoadBbox(result.bbox);
+                          }
+                        }
+                      } catch (e) {
+                        console.error("Highlight road query failed:", e);
+                        alert("道路查询失败，请重试");
+                      } finally {
+                        setIsHighlightRoadLoading(false);
+                      }
+                    }}
+                    onClear={() => {
+                      setHighlightRoadName("");
+                      setHighlightRoadData(null);
+                      setHighlightRoadBbox(null);
+                    }}
+                    onSearchSuggestions={async (keyword) => {
+                      const cached = await mapDataService.searchRoadNames(
+                        location.country ?? "",
+                        location.city ?? "",
+                        baseRadius,
+                        lodMode,
+                        keyword,
+                        location.district
+                      );
+                      if (cached.length > 0) return cached;
+                      return searchRoadNamesPhoton(keyword, location.lat ?? 0, location.lng ?? 0);
+                    }}
+                  />
                 </div>
 
                 <div id="section-theme-colors" ref={setSectionRef("section-theme-colors")}>
