@@ -1749,12 +1749,12 @@ export default function MapPosterGenerator() {
       const mapResults = await mapDataService.getMapData(
         location.country,
         location.city,
-        effectiveLat,
-        effectiveLng,
-        effectiveRadius,
+        lat,
+        lng,
+        baseRadius,
         lodMode,
         location.district,
-        poiSource !== "overpass",
+        isRoadPosterMode || poiSource !== "overpass",
         shouldDownloadDiagnosticFixtures
       );
 
