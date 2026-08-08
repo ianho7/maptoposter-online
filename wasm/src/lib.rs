@@ -236,7 +236,7 @@ fn render_map_binary_internal(
     ));
 
     let mut total_roads = 0usize;
-    let mut road_type_counts = [0usize; 6];
+    let mut road_type_counts = [0usize; types::ROAD_TYPE_COUNT];
 
     for shard in &road_shards {
         let vec = shard.as_slice();
@@ -249,7 +249,7 @@ fn render_map_binary_internal(
                 if offset + 2 <= vec.len() {
                     let type_val = vec[offset] as usize;
                     let point_count = vec[offset + 1] as usize;
-                    if type_val < 6 {
+                    if type_val < types::ROAD_TYPE_COUNT {
                         road_type_counts[type_val] += 1;
                     }
                     offset += 2 + point_count * 2;
@@ -263,13 +263,14 @@ fn render_map_binary_internal(
         total_roads, water_count, parks_count, poi_count, custom_poi_count
     ));
     log(&format!(
-        "[Render] Roads by type: Motorway={}, Primary={}, Secondary={}, Tertiary={}, Residential={}, Default={}",
+        "[Render] Roads by type: Motorway={}, Primary={}, Secondary={}, Tertiary={}, Residential={}, Default={}, Highlighted={}",
         road_type_counts[0],
         road_type_counts[1],
         road_type_counts[2],
         road_type_counts[3],
         road_type_counts[4],
-        road_type_counts[5]
+        road_type_counts[5],
+        road_type_counts[6]
     ));
 
     let render_scale_config = config.render_scale_config.as_ref();
@@ -613,6 +614,7 @@ fn draw_roads_layers(
             road_scales.tertiary == scale,
             road_scales.residential == scale,
             road_scales.default_road == scale,
+            true,
         ];
         if !enabled_types.iter().any(|enabled| *enabled) {
             continue;

@@ -12,6 +12,7 @@ import {
   FileText,
   Scaling,
   Pin,
+  Route,
 } from "lucide-react";
 import { useLocationData } from "@/hooks/useLocationData";
 import { getUserGeolocation } from "@/services/ip-geolocation";
@@ -45,6 +46,7 @@ import { ThemeColors } from "./components/theme-colors";
 import { FontSettings } from "./components/font-settings";
 import { RenderControlSettings } from "./components/render-control-settings";
 import { PosterSizeSelector } from "./components/poster-size-selector";
+import { HighlightRoadSettings } from "./components/highlight-road-settings";
 import { GenerationModal } from "./components/generation-modal";
 import { useReverseGeocode } from "@/hooks/useReverseGeocode";
 import { getPoiIconDefinition } from "@/lib/poi-icon-registry";
@@ -56,6 +58,11 @@ import {
   parseCityCoordinates,
   resolveCitySelection,
 } from "@/services/location-resolution";
+import {
+  fetchHighlightedRoad,
+  flattenHighlightedRoads,
+  mergeRoadsWithHighlighted,
+} from "@/services/highlighted-road";
 
 const LazyMapPreview = lazy(() =>
   import("./components/map-preview").then(({ MapPreview }) => ({ default: MapPreview }))
@@ -866,6 +873,9 @@ export default function MapPosterGenerator() {
   const [customPois, setCustomPois] = useState<CustomPOI[]>([]);
   const [amapApiKey, setAmapApiKey] = useState("");
   const [isPoiDialogOpen, setIsPoiDialogOpen] = useState(false);
+  const [highlightRoadName, setHighlightRoadName] = useState("");
+  const [highlightRoadData, setHighlightRoadData] = useState<Float64Array | null>(null);
+  const [isHighlightRoadLoading, setIsHighlightRoadLoading] = useState(false);
   const internalPinThemeConfig = INTERNAL_PIN_THEME_CONFIGS[INTERNAL_PIN_THEME_STYLE][poiShape];
 
   const beginLocationFlow = () => ++locationFlowRequestIdRef.current;
@@ -1768,12 +1778,17 @@ export default function MapPosterGenerator() {
       await yieldMainThread();
 
       setGenerationProgress(62);
+
+      const finalRoads = highlightRoadData
+        ? mergeRoadsWithHighlighted(roads, highlightRoadData)
+        : roads;
+
       currentStepRef.current = "step_sharding_roads";
       setGenerationStep(m.step_sharding_roads());
       await yieldMainThread();
 
       const shardStart = performance.now();
-      const roadShards = shardRoadsBinary(roads, numWorkers);
+      const roadShards = shardRoadsBinary(finalRoads, numWorkers);
       logClientTiming("processing", "shardRoads", {
         total: performance.now() - shardStart,
         shards: roadShards.length.toString(),
@@ -2049,6 +2064,7 @@ export default function MapPosterGenerator() {
     () => [
       { id: "section-location", icon: <MapPin className="w-5 h-5" />, label: m.location() },
       { id: "section-data", icon: <Settings2 className="w-5 h-5" />, label: m.label_map_radius() },
+      { id: "section-highlight-road", icon: <Route className="w-5 h-5" />, label: "高亮道路" },
       {
         id: "section-theme-colors",
         icon: <Palette className="w-5 h-5" />,
@@ -2199,6 +2215,45 @@ export default function MapPosterGenerator() {
 
                 <div id="section-data" ref={setSectionRef("section-data")}>
                   <DataSettings baseRadius={baseRadius} onBaseRadiusChange={setBaseRadius} />
+                </div>
+
+                <div id="section-highlight-road" ref={setSectionRef("section-highlight-road")}>
+                  <HighlightRoadSettings
+                    roadName={highlightRoadName}
+                    onRoadNameChange={setHighlightRoadName}
+                    isLoading={isHighlightRoadLoading}
+                    hasData={!!highlightRoadData}
+                    onSearch={async () => {
+                      if (!highlightRoadName.trim()) {
+                        setHighlightRoadData(null);
+                        return;
+                      }
+                      setIsHighlightRoadLoading(true);
+                      try {
+                        const result = await fetchHighlightedRoad(
+                          highlightRoadName.trim(),
+                          location.lat ?? 0,
+                          location.lng ?? 0,
+                          baseRadius
+                        );
+                        if (result.geojson.features.length === 0) {
+                          setHighlightRoadData(null);
+                          alert(`未找到道路「${highlightRoadName}」`);
+                        } else {
+                          setHighlightRoadData(flattenHighlightedRoads(result.geojson));
+                        }
+                      } catch (e) {
+                        console.error("Highlight road query failed:", e);
+                        alert("道路查询失败，请重试");
+                      } finally {
+                        setIsHighlightRoadLoading(false);
+                      }
+                    }}
+                    onClear={() => {
+                      setHighlightRoadName("");
+                      setHighlightRoadData(null);
+                    }}
+                  />
                 </div>
 
                 <div id="section-theme-colors" ref={setSectionRef("section-theme-colors")}>

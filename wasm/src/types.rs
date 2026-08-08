@@ -53,6 +53,12 @@ pub struct Theme {
     pub road_tertiary: String,
     pub road_residential: String,
     pub road_default: String,
+    #[serde(default = "default_road_highlighted")]
+    pub road_highlighted: String,
+}
+
+fn default_road_highlighted() -> String {
+    "#FF4500".into()
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -240,6 +246,7 @@ pub enum RoadType {
     Tertiary,
     Residential,
     Default,
+    Highlighted,
 }
 
 impl RoadType {
@@ -262,6 +269,7 @@ impl RoadType {
             2 => RoadType::Secondary,
             3 => RoadType::Tertiary,
             4 => RoadType::Residential,
+            6 => RoadType::Highlighted,
             _ => RoadType::Default,
         }
     }
@@ -274,6 +282,7 @@ impl RoadType {
             RoadType::Tertiary => 3,
             RoadType::Residential => 4,
             RoadType::Default => 5,
+            RoadType::Highlighted => 6,
         }
     }
 
@@ -318,6 +327,7 @@ impl RoadType {
     /// ```
     pub fn get_width_scaled(self, scale_factor: f32) -> f32 {
         let base_width = match self {
+            RoadType::Highlighted => 2.4,
             RoadType::Motorway => 1.2,
             RoadType::Primary => 1.0,
             RoadType::Secondary => 0.8,
@@ -328,16 +338,18 @@ impl RoadType {
     }
 }
 
+pub const ROAD_TYPE_COUNT: usize = 7;
+
 #[derive(Debug, Clone, Default)]
 pub struct RoadRenderStats {
-    pub timings: [f64; 6],
-    pub casing_timings: [f64; 6],
-    pub fill_timings: [f64; 6],
+    pub timings: [f64; ROAD_TYPE_COUNT],
+    pub casing_timings: [f64; ROAD_TYPE_COUNT],
+    pub fill_timings: [f64; ROAD_TYPE_COUNT],
     pub build_paths_ms: f64,
     pub stroke_casing_ms: f64,
     pub stroke_fill_ms: f64,
-    pub raw_points: [usize; 6],
-    pub simplified_points: [usize; 6],
+    pub raw_points: [usize; ROAD_TYPE_COUNT],
+    pub simplified_points: [usize; ROAD_TYPE_COUNT],
 }
 
 impl RoadRenderStats {
@@ -354,7 +366,7 @@ impl RoadRenderStats {
     }
 
     pub fn merge(&mut self, other: &Self) {
-        for i in 0..6 {
+        for i in 0..ROAD_TYPE_COUNT {
             self.timings[i] += other.timings[i];
             self.casing_timings[i] += other.casing_timings[i];
             self.fill_timings[i] += other.fill_timings[i];

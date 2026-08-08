@@ -9,7 +9,7 @@ use tiny_skia::{
 };
 
 use crate::projection;
-use crate::types::{BoundingBox, PinThemeConfig, PinThemeStyle, PoiShape, PolyFeature, Road, RoadRenderStats, RoadType, TextPosition, Theme};
+use crate::types::{BoundingBox, PinThemeConfig, PinThemeStyle, PoiShape, PolyFeature, Road, RoadRenderStats, RoadType, TextPosition, Theme, ROAD_TYPE_COUNT};
 use crate::utils::{calculate_font_size, format_city_name, format_coordinates, log, parse_hex_color};
 
 /// 地图渲染引擎
@@ -119,6 +119,7 @@ impl MapRenderer {
             RoadType::Tertiary => &self.theme.road_tertiary,
             RoadType::Residential => &self.theme.road_residential,
             RoadType::Default => &self.theme.road_default,
+            RoadType::Highlighted => &self.theme.road_highlighted,
         }
     }
 
@@ -191,7 +192,7 @@ impl MapRenderer {
                 let build_start = crate::utils::performance_now();
                 let (paths, raw_points, simplified_points) = self.build_road_paths(shard);
                 stats.build_paths_ms += crate::utils::performance_now() - build_start;
-                for i in 0..6 {
+                for i in 0..ROAD_TYPE_COUNT {
                     stats.record_points(i, raw_points[i], simplified_points[i]);
                 }
                 Self::draw_road_paths_on_pixmap(
@@ -254,7 +255,7 @@ impl MapRenderer {
         &mut self,
         road_shards: &[Vec<f64>],
         logical_scale_factor: f32,
-        enabled_types: &[bool; 6],
+        enabled_types: &[bool; ROAD_TYPE_COUNT],
     ) -> RoadRenderStats {
         if road_shards.is_empty() {
             return RoadRenderStats::default();
@@ -289,7 +290,7 @@ impl MapRenderer {
             let build_start = crate::utils::performance_now();
             let (paths, raw_points, simplified_points) = self.build_road_paths(shard);
             stats.build_paths_ms += crate::utils::performance_now() - build_start;
-            for i in 0..6 {
+            for i in 0..ROAD_TYPE_COUNT {
                 stats.record_points(i, raw_points[i], simplified_points[i]);
             }
             prebuilt_paths.push(paths);
@@ -312,7 +313,7 @@ impl MapRenderer {
         &self,
         road_shards: &[Vec<f64>],
         render_scale_override: u32,
-        enabled_types: &[bool; 6],
+        enabled_types: &[bool; ROAD_TYPE_COUNT],
         stats: &mut RoadRenderStats,
     ) -> Vec<Vec<Option<tiny_skia::Path>>> {
         let mut prebuilt_paths: Vec<Vec<Option<tiny_skia::Path>>> = Vec::new();
@@ -321,7 +322,7 @@ impl MapRenderer {
             let (paths, raw_points, simplified_points) =
                 self.build_road_paths_filtered(shard, render_scale_override, enabled_types);
             stats.build_paths_ms += crate::utils::performance_now() - build_start;
-            for i in 0..6 {
+            for i in 0..ROAD_TYPE_COUNT {
                 stats.record_points(i, raw_points[i], simplified_points[i]);
             }
             prebuilt_paths.push(paths);
@@ -338,9 +339,8 @@ impl MapRenderer {
         stats: &mut RoadRenderStats,
     ) {
         // [Z-order] 道路绘制顺序：低优先级 → 高优先级，确保主干道始终在最上层
-        // 枚举 index：Motorway=0, Primary=1, Secondary=2, Tertiary=3, Residential=4, Default=5
-        // 从 index 5 向 0 渲染 = 从最低优先级到最高优先级
-        const DRAW_ORDER: [usize; 6] = [5, 4, 3, 2, 1, 0];
+        // Highlighted (6) 最后绘制，始终在最上层
+        const DRAW_ORDER: [usize; ROAD_TYPE_COUNT] = [5, 4, 3, 2, 1, 0, 6];
 
         // [Road Casing] 第一遍：按 Z 序绘制所有道路的「描边底色」（Casing）
         // 所有 Casing 先于所有 Fill 渲染，防止低等级 Casing 压住高等级 Fill
@@ -471,18 +471,17 @@ impl MapRenderer {
         // [超采样] 将外部传入的缩放因子乘以内部超采样倍数，保持视觉比例一致
         let scale_factor = scale_factor * self.render_scale as f32;
 
-        // 【优化】使用固定大小数组替代 HashMap，道路类型仅 6 种，无需哈希开销
-        let mut groups: [Vec<&Road>; 6] = [vec![], vec![], vec![], vec![], vec![], vec![]];
+        let mut groups: [Vec<&Road>; ROAD_TYPE_COUNT] = Default::default();
         for road in roads {
             let idx = road.road_type as usize;
-            if idx < 6 {
+            if idx < ROAD_TYPE_COUNT {
                 groups[idx].push(road);
             }
         }
 
         // [Z-order + Road Casing] 将每种类型的 Road 列表预先构建为 Path
-        let mut paths: [Option<tiny_skia::Path>; 6] = Default::default();
-        for t_idx in 0..6usize {
+        let mut paths: [Option<tiny_skia::Path>; ROAD_TYPE_COUNT] = Default::default();
+        for t_idx in 0..ROAD_TYPE_COUNT {
             let road_group = &groups[t_idx];
             if road_group.is_empty() {
                 continue;
@@ -502,8 +501,8 @@ impl MapRenderer {
             paths[t_idx] = pb.finish();
         }
 
-        // [Z-order] 低优先级 → 高优先级渲染顺序
-        const DRAW_ORDER: [usize; 6] = [5, 4, 3, 2, 1, 0];
+        // [Z-order] 低优先级 → 高优先级渲染顺序，Highlighted 最后绘制
+        const DRAW_ORDER: [usize; ROAD_TYPE_COUNT] = [5, 4, 3, 2, 1, 0, 6];
 
         // [Road Casing] 第一遍：所有道路的 Casing（加宽暗色描边）
         for &t_idx in &DRAW_ORDER {
@@ -1475,21 +1474,21 @@ impl MapRenderer {
         paths
     }
 
-    fn build_road_paths(&self, data: &[f64]) -> (Vec<Option<tiny_skia::Path>>, [usize; 6], [usize; 6]) {
-        self.build_road_paths_filtered(data, self.render_scale, &[true; 6])
+    fn build_road_paths(&self, data: &[f64]) -> (Vec<Option<tiny_skia::Path>>, [usize; ROAD_TYPE_COUNT], [usize; ROAD_TYPE_COUNT]) {
+        self.build_road_paths_filtered(data, self.render_scale, &[true; ROAD_TYPE_COUNT])
     }
 
     fn build_road_paths_filtered(
         &self,
         data: &[f64],
         render_scale_override: u32,
-        enabled_types: &[bool; 6],
-    ) -> (Vec<Option<tiny_skia::Path>>, [usize; 6], [usize; 6]) {
+        enabled_types: &[bool; ROAD_TYPE_COUNT],
+    ) -> (Vec<Option<tiny_skia::Path>>, [usize; ROAD_TYPE_COUNT], [usize; ROAD_TYPE_COUNT]) {
         let road_count = data[0] as usize;
-        let mut pbs: Vec<PathBuilder> = (0..6).map(|_| PathBuilder::new()).collect();
-        let mut found = vec![false; 6];
-        let mut raw_points = [0usize; 6];
-        let mut simplified_points = [0usize; 6];
+        let mut pbs: Vec<PathBuilder> = (0..ROAD_TYPE_COUNT).map(|_| PathBuilder::new()).collect();
+        let mut found = vec![false; ROAD_TYPE_COUNT];
+        let mut raw_points = [0usize; ROAD_TYPE_COUNT];
+        let mut simplified_points = [0usize; ROAD_TYPE_COUNT];
         let mut curr_offset = 1;
 
         for _ in 0..road_count {
@@ -1500,7 +1499,7 @@ impl MapRenderer {
             let count = data[curr_offset + 1] as usize;
             curr_offset += 2;
 
-            if t < 6 && enabled_types[t] && curr_offset + count * 2 <= data.len() && count >= 2 {
+            if t < ROAD_TYPE_COUNT && enabled_types[t] && curr_offset + count * 2 <= data.len() && count >= 2 {
                 raw_points[t] += count;
                 let screen_coords: Vec<(f32, f32)> = (0..count)
                     .map(|i| {
@@ -1545,12 +1544,14 @@ impl MapRenderer {
             RoadType::Tertiary => &theme.road_tertiary,
             RoadType::Residential => &theme.road_residential,
             RoadType::Default => &theme.road_default,
+            RoadType::Highlighted => &theme.road_highlighted,
         }
     }
 
     #[inline]
     fn road_simplify_epsilon_sq(road_type: RoadType) -> f32 {
         match road_type {
+            RoadType::Highlighted => 0.25 * 0.25,
             RoadType::Motorway | RoadType::Primary => 0.5 * 0.5,
             RoadType::Secondary => 0.75 * 0.75,
             RoadType::Tertiary => 1.0 * 1.0,
