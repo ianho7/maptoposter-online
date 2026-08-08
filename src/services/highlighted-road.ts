@@ -26,33 +26,75 @@ function buildBbox(
   return `${south},${west},${north},${east}`;
 }
 
-export async function searchRoadNames(
+export async function searchRoadNamesPhoton(
   keyword: string,
   centerLat: number,
   centerLon: number,
-  radiusMeters: number
 ): Promise<RoadSuggestion[]> {
   if (!keyword.trim()) return [];
 
-  const bbox = buildBbox(centerLat, centerLon, radiusMeters);
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const query = `[out:json][timeout:10];way["highway"]["name"~"${escaped}",i](${bbox});out tags 50;`;
+  const params = new URLSearchParams({
+    q: keyword.trim(),
+    lat: String(centerLat),
+    lon: String(centerLon),
+    limit: "15",
+    osm_tag: "highway",
+  });
 
-  const json = await overpassRequest(query, 3) as { elements?: Array<{ tags?: Record<string, string> }> };
+  const res = await fetch(`https://photon.komoot.io/api/?${params}`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new Error(`Photon ${res.status}`);
+  const json = await res.json();
 
   const seen = new Set<string>();
   const results: RoadSuggestion[] = [];
-  for (const el of json.elements ?? []) {
-    const name = el.tags?.name;
+  for (const feature of json.features ?? []) {
+    const name = feature.properties?.name;
     if (!name || seen.has(name)) continue;
     seen.add(name);
-    results.push({
-      name,
-      nameZh: el.tags?.["name:zh"],
-      nameEn: el.tags?.["name:en"],
-    });
+    results.push({ name });
   }
   return results;
+}
+
+export function buildHighlightedRoadFromFeatures(
+  features: GeoJSON.Feature[]
+): HighlightedRoadResult {
+  const resultFeatures: GeoJSON.Feature[] = [];
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+
+  for (const feature of features) {
+    const geom = feature.geometry;
+    if (!geom) continue;
+    const coords: [number, number][] = [];
+    if (geom.type === "LineString") {
+      coords.push(...(geom as GeoJSON.LineString).coordinates as [number, number][]);
+    } else if (geom.type === "MultiLineString") {
+      for (const line of (geom as GeoJSON.MultiLineString).coordinates) {
+        coords.push(...line as [number, number][]);
+      }
+    }
+    for (const [lon, lat] of coords) {
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    resultFeatures.push({
+      type: "Feature",
+      properties: { highway: "highlighted" },
+      geometry: feature.geometry,
+    });
+  }
+
+  const bbox: [number, number, number, number] | null =
+    resultFeatures.length > 0 ? [minLon, minLat, maxLon, maxLat] : null;
+
+  return {
+    geojson: { type: "FeatureCollection", features: resultFeatures },
+    bbox,
+  };
 }
 
 export async function fetchHighlightedRoad(

@@ -171,6 +171,32 @@ export class MapDataService {
       isProtomaps: mapData.isProtomaps,
     };
   }
+  async fetchRoadGeometry(
+    country: string,
+    city: string,
+    baseRadius: number,
+    lodMode: "simplified" | "detailed",
+    roadName: string,
+    district?: string
+  ): Promise<{ features: GeoJSON.Feature[]; found: boolean }> {
+    if (!this.worker || !roadName.trim()) return { features: [], found: false };
+
+    const id = this.requestId++;
+    const promise = new Promise<{ features: GeoJSON.Feature[]; found: boolean }>(
+      (resolve, reject) => {
+        this.pendingRequests.set(id, { resolve, reject });
+      }
+    );
+
+    this.worker.postMessage({
+      id,
+      type: "FETCH_ROAD_GEOMETRY",
+      payload: { country, city, baseRadius, lodMode, roadName: roadName.trim(), district },
+    });
+
+    return promise;
+  }
+
   async searchRoadNames(
     country: string,
     city: string,

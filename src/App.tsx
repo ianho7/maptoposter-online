@@ -63,7 +63,8 @@ import {
   flattenHighlightedRoads,
   mergeRoadsWithHighlighted,
   roadBboxToViewport,
-  searchRoadNames,
+  searchRoadNamesPhoton,
+  buildHighlightedRoadFromFeatures,
 } from "@/services/highlighted-road";
 
 const LazyMapPreview = lazy(() =>
@@ -2249,12 +2250,25 @@ export default function MapPosterGenerator() {
                       }
                       setIsHighlightRoadLoading(true);
                       try {
-                        const result = await fetchHighlightedRoad(
+                        const cached = await mapDataService.fetchRoadGeometry(
+                          location.country ?? "",
+                          location.city ?? "",
+                          baseRadius,
+                          lodMode,
                           highlightRoadName.trim(),
-                          location.lat ?? 0,
-                          location.lng ?? 0,
-                          baseRadius
+                          location.district
                         );
+                        let result: { geojson: GeoJSON.FeatureCollection; bbox: [number, number, number, number] | null };
+                        if (cached.found) {
+                          result = buildHighlightedRoadFromFeatures(cached.features);
+                        } else {
+                          result = await fetchHighlightedRoad(
+                            highlightRoadName.trim(),
+                            location.lat ?? 0,
+                            location.lng ?? 0,
+                            baseRadius
+                          );
+                        }
                         if (result.geojson.features.length === 0) {
                           setHighlightRoadData(null);
                           setHighlightRoadBbox(null);
@@ -2285,7 +2299,7 @@ export default function MapPosterGenerator() {
                         location.district
                       );
                       if (cached.length > 0) return cached;
-                      return searchRoadNames(keyword, location.lat ?? 0, location.lng ?? 0, baseRadius);
+                      return searchRoadNamesPhoton(keyword, location.lat ?? 0, location.lng ?? 0);
                     }}
                   />
                 </div>

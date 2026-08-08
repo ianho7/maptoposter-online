@@ -765,6 +765,35 @@ self.onmessage = async (event: MessageEvent) => {
       }
 
       (self as WorkerSelf).postMessage({ id, success: true, payload: results });
+    } else if (type === "FETCH_ROAD_GEOMETRY") {
+      const { country, city, baseRadius, lodMode, roadName, district } = payload;
+      const key = createCacheKey(country, city, baseRadius, lodMode, "roads", district);
+      const db = await getDB();
+      const blob = await db.get(STORE_NAME, key);
+
+      const features: GeoJSON.Feature[] = [];
+
+      if (blob) {
+        const rawJson = await decompress(blob);
+        const json = JSON.parse(rawJson) as GeoJSON.FeatureCollection;
+
+        for (const feature of json.features) {
+          const props = (feature as any).properties;
+          if (!props) continue;
+          const name: string | undefined = props.name;
+          const nameZh: string | undefined = props["name:zh"];
+          const nameEn: string | undefined = props["name:en"];
+          if (name === roadName || nameZh === roadName || nameEn === roadName) {
+            features.push(feature);
+          }
+        }
+      }
+
+      (self as WorkerSelf).postMessage({
+        id,
+        success: true,
+        payload: { features, found: features.length > 0 },
+      });
     }
   } catch (error) {
     self.postMessage({
