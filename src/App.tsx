@@ -59,7 +59,6 @@ import {
   resolveCitySelection,
 } from "@/services/location-resolution";
 import {
-  fetchHighlightedRoad,
   flattenHighlightedRoads,
   mergeRoadsWithHighlighted,
   roadBboxToViewport,
@@ -2250,7 +2249,7 @@ export default function MapPosterGenerator() {
                       }
                       setIsHighlightRoadLoading(true);
                       try {
-                        const cached = await mapDataService.fetchRoadGeometry(
+                        let cached = await mapDataService.fetchRoadGeometry(
                           location.country ?? "",
                           location.city ?? "",
                           baseRadius,
@@ -2258,24 +2257,40 @@ export default function MapPosterGenerator() {
                           highlightRoadName.trim(),
                           location.district
                         );
-                        let result: { geojson: GeoJSON.FeatureCollection; bbox: [number, number, number, number] | null };
-                        if (cached.found) {
-                          result = buildHighlightedRoadFromFeatures(cached.features);
-                        } else {
-                          result = await fetchHighlightedRoad(
-                            highlightRoadName.trim(),
+                        if (!cached.found) {
+                          await mapDataService.getMapData(
+                            location.country ?? "",
+                            location.city ?? "",
                             location.lat ?? 0,
                             location.lng ?? 0,
-                            baseRadius
+                            baseRadius,
+                            lodMode,
+                            location.district,
+                            true
+                          );
+                          cached = await mapDataService.fetchRoadGeometry(
+                            location.country ?? "",
+                            location.city ?? "",
+                            baseRadius,
+                            lodMode,
+                            highlightRoadName.trim(),
+                            location.district
                           );
                         }
-                        if (result.geojson.features.length === 0) {
+                        if (!cached.found) {
                           setHighlightRoadData(null);
                           setHighlightRoadBbox(null);
-                          alert(`未找到道路「${highlightRoadName}」`);
+                          alert(`未找到道路「${highlightRoadName}」，请确认道路名称是否正确`);
                         } else {
-                          setHighlightRoadData(flattenHighlightedRoads(result.geojson));
-                          setHighlightRoadBbox(result.bbox);
+                          const result = buildHighlightedRoadFromFeatures(cached.features);
+                          if (result.geojson.features.length === 0) {
+                            setHighlightRoadData(null);
+                            setHighlightRoadBbox(null);
+                            alert(`未找到道路「${highlightRoadName}」`);
+                          } else {
+                            setHighlightRoadData(flattenHighlightedRoads(result.geojson));
+                            setHighlightRoadBbox(result.bbox);
+                          }
                         }
                       } catch (e) {
                         console.error("Highlight road query failed:", e);
