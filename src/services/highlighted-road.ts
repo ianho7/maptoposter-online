@@ -134,3 +134,26 @@ export function mergeRoadsWithHighlighted(
 
   return merged;
 }
+
+export function roadBboxToViewport(
+  bbox: [number, number, number, number],
+  aspectRatio: number,
+  padding: number = 1.4
+): { centerLat: number; centerLng: number; radius: number } {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLon + maxLon) / 2;
+
+  const latSpanM = (maxLat - minLat) * 111320;
+  const lonSpanM =
+    (maxLon - minLon) * 111320 * Math.cos(centerLat * (Math.PI / 180));
+
+  const safeAspect = aspectRatio > 0 ? aspectRatio : 1;
+  const halfH = latSpanM / 2;
+  const halfW = lonSpanM / 2;
+  const radius =
+    (safeAspect >= 1 ? Math.max(halfH, halfW / safeAspect) : Math.max(halfH * safeAspect, halfW)) *
+    padding;
+
+  return { centerLat, centerLng, radius: Math.max(radius, 500) };
+}

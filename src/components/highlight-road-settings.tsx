@@ -25,7 +25,7 @@ export function HighlightRoadSettings({
     <Card className="p-4 bg-card border-border">
       <div className="flex items-center gap-2 mb-3">
         <Route className="w-4 h-4 text-primary" />
-        <h2 className="text-lg text-foreground">高亮道路</h2>
+        <h2 className="text-lg text-foreground">道路海报</h2>
       </div>
       <div className="space-y-3">
         <div className="space-y-1">
@@ -69,11 +69,11 @@ export function HighlightRoadSettings({
         </div>
         {hasData && (
           <p className="text-xs text-green-600">
-            ✓ 已加载道路数据，导出海报时将高亮显示
+            ✓ 道路海报模式已激活，视口将自动适配道路范围
           </p>
         )}
         <p className="text-[12px] italic px-1 text-muted-foreground">
-          输入道路名称，在地图海报上高亮显示该条道路的完整形状
+          输入道路名称，以该道路为中心生成专属海报。周围路网将作为低对比度纹理背景
         </p>
       </div>
     </Card>
