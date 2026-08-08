@@ -5,6 +5,69 @@ export interface HighlightedRoadResult {
   bbox: [number, number, number, number] | null;
 }
 
+export interface RoadSuggestion {
+  name: string;
+  nameZh?: string;
+  nameEn?: string;
+}
+
+export async function searchRoadNames(
+  keyword: string,
+  centerLat: number,
+  centerLon: number,
+  radiusMeters: number
+): Promise<RoadSuggestion[]> {
+  if (!keyword.trim()) return [];
+
+  const degPerMeter = 1 / 111320;
+  const latDelta = radiusMeters * degPerMeter;
+  const lonDelta = radiusMeters * degPerMeter / Math.cos(centerLat * Math.PI / 180);
+  const south = centerLat - latDelta;
+  const north = centerLat + latDelta;
+  const west = centerLon - lonDelta;
+  const east = centerLon + lonDelta;
+  const bbox = `${south},${west},${north},${east}`;
+
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const query = `[out:json][timeout:10];way["highway"]["name"~"${escaped}",i](${bbox});out tags 50;`;
+
+  const servers = [...OVERPASS_RACE_SERVERS];
+  let lastError: Error | null = null;
+
+  for (const server of servers) {
+    try {
+      const interpreterUrl = `${server.replace(/\/+$/, "")}/interpreter`;
+      const res = await fetch(interpreterUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `data=${encodeURIComponent(query)}`,
+      });
+      if (!res.ok) {
+        lastError = new Error(`Overpass ${res.status}: ${res.statusText}`);
+        continue;
+      }
+      const json = await res.json();
+      const seen = new Set<string>();
+      const results: RoadSuggestion[] = [];
+      for (const el of json.elements ?? []) {
+        const name = el.tags?.name;
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        results.push({
+          name,
+          nameZh: el.tags?.["name:zh"],
+          nameEn: el.tags?.["name:en"],
+        });
+      }
+      return results;
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+    }
+  }
+
+  throw lastError ?? new Error("All Overpass servers failed");
+}
+
 export async function fetchHighlightedRoad(
   roadName: string,
   centerLat: number,

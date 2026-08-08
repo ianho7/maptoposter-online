@@ -63,6 +63,7 @@ import {
   flattenHighlightedRoads,
   mergeRoadsWithHighlighted,
   roadBboxToViewport,
+  searchRoadNames,
 } from "@/services/highlighted-road";
 
 const LazyMapPreview = lazy(() =>
@@ -2274,6 +2275,9 @@ export default function MapPosterGenerator() {
                       setHighlightRoadData(null);
                       setHighlightRoadBbox(null);
                     }}
+                    onSearchSuggestions={(keyword) =>
+                      searchRoadNames(keyword, location.lat ?? 0, location.lng ?? 0, baseRadius)
+                    }
                   />
                 </div>
 
